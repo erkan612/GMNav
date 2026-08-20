@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"GMNav_Agent",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"GMNav_Agent",
+  "parent":{
+    "name":"GMNav",
+    "path":"folders/GMNav.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

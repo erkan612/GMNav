@@ -1,0 +1,21 @@
+<svg width="680" height="280" viewBox="0 0 680 280" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>A fast agent passing several waypoints in one frame</title>
+<desc>Advancing one waypoint per frame leaves a fast agent chasing points it has already gone past, so it curves backwards. Draining every reached waypoint in the same frame keeps it on line.</desc>
+<rect width="680" height="280" fill="#ffffff"/>
+<text x="40" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#712B13">One waypoint per frame</text>
+
+<line x1="60" y1="90" x2="600" y2="90" stroke="#DCD9CE" stroke-width="2"/>
+<g fill="#5F5E5A"><circle cx="60" cy="90" r="4"/><circle cx="120" cy="90" r="4"/><circle cx="180" cy="90" r="4"/><circle cx="240" cy="90" r="4"/><circle cx="300" cy="90" r="4"/></g>
+<circle cx="300" cy="90" r="9" fill="#D85A30"/>
+<path d="M300 90 Q270 60 180 84" fill="none" stroke="#993C1D" stroke-width="2.5"/>
+<text x="330" y="76" font-family="sans-serif" font-size="12" fill="#712B13">still steering at a waypoint it passed three frames ago</text>
+
+<text x="40" y="164" font-family="sans-serif" font-size="13" font-weight="500" fill="#04342C">Drain every reached waypoint</text>
+<line x1="60" y1="214" x2="600" y2="214" stroke="#DCD9CE" stroke-width="2"/>
+<g fill="#5F5E5A"><circle cx="60" cy="214" r="4"/><circle cx="120" cy="214" r="4"/><circle cx="180" cy="214" r="4"/><circle cx="240" cy="214" r="4"/><circle cx="300" cy="214" r="4"/></g>
+<circle cx="300" cy="214" r="9" fill="#D85A30"/>
+<line x1="309" y1="214" x2="420" y2="214" stroke="#0F6E56" stroke-width="2.5"/>
+<text x="432" y="218" font-family="sans-serif" font-size="12" fill="#085041">steering at the next one still ahead of it</text>
+
+<text x="340" y="264" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">The reach radius is max(reach_dist, speed), because a slow radius on a fast agent is a waypoint it can never land inside.</text>
+</svg>

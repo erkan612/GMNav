@@ -1,0 +1,24 @@
+<svg width="680" height="300" viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Two agent types crossing the same field</title>
+<desc>Reading the same threat layer, one agent weights it at zero and walks straight through, the other weights it at one and arcs around the edge of the danger.</desc>
+<rect width="680" height="300" fill="#ffffff"/>
+
+<circle cx="340" cy="150" r="96" fill="#FAECE7"/>
+<circle cx="340" cy="150" r="64" fill="#F6DACE"/>
+<circle cx="340" cy="150" r="32" fill="#E39C7B"/>
+<circle cx="340" cy="150" r="7" fill="#C25A2C"/>
+<text x="340" y="176" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#712B13">turret</text>
+
+<circle cx="56" cy="150" r="7" fill="#D85A30"/>
+<circle cx="624" cy="150" r="7" fill="#1D9E75"/>
+
+<line x1="64" y1="150" x2="616" y2="150" stroke="#993C1D" stroke-width="2.5"/>
+<text x="150" y="140" font-family="sans-serif" font-size="12" fill="#712B13">berserker, weight 0</text>
+
+<path d="M64 150 L180 150 L260 68 L430 68 L520 130 L616 150" fill="none" stroke="#0F6E56" stroke-width="2.5" stroke-linejoin="round"/>
+<text x="300" y="56" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#085041">soldier, weight 1</text>
+
+<rect x="40" y="222" width="600" height="62" rx="10" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="60" y="244" font-family="sans-serif" font-size="12" fill="#2C2C2A">Both routes are 30 cells long. The straight one crosses 80.13 of accumulated threat, the arc crosses 0.06.</text>
+<text x="60" y="266" font-family="sans-serif" font-size="12" fill="#5F5E5A">Eleven percent further to walk, and effectively none of the exposure. Nobody wrote any flanking logic to get this.</text>
+</svg>

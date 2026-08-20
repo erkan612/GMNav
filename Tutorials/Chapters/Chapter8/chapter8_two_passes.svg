@@ -1,0 +1,43 @@
+<svg width="680" height="280" viewBox="0 0 680 280" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>The two passes that build a flow field</title>
+<desc>First a cost ordered sweep records the distance from every cell to the goal. Then a second pass turns those distances into a direction per cell.</desc>
+<defs><marker id="a8" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#73726c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<rect width="680" height="280" fill="#ffffff"/>
+
+<text x="40" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#2C2C2A">Pass 1, distances</text>
+<g stroke="#ffffff" stroke-width="1">
+<rect x="50" y="56" width="38" height="38" fill="#B9EEDC"/><rect x="88" y="56" width="38" height="38" fill="#D8F5EA"/><rect x="126" y="56" width="38" height="38" fill="#E8FAF4"/>
+<rect x="50" y="94" width="38" height="38" fill="#5FCBA6"/><rect x="88" y="94" width="38" height="38" fill="#8FDDC2"/><rect x="126" y="94" width="38" height="38" fill="#D8F5EA"/>
+<rect x="50" y="132" width="38" height="38" fill="#1D9E75"/><rect x="88" y="132" width="38" height="38" fill="#5FCBA6"/><rect x="126" y="132" width="38" height="38" fill="#B9EEDC"/>
+</g>
+<g font-family="sans-serif" font-size="11" text-anchor="middle" fill="#04342C">
+<text x="69" y="79">2.0</text><text x="107" y="79">2.4</text><text x="145" y="79">2.8</text>
+<text x="69" y="117">1.0</text><text x="107" y="117">1.4</text><text x="145" y="117">2.4</text>
+<text x="69" y="155" fill="#ffffff">0</text><text x="107" y="155">1.0</text><text x="145" y="155">2.0</text>
+</g>
+
+<line x1="196" y1="112" x2="248" y2="112" stroke="#73726c" stroke-width="1.5" marker-end="url(#a8)"/>
+
+<text x="270" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#2C2C2A">Pass 2, directions</text>
+<g stroke="#5F5E5A" stroke-width="0.5" fill="#F7F6F2">
+<rect x="280" y="56" width="38" height="38"/><rect x="318" y="56" width="38" height="38"/><rect x="356" y="56" width="38" height="38"/>
+<rect x="280" y="94" width="38" height="38"/><rect x="318" y="94" width="38" height="38"/><rect x="356" y="94" width="38" height="38"/>
+<rect x="280" y="132" width="38" height="38"/><rect x="318" y="132" width="38" height="38"/><rect x="356" y="132" width="38" height="38"/>
+</g>
+<g stroke="#0F6E56" stroke-width="1.8" marker-end="url(#a8)">
+<line x1="299" y1="62" x2="299" y2="88"/><line x1="346" y1="66" x2="328" y2="84"/><line x1="384" y1="66" x2="366" y2="84"/>
+<line x1="299" y1="100" x2="299" y2="126"/><line x1="346" y1="104" x2="328" y2="122"/><line x1="384" y1="104" x2="366" y2="122"/>
+<line x1="350" y1="151" x2="324" y2="151"/><line x1="388" y1="151" x2="362" y2="151"/>
+</g>
+<circle cx="299" cy="151" r="6" fill="#1D9E75"/>
+
+<rect x="430" y="56" width="210" height="114" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="450" y="80" font-family="sans-serif" font-size="12" font-weight="500" fill="#26215C">Each cell points at</text>
+<text x="450" y="102" font-family="sans-serif" font-size="12" fill="#3C3489">its cheapest reachable</text>
+<text x="450" y="120" font-family="sans-serif" font-size="12" fill="#3C3489">neighbour, measured in</text>
+<text x="450" y="138" font-family="sans-serif" font-size="12" fill="#3C3489">world space, never from</text>
+<text x="450" y="156" font-family="sans-serif" font-size="12" fill="#3C3489">the raw cell offset.</text>
+
+<text x="340" y="216" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">The distance pass touches only reachable cells. The direction pass touches every one, and costs more.</text>
+<text x="340" y="240" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">On this chapter's fortress that is 1300 pops and then 1300 cells, so both halves are sliced across frames.</text>
+</svg>

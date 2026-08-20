@@ -1,0 +1,44 @@
+<svg width="680" height="290" viewBox="0 0 680 290" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>A single search spread across several frames</title>
+<desc>Calling begin once and step repeatedly lets one search advance a little each frame, keeping its frontier and costs alive in between, until it reports FOUND.</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#73726c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+<rect width="680" height="290" fill="#ffffff"/>
+
+<rect x="34" y="70" width="118" height="64" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="93" y="94" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="500" fill="#26215C">begin</text>
+<text x="93" y="114" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#3C3489">frame 1</text>
+
+<g>
+<rect x="170" y="70" width="106" height="64" rx="10" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="223" y="92" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#2C2C2A">step(125)</text>
+<text x="223" y="112" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#5F5E5A">WORKING</text>
+<rect x="290" y="70" width="106" height="64" rx="10" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="343" y="92" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#2C2C2A">step(125)</text>
+<text x="343" y="112" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#5F5E5A">WORKING</text>
+<rect x="410" y="70" width="106" height="64" rx="10" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="463" y="92" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#2C2C2A">step(125)</text>
+<text x="463" y="112" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#5F5E5A">WORKING</text>
+<rect x="530" y="70" width="116" height="64" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="588" y="92" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#04342C">step(125)</text>
+<text x="588" y="112" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="500" fill="#085041">FOUND</text>
+</g>
+
+<line x1="152" y1="102" x2="166" y2="102" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="276" y1="102" x2="286" y2="102" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="396" y1="102" x2="406" y2="102" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="516" y1="102" x2="526" y2="102" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<text x="223" y="52" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#5F5E5A">frame 2</text>
+<text x="343" y="52" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#5F5E5A">frame 3</text>
+<text x="463" y="52" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#5F5E5A">frame 4</text>
+<text x="588" y="52" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#5F5E5A">frame 5</text>
+
+<rect x="34" y="164" width="612" height="76" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="54" y="188" font-family="sans-serif" font-size="12" font-weight="500" fill="#26215C">What survives between the frames</text>
+<text x="54" y="210" font-family="sans-serif" font-size="12" fill="#3C3489">The frontier, the cost recorded for every settled cell, and the trail of parents that will become the path.</text>
+<text x="54" y="228" font-family="sans-serif" font-size="12" fill="#3C3489">Nothing is recomputed. Frame 5 carries on from precisely where frame 4 stopped.</text>
+
+<text x="340" y="272" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">The corner to corner search on this chapter's fortress map needs 461 pops, so at 125 a frame it lands on the fourth.</text>
+</svg>

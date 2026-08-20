@@ -1,0 +1,23 @@
+<svg width="680" height="280" viewBox="0 0 680 280" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Logical and visual step costs on two to one isometric tiles</title>
+<desc>In logical mode every cardinal step costs the same. In visual mode costs follow real screen distance, which on wide flat tiles is not the same thing.</desc>
+<rect width="680" height="280" fill="#ffffff"/>
+
+<rect x="40" y="48" width="280" height="140" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="60" y="74" font-family="sans-serif" font-size="13" font-weight="500" fill="#26215C">LOGICAL</text>
+<text x="60" y="100" font-family="sans-serif" font-size="12" fill="#3C3489">cardinal steps    1.0</text>
+<text x="60" y="120" font-family="sans-serif" font-size="12" fill="#3C3489">diagonal steps    1.4142</text>
+<text x="60" y="152" font-family="sans-serif" font-size="12" fill="#3C3489">counts moves, ignores tile shape</text>
+<text x="60" y="172" font-family="sans-serif" font-size="12" fill="#3C3489">right for turn based movement</text>
+
+<rect x="360" y="48" width="280" height="140" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="380" y="74" font-family="sans-serif" font-size="13" font-weight="500" fill="#04342C">VISUAL</text>
+<text x="380" y="100" font-family="sans-serif" font-size="12" fill="#085041">cardinal steps    1.118</text>
+<text x="380" y="120" font-family="sans-serif" font-size="12" fill="#085041">diagonal steps    1.0 and 2.0</text>
+<text x="380" y="152" font-family="sans-serif" font-size="12" fill="#085041">counts pixels actually travelled</text>
+<text x="380" y="172" font-family="sans-serif" font-size="12" fill="#085041">right for real time movement</text>
+
+<rect x="40" y="204" width="600" height="60" rx="10" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="60" y="228" font-family="sans-serif" font-size="12" fill="#2C2C2A">On 64 by 32 tiles, a logical diagonal is a straight step up the screen, and a logical cardinal is a screen diagonal.</text>
+<text x="60" y="248" font-family="sans-serif" font-size="12" fill="#5F5E5A">Same map, same endpoints: LOGICAL gives 16 cells and 564.88 pixels of walking, VISUAL gives 15 cells and 485.77.</text>
+</svg>

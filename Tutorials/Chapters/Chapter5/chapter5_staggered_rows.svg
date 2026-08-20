@@ -1,0 +1,33 @@
+<svg width="680" height="300" viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Why one blocked row does not seal a staggered isometric map</title>
+<desc>In staggered isometric, rows two apart sit directly above and below each other on screen, so they are neighbours. A wall one row deep is stepped straight over.</desc>
+<rect width="680" height="300" fill="#ffffff"/>
+<text x="40" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#2C2C2A">Rows 5, 6, 7, 8, 9 as they sit on screen</text>
+
+<g stroke="#0F6E56" stroke-width="0.5" fill="#E1F5EE">
+<polygon points="150,60 190,80 150,100 110,80"/><polygon points="250,60 290,80 250,100 210,80"/>
+<polygon points="200,80 240,100 200,120 160,100"/>
+</g>
+<g stroke="#993C1D" stroke-width="0.5" fill="#FAECE7">
+<polygon points="150,100 190,120 150,140 110,120"/><polygon points="250,100 290,120 250,140 210,120"/>
+</g>
+<g stroke="#0F6E56" stroke-width="0.5" fill="#E1F5EE">
+<polygon points="200,120 240,140 200,160 160,140"/>
+<polygon points="150,140 190,160 150,180 110,160"/><polygon points="250,140 290,160 250,180 210,160"/>
+</g>
+<text x="168" y="84" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#04342C">r5</text>
+<text x="200" y="104" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#04342C">r6</text>
+<text x="168" y="124" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#712B13">r7</text>
+<text x="200" y="144" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#04342C">r8</text>
+<text x="168" y="164" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#04342C">r9</text>
+<path d="M150 84 L150 156" fill="none" stroke="#0F6E56" stroke-width="2.5" stroke-dasharray="6 4"/>
+<circle cx="150" cy="80" r="4" fill="#1D9E75"/><circle cx="150" cy="160" r="4" fill="#1D9E75"/>
+<text x="330" y="120" font-family="sans-serif" font-size="12" fill="#085041">row 5 and row 7 are one tile apart vertically,</text>
+<text x="330" y="138" font-family="sans-serif" font-size="12" fill="#085041">so the neighbour table carries steps of (0, +2)</text>
+<text x="330" y="156" font-family="sans-serif" font-size="12" fill="#085041">and the blocked row 7 is simply hopped over</text>
+
+<rect x="40" y="200" width="600" height="80" rx="10" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="60" y="224" font-family="sans-serif" font-size="12" font-weight="500" fill="#2C2C2A">Measured on a plain 16 by 16 room</text>
+<text x="60" y="246" font-family="sans-serif" font-size="12" fill="#5F5E5A">One blocked row: ORTHO has no route. Staggered crosses in 6, hopping rows 3-5-6-8-10-12.</text>
+<text x="60" y="264" font-family="sans-serif" font-size="12" fill="#5F5E5A">Two consecutive blocked rows: no route on either. Wall two rows on a staggered map.</text>
+</svg>

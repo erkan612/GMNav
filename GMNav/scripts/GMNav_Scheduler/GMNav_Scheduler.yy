@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"GMNav_Scheduler",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"GMNav_Scheduler",
+  "parent":{
+    "name":"GMNav",
+    "path":"folders/GMNav.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

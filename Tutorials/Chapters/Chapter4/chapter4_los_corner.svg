@@ -1,0 +1,33 @@
+<svg width="680" height="310" viewBox="0 0 680 310" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Two ways of walking a line across a grid</title>
+<desc>Bresenham picks one cell per step and can slip diagonally between two wall corners. Supercover visits every cell the line touches and refuses that gap.</desc>
+<rect width="680" height="310" fill="#ffffff"/>
+<text x="40" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#712B13">Bresenham, one cell per step</text>
+<text x="390" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#04342C">Supercover, every cell touched</text>
+
+<!-- Left: Bresenham visits one cell per step, so on a pure diagonal it sees
+     only (0,0) (1,1) (2,2) and never looks at either wall. -->
+<g stroke="#ffffff" stroke-width="1">
+<rect x="50" y="58" width="46" height="46" fill="#DCD9CE"/><rect x="96" y="58" width="46" height="46" fill="#993C1D" opacity="0.45"/><rect x="142" y="58" width="46" height="46" fill="#F1EFE8"/>
+<rect x="50" y="104" width="46" height="46" fill="#F1EFE8"/><rect x="96" y="104" width="46" height="46" fill="#DCD9CE"/><rect x="142" y="104" width="46" height="46" fill="#993C1D" opacity="0.45"/>
+<rect x="50" y="150" width="46" height="46" fill="#F1EFE8"/><rect x="96" y="150" width="46" height="46" fill="#F1EFE8"/><rect x="142" y="150" width="46" height="46" fill="#DCD9CE"/>
+</g>
+<line x1="73" y1="81" x2="165" y2="173" stroke="#993C1D" stroke-width="2.5"/>
+<circle cx="73" cy="81" r="4" fill="#993C1D"/><circle cx="165" cy="173" r="4" fill="#993C1D"/>
+<text x="119" y="222" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#712B13">reports clear, and slips through</text>
+
+<!-- Right: supercover also examines the cells flanking each exact corner
+     crossing, so it sees the wall and refuses. -->
+<g stroke="#ffffff" stroke-width="1">
+<rect x="400" y="58" width="46" height="46" fill="#B9EEDC"/><rect x="446" y="58" width="46" height="46" fill="#993C1D" opacity="0.45"/><rect x="492" y="58" width="46" height="46" fill="#F1EFE8"/>
+<rect x="400" y="104" width="46" height="46" fill="#B9EEDC"/><rect x="446" y="104" width="46" height="46" fill="#B9EEDC"/><rect x="492" y="104" width="46" height="46" fill="#993C1D" opacity="0.45"/>
+<rect x="400" y="150" width="46" height="46" fill="#F1EFE8"/><rect x="446" y="150" width="46" height="46" fill="#B9EEDC"/><rect x="492" y="150" width="46" height="46" fill="#B9EEDC"/>
+</g>
+<line x1="423" y1="81" x2="515" y2="173" stroke="#0F6E56" stroke-width="2.5"/>
+<circle cx="423" cy="81" r="4" fill="#0F6E56"/><circle cx="515" cy="173" r="4" fill="#0F6E56"/>
+<text x="469" y="222" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#085041">sees both wall cells, and refuses</text>
+
+<rect x="40" y="240" width="600" height="56" rx="10" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="60" y="262" font-family="sans-serif" font-size="12" fill="#2C2C2A">Smoothing built on the wrong line test produces shorter paths that clip corners.</text>
+<text x="60" y="280" font-family="sans-serif" font-size="12" fill="#5F5E5A">The two disagree on 1546 cell pairs here, and Bresenham clips geometry on 2 of 5 segments.</text>
+</svg>

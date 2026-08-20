@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"test_util",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"test_util",
+  "parent":{
+    "name":"GMNav",
+    "path":"GMNav.yyp",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

@@ -1,0 +1,22 @@
+<svg width="680" height="270" viewBox="0 0 680 270" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Why flat ground needs a bias against jumping</title>
+<desc>Horizontal speed is the same on the ground and in the air, so hopping across level ground costs exactly what walking costs. A small penalty on jump links breaks the tie.</desc>
+<rect width="680" height="270" fill="#ffffff"/>
+
+<rect x="50" y="140" width="260" height="16" fill="#5F5E5A"/>
+<circle cx="70" cy="132" r="7" fill="#D85A30"/>
+<path d="M78 130 Q118 86 158 130" fill="none" stroke="#993C1D" stroke-width="2.5"/>
+<path d="M162 130 Q202 86 242 130" fill="none" stroke="#993C1D" stroke-width="2.5"/>
+<circle cx="290" cy="132" r="6" fill="#1D9E75"/>
+<text x="180" y="192" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="500" fill="#712B13">bias 1.00</text>
+<text x="180" y="212" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#993C1D">6 nodes, 42.67 frames, hops</text>
+
+<rect x="380" y="140" width="260" height="16" fill="#5F5E5A"/>
+<circle cx="400" cy="132" r="7" fill="#D85A30"/>
+<line x1="408" y1="132" x2="612" y2="132" stroke="#0F6E56" stroke-width="2.5"/>
+<circle cx="620" cy="132" r="6" fill="#1D9E75"/>
+<text x="510" y="192" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="500" fill="#04342C">bias 1.15</text>
+<text x="510" y="212" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#085041">9 nodes, 42.67 frames, walks</text>
+
+<text x="340" y="248" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">Identical cost to four decimal places. Without a tie breaker the AI bunny hops across level ground, which is correct and looks absurd.</text>
+</svg>

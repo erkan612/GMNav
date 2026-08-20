@@ -1,0 +1,28 @@
+<svg width="680" height="290" viewBox="0 0 680 290" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Searching inward from every agent, or spreading outward from the goal once</title>
+<desc>Running one search per agent repeats nearly the same work many times. Building a distance field outward from the goal does the work once and every agent reads from it.</desc>
+<rect width="680" height="290" fill="#ffffff"/>
+<text x="40" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#712B13">One search per agent</text>
+<text x="390" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#04342C">One field, read by everyone</text>
+
+<circle cx="270" cy="145" r="8" fill="#1D9E75"/>
+<g stroke="#993C1D" stroke-width="1.5" fill="none" opacity="0.75">
+<path d="M60 70 L270 145"/><path d="M60 145 L270 145"/><path d="M60 220 L270 145"/>
+<path d="M130 60 L270 145"/><path d="M130 230 L270 145"/><path d="M190 66 L270 145"/><path d="M190 226 L270 145"/>
+</g>
+<g fill="#D85A30">
+<circle cx="60" cy="70" r="5"/><circle cx="60" cy="145" r="5"/><circle cx="60" cy="220" r="5"/>
+<circle cx="130" cy="60" r="5"/><circle cx="130" cy="230" r="5"/><circle cx="190" cy="66" r="5"/><circle cx="190" cy="226" r="5"/>
+</g>
+<text x="170" y="266" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#712B13">seven searches, all crossing the same ground</text>
+
+<circle cx="470" cy="145" r="8" fill="#1D9E75"/>
+<g fill="none" stroke="#0F6E56" stroke-width="1.2" opacity="0.55">
+<circle cx="470" cy="145" r="34"/><circle cx="470" cy="145" r="62"/><circle cx="470" cy="145" r="90"/><circle cx="470" cy="145" r="118"/>
+</g>
+<g fill="#D85A30">
+<circle cx="392" cy="82" r="5"/><circle cx="380" cy="145" r="5"/><circle cx="400" cy="212" r="5"/>
+<circle cx="452" cy="60" r="5"/><circle cx="470" cy="232" r="5"/><circle cx="556" cy="90" r="5"/><circle cx="548" cy="208" r="5"/>
+</g>
+<text x="470" y="266" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#085041">one pass, and each agent reads a direction</text>
+</svg>

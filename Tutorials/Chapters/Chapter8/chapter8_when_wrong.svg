@@ -1,0 +1,25 @@
+<svg width="680" height="290" viewBox="0 0 680 290" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Where the crossover sits between searches and a field</title>
+<desc>With few agents, individual searches are cheaper. The field costs the same regardless, so past roughly thirty agents on this map it wins and keeps winning.</desc>
+<rect width="680" height="290" fill="#ffffff"/>
+
+<line x1="70" y1="200" x2="640" y2="200" stroke="#5F5E5A" stroke-width="1"/>
+<line x1="70" y1="200" x2="70" y2="50" stroke="#5F5E5A" stroke-width="1"/>
+<text x="355" y="228" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">agents heading to the same goal</text>
+
+<line x1="70" y1="140" x2="640" y2="140" stroke="#0F6E56" stroke-width="2.5"/>
+<text x="600" y="130" text-anchor="end" font-family="sans-serif" font-size="11" fill="#085041">one field, 2600</text>
+
+<path d="M70 199 L128 197 L214 185 L300 140 L386 118 L500 84 L640 56" fill="none" stroke="#993C1D" stroke-width="2.5"/>
+<text x="640" y="46" text-anchor="end" font-family="sans-serif" font-size="11" fill="#712B13">one search each</text>
+
+<circle cx="300" cy="140" r="5" fill="#D85A30"/>
+<line x1="300" y1="140" x2="300" y2="200" stroke="#D85A30" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="300" y="252" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#712B13">around 30</text>
+
+<g font-family="sans-serif" font-size="11" fill="#5F5E5A">
+<text x="128" y="216" text-anchor="middle">5</text><text x="214" y="216" text-anchor="middle">20</text><text x="386" y="216" text-anchor="middle">100</text><text x="600" y="216" text-anchor="middle">500</text>
+</g>
+
+<text x="355" y="278" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">20 agents cost 1100 pops as searches. 50 cost 3917. The field costs 2600 whatever happens.</text>
+</svg>

@@ -1,0 +1,39 @@
+<svg width="680" height="330" viewBox="0 0 680 330" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>One budget shared by every agent</title>
+<desc>The per frame cost is set by the budget, not by how many agents are asking. More agents do not make frames more expensive, they make the queue take longer to drain.</desc>
+<rect width="680" height="330" fill="#ffffff"/>
+
+<text x="40" y="42" font-family="sans-serif" font-size="13" font-weight="500" fill="#2C2C2A">Cost per frame</text>
+<text x="430" y="42" font-family="sans-serif" font-size="13" font-weight="500" fill="#2C2C2A">Frames to drain</text>
+
+<text x="40" y="80" font-family="sans-serif" font-size="12" fill="#5F5E5A">10 agents</text>
+<rect x="120" y="66" width="62" height="20" rx="5" fill="#1D9E75" opacity="0.55"/>
+<text x="192" y="80" font-family="sans-serif" font-size="11" fill="#085041">500</text>
+<rect x="430" y="66" width="10" height="20" rx="4" fill="#534AB7" opacity="0.45"/>
+<text x="448" y="80" font-family="sans-serif" font-size="11" fill="#26215C">5</text>
+
+<text x="40" y="128" font-family="sans-serif" font-size="12" fill="#5F5E5A">50 agents</text>
+<rect x="120" y="114" width="62" height="20" rx="5" fill="#1D9E75" opacity="0.55"/>
+<text x="192" y="128" font-family="sans-serif" font-size="11" fill="#085041">500</text>
+<rect x="430" y="114" width="48" height="20" rx="4" fill="#534AB7" opacity="0.45"/>
+<text x="486" y="128" font-family="sans-serif" font-size="11" fill="#26215C">24</text>
+
+<text x="40" y="176" font-family="sans-serif" font-size="12" fill="#5F5E5A">200 agents</text>
+<rect x="120" y="162" width="62" height="20" rx="5" fill="#1D9E75" opacity="0.55"/>
+<text x="192" y="176" font-family="sans-serif" font-size="11" fill="#085041">500</text>
+<rect x="430" y="162" width="184" height="20" rx="4" fill="#534AB7" opacity="0.45"/>
+<text x="622" y="176" font-family="sans-serif" font-size="11" fill="#26215C">92</text>
+
+<line x1="120" y1="200" x2="646" y2="200" stroke="#DCD9CE" stroke-width="1"/>
+
+<text x="40" y="234" font-family="sans-serif" font-size="12" fill="#5F5E5A">200 agents,</text>
+<text x="40" y="250" font-family="sans-serif" font-size="12" fill="#5F5E5A">budget 2000</text>
+<rect x="120" y="228" width="230" height="20" rx="5" fill="#D85A30" opacity="0.5"/>
+<text x="360" y="242" font-family="sans-serif" font-size="11" fill="#712B13">1855</text>
+<rect x="430" y="228" width="102" height="20" rx="4" fill="#534AB7" opacity="0.45"/>
+<text x="540" y="242" font-family="sans-serif" font-size="11" fill="#26215C">51</text>
+
+<rect x="40" y="272" width="600" height="44" rx="10" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="60" y="292" font-family="sans-serif" font-size="12" fill="#2C2C2A">Raising the budget is the one knob that trades frame time for responsiveness.</text>
+<text x="60" y="308" font-family="sans-serif" font-size="12" fill="#5F5E5A">Four times the budget drains 200 agents in 51 frames instead of 92, at four times the cost.</text>
+</svg>

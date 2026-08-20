@@ -1,0 +1,26 @@
+<svg width="680" height="330" viewBox="0 0 680 330" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>How much of the map each search examines</title>
+<desc>Without a heuristic the search expands evenly in all directions. With a heuristic it stretches toward the goal and examines far fewer cells, returning the same path.</desc>
+<rect width="680" height="330" fill="#ffffff"/>
+
+<rect x="30" y="46" width="300" height="180" rx="12" fill="#F7F6F2" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="46" y="72" font-family="sans-serif" font-size="14" font-weight="500" fill="#2C2C2A">No heuristic, h is always 0</text>
+
+<ellipse cx="110" cy="150" rx="72" ry="58" fill="#DCD9CE" stroke="#5F5E5A" stroke-width="0.5"/>
+<circle cx="110" cy="150" r="7" fill="#D85A30"/>
+<circle cx="270" cy="150" r="7" fill="#1D9E75"/>
+<text x="180" y="216" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">spreads evenly, no sense of direction</text>
+
+<rect x="350" y="46" width="300" height="180" rx="12" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="366" y="72" font-family="sans-serif" font-size="14" font-weight="500" fill="#04342C">With the octile heuristic</text>
+
+<ellipse cx="470" cy="150" rx="96" ry="26" fill="#B9EEDC" stroke="#0F6E56" stroke-width="0.5"/>
+<circle cx="430" cy="150" r="7" fill="#D85A30"/>
+<circle cx="590" cy="150" r="7" fill="#1D9E75"/>
+<text x="500" y="216" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#085041">stretches toward the goal</text>
+
+<rect x="30" y="244" width="620" height="68" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="50" y="268" font-family="sans-serif" font-size="12" fill="#26215C">On the Chapter 2 valley map, both settle on exactly the same route at a cost of 20.485281.</text>
+<text x="50" y="288" font-family="sans-serif" font-size="12" fill="#3C3489">Without the heuristic that takes 112 settled cells. With it, 40. Same answer, a third of the work.</text>
+<text x="50" y="304" font-family="sans-serif" font-size="12" fill="#3C3489">The heuristic never changes which path is best, it only changes how quickly the search gets there.</text>
+</svg>

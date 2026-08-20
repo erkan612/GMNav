@@ -1,0 +1,23 @@
+<svg width="680" height="300" viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>A raw cell path compared to the same route after string pulling</title>
+<desc>The raw path turns at every cell boundary. String pulling keeps only the corners that geometry actually forces, leaving long straight runs.</desc>
+<rect width="680" height="300" fill="#ffffff"/>
+<text x="40" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#2C2C2A">Raw path, one waypoint per cell</text>
+<text x="380" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#04342C">After string pulling</text>
+
+<rect x="150" y="120" width="110" height="34" rx="3" fill="#993C1D" opacity="0.35"/>
+<path d="M50 70 L74 70 L74 94 L98 94 L98 118 L122 118 L122 166 L146 166 L146 190 L170 190 L194 190 L218 190 L242 190 L266 190 L290 190 L314 190 L314 166 L314 142" fill="none" stroke="#5F5E5A" stroke-width="2" stroke-linejoin="round"/>
+<g fill="#5F5E5A">
+<circle cx="50" cy="70" r="3"/><circle cx="74" cy="70" r="3"/><circle cx="74" cy="94" r="3"/><circle cx="98" cy="94" r="3"/><circle cx="98" cy="118" r="3"/><circle cx="122" cy="118" r="3"/><circle cx="122" cy="166" r="3"/><circle cx="146" cy="166" r="3"/><circle cx="146" cy="190" r="3"/><circle cx="170" cy="190" r="3"/><circle cx="194" cy="190" r="3"/><circle cx="218" cy="190" r="3"/><circle cx="242" cy="190" r="3"/><circle cx="266" cy="190" r="3"/><circle cx="290" cy="190" r="3"/><circle cx="314" cy="190" r="3"/><circle cx="314" cy="166" r="3"/><circle cx="314" cy="142" r="3"/>
+</g>
+<text x="185" y="234" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">36 waypoints, 1239.29 px</text>
+
+<rect x="490" y="120" width="110" height="34" rx="3" fill="#993C1D" opacity="0.35"/>
+<path d="M390 70 L430 132 L462 190 L556 190 L622 178 L654 142" fill="none" stroke="#0F6E56" stroke-width="2.5" stroke-linejoin="round"/>
+<g fill="#0F6E56">
+<circle cx="390" cy="70" r="4"/><circle cx="430" cy="132" r="4"/><circle cx="462" cy="190" r="4"/><circle cx="556" cy="190" r="4"/><circle cx="622" cy="178" r="4"/><circle cx="654" cy="142" r="4"/>
+</g>
+<text x="525" y="234" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#085041">6 waypoints, 1179.17 px</text>
+
+<text x="340" y="272" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">83 percent fewer waypoints, and 60 pixels shorter, because the staircase was never the shortest route.</text>
+</svg>

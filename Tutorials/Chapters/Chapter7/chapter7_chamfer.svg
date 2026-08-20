@@ -1,0 +1,35 @@
+<svg width="680" height="330" viewBox="0 0 680 330" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Two sweeps, four neighbours each</title>
+<desc>The forward pass carries distance from obstacles above and left, the backward pass folds in obstacles below and right. Dropping the anti diagonal from either pass leaves a blind spot.</desc>
+<rect width="680" height="330" fill="#ffffff"/>
+
+<text x="40" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#2C2C2A">Forward pass, top left to bottom right</text>
+<g stroke="#5F5E5A" stroke-width="0.5" fill="#F1EFE8">
+<rect x="60" y="56" width="34" height="34"/><rect x="94" y="56" width="34" height="34"/><rect x="128" y="56" width="34" height="34"/>
+<rect x="60" y="90" width="34" height="34"/>
+</g>
+<rect x="94" y="90" width="34" height="34" fill="#1D9E75" stroke="#04342C" stroke-width="0.5"/>
+<g fill="#085041" font-family="sans-serif" font-size="11" text-anchor="middle">
+<text x="77" y="78">ul</text><text x="111" y="78">up</text><text x="145" y="78">ur</text><text x="77" y="112">lf</text>
+</g>
+<text x="200" y="82" font-family="sans-serif" font-size="12" fill="#5F5E5A">min of those four, plus one</text>
+
+<text x="380" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#2C2C2A">Backward pass, bottom right to top left</text>
+<g stroke="#5F5E5A" stroke-width="0.5" fill="#F1EFE8">
+<rect x="434" y="90" width="34" height="34"/>
+<rect x="366" y="124" width="34" height="34"/><rect x="400" y="124" width="34" height="34"/><rect x="434" y="124" width="34" height="34"/>
+</g>
+<rect x="400" y="90" width="34" height="34" fill="#1D9E75" stroke="#04342C" stroke-width="0.5"/>
+<g fill="#085041" font-family="sans-serif" font-size="11" text-anchor="middle">
+<text x="451" y="112">rt</text><text x="383" y="146">dl</text><text x="417" y="146">dn</text><text x="451" y="146">dr</text>
+</g>
+<text x="500" y="116" font-family="sans-serif" font-size="12" fill="#5F5E5A">keep the smaller</text>
+
+<rect x="40" y="180" width="600" height="60" rx="10" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+<text x="60" y="202" font-family="sans-serif" font-size="12" font-weight="500" fill="#712B13">Three neighbours per pass is not enough</text>
+<text x="60" y="224" font-family="sans-serif" font-size="12" fill="#993C1D">Drop ur and dl and the up-right and down-left diagonals are never consulted. On this chapter's map that over-reports 45 cells, including one that claims 2 when the truth is 1.</text>
+
+<rect x="40" y="254" width="600" height="56" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="60" y="276" font-family="sans-serif" font-size="12" fill="#04342C">With all four, the transform matches a literal box scan on every cell of the map.</text>
+<text x="60" y="296" font-family="sans-serif" font-size="12" fill="#085041">1496 cell visits, against 36652 for a box scan at radius 4. The gap widens as agents get larger.</text>
+</svg>

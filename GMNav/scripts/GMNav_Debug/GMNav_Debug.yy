@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"GMNav_Debug",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"GMNav_Debug",
+  "parent":{
+    "name":"GMNav",
+    "path":"folders/GMNav.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

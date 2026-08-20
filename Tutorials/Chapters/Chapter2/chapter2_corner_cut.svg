@@ -1,0 +1,31 @@
+<svg width="680" height="300" viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Corner cutting through a gap no character could fit through</title>
+<desc>Two walls placed diagonally opposite each other leave a mathematical opening with no real width. GMNav refuses that step by default, and routes around instead.</desc>
+<rect width="680" height="300" fill="#ffffff"/>
+
+<g stroke="#5F5E5A" stroke-width="0.5">
+<rect x="90" y="60" width="70" height="70" fill="#F1EFE8"/><rect x="160" y="60" width="70" height="70" fill="#FAECE7"/>
+<rect x="90" y="130" width="70" height="70" fill="#FAECE7"/><rect x="160" y="130" width="70" height="70" fill="#F1EFE8"/>
+</g>
+<text x="195" y="95" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="11" fill="#712B13">wall</text>
+<text x="125" y="165" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="11" fill="#712B13">wall</text>
+<circle cx="125" cy="95" r="6" fill="#D85A30"/>
+<circle cx="195" cy="165" r="6" fill="#1D9E75"/>
+<line x1="125" y1="95" x2="191" y2="161" stroke="#993C1D" stroke-width="2.5" stroke-dasharray="5 4"/>
+<text x="160" y="232" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="500" fill="#712B13">allowed, if you ask for it</text>
+<text x="160" y="252" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">cost 1.414214, and your character clips the corners</text>
+
+<g stroke="#5F5E5A" stroke-width="0.5">
+<rect x="410" y="60" width="70" height="70" fill="#F1EFE8"/><rect x="480" y="60" width="70" height="70" fill="#FAECE7"/>
+<rect x="410" y="130" width="70" height="70" fill="#FAECE7"/><rect x="480" y="130" width="70" height="70" fill="#F1EFE8"/>
+</g>
+<text x="515" y="95" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="11" fill="#712B13">wall</text>
+<text x="445" y="165" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="11" fill="#712B13">wall</text>
+<circle cx="445" cy="95" r="6" fill="#D85A30"/>
+<circle cx="515" cy="165" r="6" fill="#1D9E75"/>
+<path d="M445 95 L445 40 L575 40 L575 165 L521 165" fill="none" stroke="#0F6E56" stroke-width="2.5" stroke-linejoin="round"/>
+<text x="480" y="232" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="500" fill="#04342C">the default, refused</text>
+<text x="480" y="252" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#085041">cost 6.0, and the route is one a character can walk</text>
+
+<text x="340" y="286" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">A diagonal is only offered when both cells flanking it are open.</text>
+</svg>

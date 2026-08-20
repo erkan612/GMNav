@@ -1,0 +1,22 @@
+<svg width="680" height="270" viewBox="0 0 680 270" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Updating a threat that moves</title>
+<desc>Clear the rectangle the old stamp covered, stamp the new position, then rebake only those two rectangles rather than the whole map.</desc>
+<rect width="680" height="270" fill="#ffffff"/>
+
+<rect x="40" y="50" width="600" height="120" rx="10" fill="#F7F6F2" stroke="#5F5E5A" stroke-width="0.5"/>
+<rect x="90" y="72" width="76" height="76" rx="6" fill="#DCD9CE" stroke="#5F5E5A" stroke-width="0.5" stroke-dasharray="5 4"/>
+<text x="128" y="114" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="11" fill="#5F5E5A">old rect</text>
+<circle cx="128" cy="134" r="6" fill="#DCD9CE" stroke="#5F5E5A" stroke-width="0.5"/>
+
+<rect x="250" y="72" width="76" height="76" rx="6" fill="#F6DACE" stroke="#993C1D" stroke-width="0.5"/>
+<text x="288" y="114" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="11" fill="#712B13">new rect</text>
+<circle cx="288" cy="134" r="6" fill="#C25A2C"/>
+
+<text x="380" y="86" font-family="sans-serif" font-size="12" fill="#2C2C2A">1. clear_region on the old rect</text>
+<text x="380" y="108" font-family="sans-serif" font-size="12" fill="#2C2C2A">2. stamp_radial at the new spot</text>
+<text x="380" y="130" font-family="sans-serif" font-size="12" fill="#2C2C2A">3. bake_region on both rects</text>
+
+<rect x="40" y="188" width="600" height="62" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="60" y="210" font-family="sans-serif" font-size="12" fill="#04342C">Miss step one and the old threat stays burned into the array, trailing whatever moved.</text>
+<text x="60" y="232" font-family="sans-serif" font-size="12" fill="#085041">On a 500 by 500 map the stamp touches 225 cells of 250000: 0.09 percent of a full rebake.</text>
+</svg>

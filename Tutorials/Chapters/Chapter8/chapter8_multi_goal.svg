@@ -1,0 +1,20 @@
+<svg width="680" height="280" viewBox="0 0 680 280" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Three exits seeded into one field</title>
+<desc>Seeding several goals at zero distance produces a single field in which every cell already points at whichever exit is cheapest to reach from it.</desc>
+<rect width="680" height="280" fill="#ffffff"/>
+
+<path d="M40 50 L250 50 L200 200 L40 200 Z" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<path d="M250 50 L470 50 L430 200 L200 200 Z" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<path d="M470 50 L640 50 L640 200 L430 200 Z" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+
+<circle cx="120" cy="120" r="8" fill="#1D9E75"/><text x="120" y="148" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#04342C">exit A</text>
+<circle cx="330" cy="120" r="8" fill="#534AB7"/><text x="330" y="148" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#26215C">exit B</text>
+<circle cx="550" cy="120" r="8" fill="#C25A2C"/><text x="550" y="148" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#712B13">exit C</text>
+
+<g fill="#D85A30">
+<circle cx="70" cy="80" r="4"/><circle cx="180" cy="170" r="4"/><circle cx="270" cy="80" r="4"/><circle cx="400" cy="170" r="4"/><circle cx="500" cy="80" r="4"/><circle cx="600" cy="170" r="4"/>
+</g>
+
+<text x="340" y="234" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">Seeding three goals costs 1303 pops instead of 1300. Building three separate fields would cost three full passes.</text>
+<text x="340" y="258" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">Every cell's distance matched its true nearest exit exactly, on every sample checked.</text>
+</svg>

@@ -1,0 +1,22 @@
+<svg width="680" height="290" viewBox="0 0 680 290" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Measuring the estimate in the wrong units</title>
+<desc>On isometric tiles a step is 32 pixels but costs 1. Feeding raw pixel distance to the search inflates the estimate by a factor of 32 and breaks the optimality guarantee.</desc>
+<rect width="680" height="290" fill="#ffffff"/>
+
+<rect x="40" y="52" width="280" height="128" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="60" y="78" font-family="sans-serif" font-size="13" font-weight="500" fill="#04342C">Estimate in logical steps</text>
+<text x="60" y="104" font-family="sans-serif" font-size="12" fill="#085041">h counts steps, g counts steps</text>
+<text x="60" y="124" font-family="sans-serif" font-size="12" fill="#085041">the two are comparable</text>
+<text x="60" y="152" font-family="sans-serif" font-size="12" font-weight="500" fill="#04342C">cost 2.000000, 2 settled</text>
+
+<rect x="360" y="52" width="280" height="128" rx="10" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+<text x="380" y="78" font-family="sans-serif" font-size="13" font-weight="500" fill="#712B13">Estimate in pixels</text>
+<text x="380" y="104" font-family="sans-serif" font-size="12" fill="#993C1D">h counts pixels, g counts steps</text>
+<text x="380" y="124" font-family="sans-serif" font-size="12" fill="#993C1D">h is 32 times too large</text>
+<text x="380" y="152" font-family="sans-serif" font-size="12" font-weight="500" fill="#712B13">cost 2.828427, 2 settled</text>
+
+<rect x="40" y="200" width="600" height="66" rx="10" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="60" y="224" font-family="sans-serif" font-size="12" fill="#2C2C2A">A 41 percent worse path, for exactly the same amount of work.</text>
+<text x="60" y="244" font-family="sans-serif" font-size="12" fill="#5F5E5A">Across this chapter's map, 325 start and goal pairs come back with a worse route when the estimate is measured in pixels.</text>
+<text x="60" y="260" font-family="sans-serif" font-size="12" fill="#5F5E5A">GMNav converts by dividing by the shortest possible step, so the two units always agree.</text>
+</svg>

@@ -1,0 +1,38 @@
+<svg width="680" height="250" viewBox="0 0 680 250" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>One set of cells drawn five different ways</title>
+<desc>The same logical grid rendered as squares, isometric diamonds, staggered diamonds, and hexagons in two orientations.</desc>
+<rect width="680" height="250" fill="#ffffff"/>
+<g stroke="#0F6E56" stroke-width="0.5" fill="#E1F5EE">
+<rect x="30" y="60" width="26" height="26"/><rect x="56" y="60" width="26" height="26"/><rect x="30" y="86" width="26" height="26"/><rect x="56" y="86" width="26" height="26"/>
+</g>
+<text x="56" y="140" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#04342C">ORTHO</text>
+
+<g stroke="#0F6E56" stroke-width="0.5" fill="#E1F5EE">
+<polygon points="190,60 216,73 190,86 164,73"/><polygon points="216,73 242,86 216,99 190,86"/>
+<polygon points="164,73 190,86 164,99 138,86"/><polygon points="190,86 216,99 190,112 164,99"/>
+</g>
+<text x="190" y="140" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#04342C">ISO_DIAMOND</text>
+
+<g stroke="#0F6E56" stroke-width="0.5" fill="#E1F5EE">
+<polygon points="330,60 356,73 330,86 304,73"/><polygon points="382,60 408,73 382,86 356,73"/>
+<polygon points="356,86 382,99 356,112 330,99"/><polygon points="408,86 434,99 408,112 382,99"/>
+</g>
+<text x="368" y="140" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#04342C">ISO_STAGGERED</text>
+
+<g stroke="#0F6E56" stroke-width="0.5" fill="#E1F5EE">
+<polygon points="500,58 514,66 514,82 500,90 486,82 486,66"/><polygon points="528,58 542,66 542,82 528,90 514,82 514,66"/>
+<polygon points="514,82 528,90 528,106 514,114 500,106 500,90"/>
+</g>
+<text x="514" y="140" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#04342C">HEX_POINTY</text>
+
+<g stroke="#0F6E56" stroke-width="0.5" fill="#E1F5EE">
+<polygon points="606,58 622,58 630,72 622,86 606,86 598,72"/><polygon points="630,72 646,72 654,86 646,100 630,100 622,86"/>
+<polygon points="606,86 622,86 630,100 622,114 606,114 598,100"/>
+</g>
+<text x="626" y="140" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#04342C">HEX_FLAT</text>
+
+<rect x="30" y="164" width="620" height="66" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="50" y="188" font-family="sans-serif" font-size="12" font-weight="500" fill="#26215C">Same cells, same walls, same search code.</text>
+<text x="50" y="208" font-family="sans-serif" font-size="12" fill="#3C3489">The layout descriptor decides where cell (5,3) lands on screen and which cells count as its neighbours.</text>
+<text x="50" y="224" font-family="sans-serif" font-size="12" fill="#3C3489">Nothing inside A* changes, because A* never looks at a pixel.</text>
+</svg>

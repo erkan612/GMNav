@@ -1,0 +1,23 @@
+<svg width="680" height="290" viewBox="0 0 680 290" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Why touching cells mean nothing in a side view</title>
+<desc>Two ledges can be adjacent on screen and unreachable from each other, while two far apart can be connected by a jump. Connectivity depends on movement, not on adjacency.</desc>
+<rect width="680" height="290" fill="#ffffff"/>
+<text x="40" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#712B13">Touching, but unreachable</text>
+<text x="390" y="40" font-family="sans-serif" font-size="13" font-weight="500" fill="#04342C">Far apart, but connected</text>
+
+<rect x="50" y="200" width="120" height="20" fill="#5F5E5A"/>
+<rect x="170" y="90" width="130" height="20" fill="#5F5E5A"/>
+<circle cx="110" cy="190" r="9" fill="#D85A30"/>
+<path d="M120 186 Q160 150 168 116" fill="none" stroke="#993C1D" stroke-width="2" stroke-dasharray="5 4"/>
+<text x="196" y="146" font-family="sans-serif" font-size="11" fill="#712B13">too high to jump</text>
+<text x="175" y="252" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#712B13">the cells are neighbours on the grid</text>
+
+<rect x="380" y="200" width="90" height="20" fill="#5F5E5A"/>
+<rect x="560" y="200" width="90" height="20" fill="#5F5E5A"/>
+<circle cx="430" cy="190" r="9" fill="#D85A30"/>
+<path d="M440 186 Q515 118 600 190" fill="none" stroke="#0F6E56" stroke-width="2.5"/>
+<circle cx="600" cy="190" r="7" fill="#1D9E75"/>
+<text x="515" y="252" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#085041">the cells are nowhere near each other</text>
+
+<text x="340" y="282" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#5F5E5A">In a top down game, adjacency is connectivity. Here it tells you nothing at all.</text>
+</svg>
