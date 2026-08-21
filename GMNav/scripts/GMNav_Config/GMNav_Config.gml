@@ -105,7 +105,7 @@ enum gmnav_bake {
 #macro GMNAV_PLAT_MAX_LINKS 24  // max outgoing links kept per node
 
 #macro GMNAV_FLAG_BLOCKED   0x0001
-#macro GMNAV_FLAG_ONEWAY    0x0002
+#macro GMNAV_FLAG_ONEWAY    0x0002   // [[EXPERIMENTAL]]
 #macro GMNAV_FLAG_LINK      0x0004   // endpoint of an off-graph link (jump, ladder, door)
 #macro GMNAV_FLAG_WATER     0x0008
 #macro GMNAV_FLAG_DANGER    0x0010
