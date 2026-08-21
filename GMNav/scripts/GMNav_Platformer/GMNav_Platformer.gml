@@ -40,11 +40,15 @@ function gmnav_platgraph_create(_grid, _movement) {
         edge_to    : [],
         edge_cost  : [],
         edge_type  : [],
+        edge_vx    : [],
+        edge_vy    : [],
 
         // scratch during bake
         tmp_to    : [],
         tmp_cost  : [],
         tmp_type  : [],
+        tmp_vx    : [],
+        tmp_vy    : [],
 
         phase     : gmnav_bake.IDLE,
         cursor    : 0,
@@ -82,6 +86,8 @@ function gmnav_platgraph_bake_begin(_pg) {
     _pg.tmp_to   = [];
     _pg.tmp_cost = [];
     _pg.tmp_type = [];
+    _pg.tmp_vx   = [];
+    _pg.tmp_vy   = [];
     _pg.cursor   = 0;
     _pg.version  = _pg.grid.version;
     _pg.phase    = gmnav_bake.SURFACES;
@@ -193,6 +199,8 @@ function __gmnav_plat_scan(_pg, _budget) {
             array_push(_pg.tmp_to,   []);
             array_push(_pg.tmp_cost, []);
             array_push(_pg.tmp_type, []);
+            array_push(_pg.tmp_vx,   []);
+            array_push(_pg.tmp_vy,   []);
             _pg.count++;
         }
 
@@ -246,7 +254,7 @@ function __gmnav_plat_links_for(_pg, _pnode) {
 
         __gmnav_plat_add(_pg, _pnode, _ap,
                          _lay.tile_w / max(0.0001, _mv.run_speed),
-                         gmnav_link.WALK);
+                         gmnav_link.WALK, _d * _mv.run_speed, 0);
     }
 
     for (var _d = -1; _d <= 1; _d += 2) {
@@ -273,17 +281,20 @@ function __gmnav_plat_simulate(_pg, _from, _x0, _y0, _vx, _vy, _type) {
     var _mv   = _pg.move;
     var _w    = _grid.width;
 
+    var _lvx = _vx;
+    var _lvy = _vy;
+
     var _x = _x0;
     var _y = _y0;
     var _frames = 0;
 
     var _armed = false;
-	
+
     if (_type == gmnav_link.FALL) {
         if (_vx == 0) return;
 
         var _walked = 0;
-        var _limit  = _lay.tile_w * 2;
+        var _limit  = _lay.tile_w * GMNAV_PLAT_FALL_WALK_CELLS;
 
         while (__gmnav_plat_blocked(_pg, _x, _y + 1, 1)) {
             if (_walked > _limit) return;                        // never left the ledge
@@ -336,7 +347,7 @@ function __gmnav_plat_simulate(_pg, _from, _x0, _y0, _vx, _vy, _type) {
 
             if (_type == gmnav_link.JUMP) _cost *= _mv.jump_bias;
 
-            __gmnav_plat_add(_pg, _from, _to, _cost, _type);
+            __gmnav_plat_add(_pg, _from, _to, _cost, _type, _lvx, _lvy);
             return;
         }
 
@@ -366,6 +377,8 @@ function __gmnav_plat_blocked(_pg, _x, _y, _vy) {
     var _r1 = floor((_y - _pg.move.height - _lay.origin_y) / _lay.tile_h);
     var _r2 = floor((_y - 0.001 - _lay.origin_y) / _lay.tile_h);
 
+    var _prev_y = _y - _vy; // where the feet were one frame ago
+
     for (var _r = _r1; _r <= _r2; _r++) {
         if (_r < 0 || _r >= _h) return true;
 
@@ -376,14 +389,15 @@ function __gmnav_plat_blocked(_pg, _x, _y, _vy) {
             if ((_f & GMNAV_FLAG_BLOCKED) != 0) return true;
 
             if ((_f & GMNAV_FLAG_ONEWAY) != 0 && _vy > 0 && _r == _r2) {
-                return true;
+                var _top = _lay.origin_y + _r * _lay.tile_h;
+                if (_prev_y <= _top) return true;
             }
         }
     }
     return false;
 }
 
-function __gmnav_plat_add(_pg, _from, _to, _cost, _type) {
+function __gmnav_plat_add(_pg, _from, _to, _cost, _type, _vx, _vy) {
     var _tos = _pg.tmp_to[_from];
 
     for (var i = 0; i < array_length(_tos); i++) {
@@ -391,6 +405,8 @@ function __gmnav_plat_add(_pg, _from, _to, _cost, _type) {
             if (_cost < _pg.tmp_cost[_from][i]) {
                 _pg.tmp_cost[_from][i] = _cost;
                 _pg.tmp_type[_from][i] = _type;
+                _pg.tmp_vx[_from][i]   = _vx;
+                _pg.tmp_vy[_from][i]   = _vy;
             }
             return;
         }
@@ -401,6 +417,8 @@ function __gmnav_plat_add(_pg, _from, _to, _cost, _type) {
     array_push(_pg.tmp_to[_from],   _to);
     array_push(_pg.tmp_cost[_from], _cost);
     array_push(_pg.tmp_type[_from], _type);
+    array_push(_pg.tmp_vx[_from],   _vx);
+    array_push(_pg.tmp_vy[_from],   _vy);
 }
 
 function __gmnav_plat_flatten(_pg) {
@@ -418,17 +436,23 @@ function __gmnav_plat_flatten(_pg) {
     var _to   = array_create(_total, 0);
     var _cost = array_create(_total, 0);
     var _type = array_create(_total, 0);
+    var _evx  = array_create(_total, 0);
+    var _evy  = array_create(_total, 0);
     var _k    = 0;
 
     for (var i = 0; i < _n; i++) {
         var _ts = _pg.tmp_to[i];
         var _cs = _pg.tmp_cost[i];
         var _ty = _pg.tmp_type[i];
+        var _vx = _pg.tmp_vx[i];
+        var _vy = _pg.tmp_vy[i];
 
         for (var j = 0; j < array_length(_ts); j++) {
             _to[_k]   = _ts[j];
             _cost[_k] = _cs[j];
             _type[_k] = _ty[j];
+            _evx[_k]  = _vx[j];
+            _evy[_k]  = _vy[j];
             _k++;
         }
     }
@@ -437,8 +461,10 @@ function __gmnav_plat_flatten(_pg) {
     _pg.edge_to    = _to;
     _pg.edge_cost  = _cost;
     _pg.edge_type  = _type;
-	
-	var _lay = _pg.grid.layout;
+    _pg.edge_vx    = _evx;
+    _pg.edge_vy    = _evy;
+
+    var _lay = _pg.grid.layout;
     var _gw  = _pg.grid.width;
     var _nx  = array_create(_n, 0);
     var _ny  = array_create(_n, 0);
@@ -455,4 +481,31 @@ function __gmnav_plat_flatten(_pg) {
     _pg.tmp_to   = [];
     _pg.tmp_cost = [];
     _pg.tmp_type = [];
+    _pg.tmp_vx   = [];
+    _pg.tmp_vy   = [];
+}
+
+function gmnav_platgraph_link_get(_pg, _from, _to) {
+    if (_from < 0 || _from >= _pg.count) return undefined;
+
+    var _e0 = _pg.edge_start[_from];
+    var _e1 = _pg.edge_start[_from + 1];
+
+    for (var e = _e0; e < _e1; e++) {
+        if (_pg.edge_to[e] != _to) continue;
+
+        return {
+            type : _pg.edge_type[e],
+            cost : _pg.edge_cost[e],
+            vx   : _pg.edge_vx[e],
+            vy   : _pg.edge_vy[e],
+            x    : _pg.node_x[_to],
+            y    : _pg.node_y[_to]
+        };
+    }
+    return undefined;
+}
+
+function gmnav_platgraph_solid(_pg, _x, _y, _vy = 0) {
+    return __gmnav_plat_blocked(_pg, _x, _y, _vy);
 }

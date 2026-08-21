@@ -121,3 +121,5 @@ enum gmnav_bake {
 #macro GMNAV_NO_NODE   -1
 #macro GMNAV_SQRT2     1.4142135623730951
 #macro GMNAV_INF       infinity
+
+#macro GMNAV_PLAT_FALL_WALK_CELLS 4  // how far a fall may walk to reach an edge
