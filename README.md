@@ -165,6 +165,7 @@ var _links = gmnav_scheduler_get_links(ticket);
 ## Documentation
 
 - **[API Reference](RawDocumentation.md)** - Complete API reference, tuning, and known behaviours
+- **[Getting Started](GettingStarted.md)** - Getting started guide
 - **[Tutorials](https://github.com/erkan612/GMNav/tree/main/Tutorials)** - Complete API reference, tuning, and known behaviours
 
 ---
