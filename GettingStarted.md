@@ -8,7 +8,7 @@ stalls your game loop.
 
 This guide gets you from an empty project to a moving agent, then shows each
 subsystem in the order you are likely to need it. For the full API see
-`RawDocumentation.md`. For worked examples with diagrams see the tutorial
+[API Reference](RawDocumentation.md). For worked examples with diagrams see the tutorial
 series.
 
 ---
@@ -439,7 +439,7 @@ one-way deck stacked over a solid ledge routes the long way round.
 
 ## Where next
 
-`RawDocumentation.md` is the complete API reference, every function with its
+[API Reference](RawDocumentation.md) is the complete API reference, every function with its
 arguments, return shape and edge cases.
 
 The tutorial series works through ten chapters with real datasets and diagrams,
