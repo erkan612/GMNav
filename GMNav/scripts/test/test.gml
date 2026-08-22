@@ -344,6 +344,88 @@ function gmt_test_platformer() {
 	    }
 	}
 	gmt_check("no jump exceeds max rise", _bad, 0);
+	
+    gmt_head("P7 one-way platforms");
+
+    var _ow = gmt_oneway_level();
+    var _og = gmnav_platgraph_create(_ow, gmt_mover());
+    gmnav_platgraph_bake(_og);
+
+    var _omv   = _og.move;
+    var _orise = 0;
+    var _ov    = _omv.jump_vel;
+    while (_ov > 0) { _ov -= _omv.gravity; _orise += max(0, _ov); }
+    gmt_note("max jump rise px", string_format(_orise, 1, 2));
+
+    var _high = 0;   // upward links onto the out-of-reach one-way, row 8
+    var _low  = 0;   // upward links onto the in-reach one-way, row 9
+    var _obad = 0;   // links that exceed the model's rise
+
+    for (var _i = 0; _i < _og.count; _i++) {
+        var _e0 = _og.edge_start[_i];
+        var _e1 = _og.edge_start[_i + 1];
+
+        for (var e = _e0; e < _e1; e++) {
+            var _to = _og.edge_to[e];
+            var _gn = _og.nodes[_to];
+            var _sr = (_gn div _ow.width) + 1;
+            var _sn = gmnav_grid_node(_ow, _gn % _ow.width, _sr);
+
+            if (_sn != GMNAV_NO_NODE
+            && (_ow.flags[_sn] & GMNAV_FLAG_ONEWAY) != 0
+            &&  _og.node_y[_to] < _og.node_y[_i]) {
+                if      (_sr == 8) _high++;
+                else if (_sr == 9) _low++;
+            }
+
+            if (_og.edge_type[e] == gmnav_link.JUMP
+            && (_og.node_y[_i] - _og.node_y[_to]) > _orise + 0.001) {
+                _obad++;
+            }
+        }
+    }
+
+    gmt_note("in-reach one-way links", _low);
+    gmt_check("out-of-reach one-way produces no links", _high, 0);
+    gmt_check("in-reach one-way still linked", _low > 0, true);
+    gmt_check("no one-way jump exceeds max rise", _obad, 0);
+    gmt_check("one-way cells are still standable",
+              _og.node_of[gmnav_grid_node(_ow, 17, 8)] >= 0, true);
+
+    gmt_head("P8 links carry a replayable launch");
+
+    var _rbad = 0;   // stored launch lands on the wrong node
+    var _wbad = 0;   // WALK edge whose launch does not face its target
+    var _non  = 0;
+
+    for (var _i = 0; _i < _og.count; _i++) {
+        var _e0 = _og.edge_start[_i];
+        var _e1 = _og.edge_start[_i + 1];
+
+        for (var e = _e0; e < _e1; e++) {
+            var _to = _og.edge_to[e];
+
+            if (_og.edge_type[e] == gmnav_link.WALK) {
+                var _want = (_og.node_x[_to] > _og.node_x[_i]) ? 1 : -1;
+                if (_og.edge_vx[e] * _want <= 0 || _og.edge_vy[e] != 0) _wbad++;
+                continue;
+            }
+
+            _non++;
+            var _land = gmt_plat_replay(_og, _i, _og.edge_vx[e], _og.edge_vy[e],
+                                        _og.edge_type[e]);
+            if (_land != _to) _rbad++;
+        }
+    }
+
+    gmt_note("non-walk edges replayed", _non);
+    gmt_check("every stored launch reproduces its link", _rbad, 0);
+    gmt_check("walk launches face their target", _wbad, 0);
+
+    var _lk = gmnav_platgraph_link_get(_og, 0, _og.edge_to[_og.edge_start[0]]);
+    gmt_check("link_get returns a struct", is_struct(_lk), true);
+    gmt_check("link_get on a missing edge returns undefined",
+              gmnav_platgraph_link_get(_og, 0, -99), undefined);
 }
 
 function gmt_test_agent() {

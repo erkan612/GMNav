@@ -32,6 +32,6 @@ step_now  = false;
 
 bake_ms = 0;
 
-show_debug_message("demo3: edge_vx " + string(variable_struct_exists(pg, "edge_vx"))
-                 + "  nodes " + string(pg.count)
-                 + "  links " + string(array_length(pg.edge_to)));
+//show_debug_message("demo3: edge_vx " + string(variable_struct_exists(pg, "edge_vx"))
+//                 + "  nodes " + string(pg.count)
+//                 + "  links " + string(array_length(pg.edge_to)));

@@ -363,3 +363,92 @@ function gmt_drain_scheduler(_sched, _tickets, _max_frames = 500) {
     }
     return -1;
 }
+
+function gmt_oneway_level() {
+    var _g = gmnav_grid_create(24, 14, gmnav_layout_create(gmnav_layout.ORTHO, 16, 16));
+
+    gmnav_grid_fill_blocked(_g, 0,  0,  23, 0,  true);
+    gmnav_grid_fill_blocked(_g, 0,  13, 23, 13, true);
+    gmnav_grid_fill_blocked(_g, 0,  0,  0,  13, true);
+    gmnav_grid_fill_blocked(_g, 23, 0,  23, 13, true);
+
+    gmnav_grid_fill_blocked(_g, 1, 11, 22, 11, true);
+
+    for (var _c = 3; _c < 9; _c++) {
+        gmnav_grid_set_flag(_g, _c, 8, GMNAV_FLAG_ONEWAY, true);
+    }
+    for (var _c = 15; _c < 21; _c++) {
+        gmnav_grid_set_flag(_g, _c, 9, GMNAV_FLAG_ONEWAY, true);
+    }
+
+    return _g;
+}
+
+function gmt_plat_replay(_pg, _from, _vx, _vy, _type) {
+    var _grid = _pg.grid;
+    var _lay  = _grid.layout;
+    var _mv   = _pg.move;
+
+    var _x  = _pg.node_x[_from];
+    var _y  = _pg.node_y[_from];
+    var _x0 = _x;
+
+    var _frames = 0;
+    var _armed  = false;
+
+    if (_type == gmnav_link.FALL) {
+        if (_vx == 0) return GMNAV_NO_NODE;
+
+        var _walked = 0;
+        var _limit  = _lay.tile_w * GMNAV_PLAT_FALL_WALK_CELLS;
+
+        while (gmnav_platgraph_solid(_pg, _x, _y + 1, 1)) {
+            if (_walked > _limit) return GMNAV_NO_NODE;
+            if (gmnav_platgraph_solid(_pg, _x + _vx, _y, 0)) return GMNAV_NO_NODE;
+
+            _x += _vx;
+            _walked += abs(_vx);
+            _frames++;
+        }
+        _armed = true;
+    }
+
+    while (_frames < GMNAV_PLAT_MAX_SIM) {
+        _frames++;
+
+        _vy = min(_vy + _mv.gravity, _mv.max_fall);
+
+        var _nx = _x + _vx;
+        if (gmnav_platgraph_solid(_pg, _nx, _y, 0)) _vx = 0;
+        else                                        _x  = _nx;
+
+        var _ny = _y + _vy;
+        if (gmnav_platgraph_solid(_pg, _x, _ny, _vy)) {
+            if (_vy < 0) {
+                _vy = 0;
+                continue;
+            }
+
+            if (!_armed) return GMNAV_NO_NODE;
+
+            var _lr = floor((_ny - _lay.origin_y) / _lay.tile_h);
+            var _lc = floor((_x  - _lay.origin_x) / _lay.tile_w);
+
+            var _stand = gmnav_grid_node(_grid, _lc, _lr - 1);
+            if (_stand == GMNAV_NO_NODE) return GMNAV_NO_NODE;
+
+            return _pg.node_of[_stand];
+        }
+
+        _y = _ny;
+
+        if (!_armed && (_vy > 0 || abs(_x - _x0) > _lay.tile_w * 0.75)) {
+            _armed = true;
+        }
+
+        if (_x < _lay.origin_x || _y < _lay.origin_y) return GMNAV_NO_NODE;
+        if (_x > _lay.origin_x + _grid.width  * _lay.tile_w) return GMNAV_NO_NODE;
+        if (_y > _lay.origin_y + _grid.height * _lay.tile_h) return GMNAV_NO_NODE;
+    }
+    return GMNAV_NO_NODE;
+}
