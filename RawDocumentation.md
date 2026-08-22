@@ -2695,6 +2695,36 @@ On `ISO_STAGGERED` and hex, cell adjacency and screen geometry have come apart, 
 
 It bypasses the frame budget, not the workspace pool. With every workspace busy it falls back into the queue and resolves later. Check `ticket.state` rather than assuming a path arrived.
 
+### Air speed defaults to run speed, which means no air momentum
+
+`gmnav_movement_create` resolves an omitted `air_speed` to `run_speed`, so the character drifts sideways in flight exactly as fast as it walks. Almost no platformer works that way.
+
+The effect is not cosmetic. A jump that gains height while covering distance has to still be travelling when it falls back through the target's height, and below a sharp threshold the link is never baked at all. A graph missing links still looks like a valid graph, so the symptom is a level with quietly one directional regions: a platform you can leave but cannot return to.
+
+On a 32px grid with `gravity` 0.5 and `jump_vel` 12, a jump covering 128px sideways while netting 96px of rise passes back through its launch height at frame 36.5. At `air_speed` 3 that is 109.5px travelled and the link does not exist. At 3.5 it is 127.8px and it does. Set it explicitly, at or above `run_speed`. The default is conservative rather than correct.
+
+### jump_levels controls arc quality, not just how many jumps are tried
+
+`jump_levels` samples that many strengths between `jump_min` and full power. The default of 3 gives you 0.5, 0.75 and 1.0 of `jump_vel` and nothing in between.
+
+When a gap's requirement falls between two samples the baker uses the next one up and the arc overshoots. On a 32px grid with `jump_vel` 12, a 3 cell gap at 3 levels is crossed by a full power jump with a 138px apex, landing a cell past the near edge. At 9 levels the same gap goes at a 90px apex. Bake time is linear at `2 + 3 * levels` simulations per surface node, and 7 to 9 buys most of the improvement.
+
+Check the geometry before reaching for it. A 4 cell gap under the same model needs 48 airborne frames to cover 128px, and 48 frames of ballistic flight has a 138px apex whatever you sample.
+
+### Local avoidance does not know walls exist
+
+`gmnav_agent_update` computes avoidance from the neighbour list you pass and nothing else. It never reads the grid's blocked flags, and GMNav never moves anything, so the velocity it hands back can point straight into geometry.
+
+A crowd compressing against a wall pushes the agents nearest the wall into it. Your movement code absorbs that, and the usual result is agents grinding along a wall or idling against it until the crowd disperses. Set `avoid_str` to 0 to disable.
+
+One consequence is worth stating separately, because it fails silently. If you zero the velocity component pointing at a wall before applying it, the move you then test is a move to the position the agent already occupies, which is legal, so your collision test reports nothing. **Stuck detection keyed on collisions never fires for exactly the agents that are most stuck.** Key it on displacement between frames instead.
+
+### GMNAV_FLAG_ONEWAY is experimental
+
+Standing on a one way platform and passing upward through it both work. Dropping down through one does not, because no link type passes through the platform the character is standing on.
+
+A one way deck placed over a solid ledge therefore produces no route down onto that ledge. The search routes around instead, usually to the floor and back up. Correct given the links that exist, rarely what the level intended. Reserved for a future release.
+
 ---
 
 ## Internal Functions
