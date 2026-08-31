@@ -57,8 +57,6 @@ The backward sweep runs bottom-right to top-left doing the mirror image, and kee
 
 Two passes, four lookups each. On our fortress that's **1,496 cell visits** against 36,652 for the box scan at radius 4, and unlike the box scan it doesn't care how large your units are. The cost is the same for radius 2 and radius 20.
 
-I checked the result against a literal box scan on every cell of the map: **zero mismatches**.
-
 ### The mistake that hides
 
 It's tempting to use three neighbours per pass rather than four. Up-left, up and left seems to cover "everything above and to the left", and the pattern is neater.
