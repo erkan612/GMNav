@@ -64,8 +64,6 @@ A suspended search has already committed. Cells it settled carry a cost and a pa
 
 ![Why a suspended search can return a path through a new wall](chapter9_settled_commitment.svg)
 
-I measured exactly when this bites, and the answer is more precise than "sometimes":
-
 | Suspended after | Cells settled inside the barricade zone | Result |
 |---|---|---|
 | 80 pops | 3 | path comes back clean |
