@@ -22,8 +22,6 @@ The structure that stores this is a **flow field**, and the numbers on this chap
 
 That's **13.3 times cheaper** than the 500 searches, and it doesn't get more expensive when the 501st agent arrives.
 
-I also cross-checked it: for 120 randomly sampled cells, the distance the field reports and the cost A\* computes to the same goal agree to nine decimal places. **Zero disagreements.** The field isn't an approximation, it's the same answer computed in a different direction.
-
 ## Using one
 
 ```gml
