@@ -98,8 +98,6 @@ The distance recorded in each cell is now the distance to the *nearest* goal, an
 
 Seeding three goals cost **1,303 pops** against 1,300 for one. Three separate fields would have cost three full passes and then needed per-agent logic to choose between them.
 
-I verified the assignment on eight sampled cells against separately computed single-goal fields. Every one matched its true nearest exit exactly.
-
 "Run to the nearest exit", "retreat to the closest friendly spawn", "route to whichever repair station is free" all become one pass and an array.
 
 ## Capping the build
