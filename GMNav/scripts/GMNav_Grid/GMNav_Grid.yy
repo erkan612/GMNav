@@ -5,8 +5,8 @@
   "isDnD":false,
   "name":"GMNav_Grid",
   "parent":{
-    "name":"GMNav",
-    "path":"folders/GMNav.yy",
+    "name":"Grid",
+    "path":"folders/GMNav/Grid.yy",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",

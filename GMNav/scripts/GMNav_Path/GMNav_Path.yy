@@ -5,8 +5,8 @@
   "isDnD":false,
   "name":"GMNav_Path",
   "parent":{
-    "name":"GMNav",
-    "path":"folders/GMNav.yy",
+    "name":"Search",
+    "path":"folders/GMNav/Search.yy",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",

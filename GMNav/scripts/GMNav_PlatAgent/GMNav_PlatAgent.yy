@@ -5,8 +5,8 @@
   "isDnD":false,
   "name":"GMNav_PlatAgent",
   "parent":{
-    "name":"GMNav",
-    "path":"folders/GMNav.yy",
+    "name":"Agents",
+    "path":"folders/GMNav/Agents.yy",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",

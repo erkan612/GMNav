@@ -5,8 +5,8 @@
   "isDnD":false,
   "name":"GMNav_Core",
   "parent":{
-    "name":"GMNav",
-    "path":"folders/GMNav.yy",
+    "name":"Core",
+    "path":"folders/GMNav/Core.yy",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",

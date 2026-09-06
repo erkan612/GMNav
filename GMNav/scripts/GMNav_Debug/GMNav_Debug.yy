@@ -5,8 +5,8 @@
   "isDnD":false,
   "name":"GMNav_Debug",
   "parent":{
-    "name":"GMNav",
-    "path":"folders/GMNav.yy",
+    "name":"Debug",
+    "path":"folders/GMNav/Debug.yy",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",
