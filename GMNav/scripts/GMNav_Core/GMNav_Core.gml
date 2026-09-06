@@ -28,7 +28,7 @@
 *   					╚██████╔╝██║ ╚═╝ ██║██║ ╚████║██║  ██║ ╚████╔╝ 		                 *
 *   					 ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝  ╚═══╝  		                 *
 *   							Pathfinding Engine for GameMaker	                         *
-*   						             Version 1.1.29										 *
+*   						             Version 1.1.32										 *
 *   																                         *
 *   						             by erkan612					                     *
 *   					***********************************************                      *
@@ -66,7 +66,6 @@ function gmnav_init(_overrides = undefined) {
     global.gmnav = { config : _c };
 }
 
-/// Cheap guard for constructors, so init is never required of the caller.
 function __gmnav_ensure_init() {
     if (!variable_global_exists("gmnav")) gmnav_init();
 }

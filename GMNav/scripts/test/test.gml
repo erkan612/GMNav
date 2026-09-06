@@ -1582,4 +1582,79 @@ function gmt_test_elevation() {
 
     gmt_check("a grid with no heights is never blocked",
               gmnav_grid_step_blocked(gmt_big_open(), 0, 1, 0, 0), false);
+	
+    gmt_head("E13 smoothing must not clip a corner diagonally");
+
+    var _kg = gmnav_grid_create(12, 12, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+    gmnav_grid_fill_height(_kg, 5, 5, 9, 9, 3);       // a plateau block
+
+    var _ka = gmnav_grid_node(_kg, 3, 7);
+    var _kb = gmnav_grid_node(_kg, 7, 3);
+
+    gmt_check("the diagonal grazes the corner and is refused",
+              __gmnav_path_line_z_ok(_kg, _ka, _kb, 1, 1), false);
+
+    gmt_check("a line well clear of it is allowed",
+              __gmnav_path_line_z_ok(_kg, gmnav_grid_node(_kg, 1, 1),
+                                          gmnav_grid_node(_kg, 3, 3), 1, 1), true);
+
+    gmt_check("with no limits the corner is fine",
+              __gmnav_path_line_z_ok(_kg, _ka, _kb, undefined, undefined), true);
+	
+    gmt_head("E14 smoothing must respect the agent's body");
+
+    var _bg = gmnav_grid_create(14, 14, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+    gmnav_grid_fill_height(_bg, 4, 5, 10, 9, 3);
+
+    var _ba = gmnav_grid_node(_bg, 2,  4);
+    var _bb = gmnav_grid_node(_bg, 11, 4);
+
+    gmt_check("zero radius hugs the edge happily",
+              __gmnav_path_corridor_ok(_bg, _ba, _bb, 1, 1, 0), true);
+    gmt_check("a small body still fits",
+              __gmnav_path_corridor_ok(_bg, _ba, _bb, 1, 1, 10), true);
+    gmt_check("a large body overlaps the plateau",
+              __gmnav_path_corridor_ok(_bg, _ba, _bb, 1, 1, 20), false);
+
+    var _wg = gmnav_grid_create(14, 14, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+    gmnav_grid_fill_blocked(_wg, 4, 5, 10, 9, true);
+
+    gmt_check("zero radius clears the wall corner",
+              __gmnav_path_corridor_ok(_wg, _ba, _bb, undefined, undefined, 0), true);
+    gmt_check("a large body clips the wall",
+              __gmnav_path_corridor_ok(_wg, _ba, _bb, undefined, undefined, 20), false);
+	
+    gmt_head("E15 the body follows the line, not the cell centres");
+
+    var _yg = gmnav_grid_create(14, 14, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+    gmnav_grid_fill_height(_yg, 5, 5, 10, 10, 3);
+
+    var _ya = gmnav_grid_node(_yg, 1, 6);
+    var _yb = gmnav_grid_node(_yg, 7, 3);
+
+    gmt_check("the bare line is clear",
+              __gmnav_path_line_z_ok(_yg, _ya, _yb, 1, 1), true);
+    gmt_check("a point sized agent may take it",
+              __gmnav_path_corridor_ok(_yg, _ya, _yb, 1, 1, 0), true);
+    gmt_check("a radius 10 body clips the corner",
+              __gmnav_path_corridor_ok(_yg, _ya, _yb, 1, 1, 10), false);
+    gmt_check("radius 4 is narrow enough to pass",
+              __gmnav_path_corridor_ok(_yg, _ya, _yb, 1, 1, 4), true);
+	
+    gmt_head("E16 diagonals must not squeeze past a cliff corner");
+
+    var _dg = gmnav_grid_create(14, 14, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+    gmnav_grid_fill_height(_dg, 6, 6, 11, 11, 3);
+
+    var _da = gmnav_grid_node(_dg, 5, 6);
+    var _db = gmnav_grid_node(_dg, 6, 5);
+
+    var _dp = gmt_solve_z(_dg, _da, _db, 1, 1);
+    gmt_check("a route still exists", is_array(_dp), true);
+    gmt_check("but not the one step diagonal", (array_length(_dp) > 2), true);
+    gmt_check("and the detour never changes height",
+              gmt_path_line_max_dz(_dg, _dp), 0);
+
+    var _dn = gmt_solve_z(_dg, _da, _db);
+    gmt_check("with no limits the diagonal is fine", array_length(_dn), 2);
 }

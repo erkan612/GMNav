@@ -180,8 +180,20 @@ function __gmnav_field_expand(_field, _budget) {
             }
 
             if (_check && _dc != 0 && _dr != 0) {
-                if ((_flags[_cr * _w + _nc] & GMNAV_FLAG_BLOCKED) != 0) continue;
-                if ((_flags[_nr * _w + _cc] & GMNAV_FLAG_BLOCKED) != 0) continue;
+                var _f1 = _cr * _w + _nc;
+                var _f2 = _nr * _w + _cc;
+
+                if ((_flags[_f1] & GMNAV_FLAG_BLOCKED) != 0) continue;
+                if ((_flags[_f2] & GMNAV_FLAG_BLOCKED) != 0) continue;
+
+                if (_hz != undefined) {
+                    var _zn  = _hz[_nn];
+                    var _dz1 = _hz[_f1] - _zn;
+                    var _dz2 = _hz[_f2] - _zn;
+
+                    if (_dz1 > _climb || -_dz1 > _drop) continue;
+                    if (_dz2 > _climb || -_dz2 > _drop) continue;
+                }
             }
 
             var _nd = _cd + _ncs[_idx] * _cost[_nn];

@@ -80,7 +80,8 @@ function gmnav_grid_node_line_clear(_grid, _a, _b) {
     return gmnav_grid_line_clear(_grid, _a % _w, _a div _w, _b % _w, _b div _w);
 }
 
-function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined) {
+function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
+                           _radius = 0) {
     var _grid = _path.grid;
     var _mode = _grid.layout.mode;
 
@@ -97,8 +98,8 @@ function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined)
         var _best = _i + 1;
 
         for (var _j = _n - 1; _j > _i + 1; _j--) {
-            if (gmnav_grid_node_line_clear(_grid, _src[_i], _src[_j])
-            &&  __gmnav_path_line_z_ok(_grid, _src[_i], _src[_j], _max_climb, _max_drop)) {
+            if (__gmnav_path_corridor_ok(_grid, _src[_i], _src[_j],
+                                         _max_climb, _max_drop, _radius)) {
                 _best = _j;
                 break;
             }
@@ -226,29 +227,61 @@ function __gmnav_path_line_z_ok(_grid, _a, _b, _climb, _drop) {
     if (_climb == undefined) return true;
     if (!gmnav_grid_has_heights(_grid)) return true;
 
-    var _c0 = gmnav_grid_col(_grid, _a);
-    var _r0 = gmnav_grid_row(_grid, _a);
-    var _c1 = gmnav_grid_col(_grid, _b);
-    var _r1 = gmnav_grid_row(_grid, _b);
+    var _w  = _grid.width;
+    var _h  = _grid.height;
+    var _hz = _grid.height_z;
 
-    var _steps = max(abs(_c1 - _c0), abs(_r1 - _r0));
-    if (_steps <= 0) return true;
+    var _c0 = _a % _w, _r0 = _a div _w;
+    var _c1 = _b % _w, _r1 = _b div _w;
 
-    var _pz = gmnav_grid_height(_grid, _a);
+    var _dc = abs(_c1 - _c0);
+    var _dr = abs(_r1 - _r0);
+    var _sc = (_c1 > _c0) ? 1 : -1;
+    var _sr = (_r1 > _r0) ? 1 : -1;
 
-    for (var s = 1; s <= _steps; s++) {
-        var _cc = round(lerp(_c0, _c1, s / _steps));
-        var _rr = round(lerp(_r0, _r1, s / _steps));
+    var _c = _c0, _r = _r0;
+    var _n = _dc + _dr;
+    var _e = _dc - _dr;
 
-        var _nn = gmnav_grid_node(_grid, _cc, _rr);
-        if (_nn == GMNAV_NO_NODE) return false;
+    _dc *= 2;
+    _dr *= 2;
 
-        var _z  = gmnav_grid_height(_grid, _nn);
+    var _pz = _hz[_r0 * _w + _c0];
+
+    for (var i = 0; i <= _n; i++) {
+        if (_c < 0 || _r < 0 || _c >= _w || _r >= _h) return false;
+
+        var _z  = _hz[_r * _w + _c];
         var _dz = _z - _pz;
-
         if (_dz > _climb || -_dz > _drop) return false;
-
         _pz = _z;
+
+        if (_c == _c1 && _r == _r1) return true;
+
+        if (_e == 0) {
+            var _nc = _c + _sc;
+            var _nr = _r + _sr;
+
+            if (_nc >= 0 && _nc < _w) {
+                var _fz = _hz[_r * _w + _nc] - _pz;
+                if (_fz > _climb || -_fz > _drop) return false;
+            }
+            if (_nr >= 0 && _nr < _h) {
+                var _gz = _hz[_nr * _w + _c] - _pz;
+                if (_gz > _climb || -_gz > _drop) return false;
+            }
+
+            _c += _sc;
+            _r += _sr;
+            _e += _dc - _dr;
+            i++;
+        } else if (_e > 0) {
+            _c += _sc;
+            _e -= _dr;
+        } else {
+            _r += _sr;
+            _e += _dc;
+        }
     }
     return true;
 }
@@ -257,27 +290,67 @@ function __gmnav_path_seg_z_ok(_grid, _x0, _y0, _x1, _y1, _climb, _drop) {
     if (_climb == undefined) return true;
     if (!gmnav_grid_has_heights(_grid)) return true;
 
-    var _lay  = _grid.layout;
-    var _step = min(_lay.tile_w, _lay.tile_h) * 0.5;
+    var _a = gmnav_grid_world_to_node(_grid, _x0, _y0);
+    var _b = gmnav_grid_world_to_node(_grid, _x1, _y1);
 
-    var _d = point_distance(_x0, _y0, _x1, _y1);
-    var _n = max(1, ceil(_d / _step));
+    if (_a == GMNAV_NO_NODE || _b == GMNAV_NO_NODE) return false;
 
-    var _pz = gmnav_grid_height(_grid, gmnav_grid_world_to_node(_grid, _x0, _y0));
+    return __gmnav_path_line_z_ok(_grid, _a, _b, _climb, _drop);
+}
 
-    for (var s = 1; s <= _n; s++) {
-        var _sx = lerp(_x0, _x1, s / _n);
-        var _sy = lerp(_y0, _y1, s / _n);
+function __gmnav_path_corridor_ok(_grid, _a, _b, _climb, _drop, _radius) {
+    if (!gmnav_grid_node_line_clear(_grid, _a, _b)) return false;
 
-        var _nn = gmnav_grid_world_to_node(_grid, _sx, _sy);
-        if (_nn == GMNAV_NO_NODE) continue;
+    var _uses_z = (_climb != undefined) && gmnav_grid_has_heights(_grid);
 
-        var _z  = gmnav_grid_height(_grid, _nn);
-        var _dz = _z - _pz;
+    if (_uses_z && !__gmnav_path_line_z_ok(_grid, _a, _b, _climb, _drop)) return false;
+    if (_radius <= 0) return true;
 
-        if (_dz > _climb || -_dz > _drop) return false;
+    var _lay = _grid.layout;
+    var _w   = _grid.width;
+    var _h   = _grid.height;
+    var _fl  = _grid.flags;
+    var _hz  = _uses_z ? _grid.height_z : undefined;
 
-        _pz = _z;
+    var _x0 = _lay.origin_x + ((_a % _w)   + 0.5) * _lay.tile_w;
+    var _y0 = _lay.origin_y + ((_a div _w) + 0.5) * _lay.tile_h;
+    var _x1 = _lay.origin_x + ((_b % _w)   + 0.5) * _lay.tile_w;
+    var _y1 = _lay.origin_y + ((_b div _w) + 0.5) * _lay.tile_h;
+
+    var _step = min(_lay.tile_w, _lay.tile_h) * 0.25;
+    var _n    = max(1, ceil(point_distance(_x0, _y0, _x1, _y1) / _step));
+
+    for (var s = 0; s <= _n; s++) {
+        var _t = s / _n;
+        var _sx = lerp(_x0, _x1, _t);
+        var _sy = lerp(_y0, _y1, _t);
+
+        var _cc = floor((_sx - _lay.origin_x) / _lay.tile_w);
+        var _cr = floor((_sy - _lay.origin_y) / _lay.tile_h);
+        if (_cc < 0 || _cr < 0 || _cc >= _w || _cr >= _h) return false;
+
+        var _here = _uses_z ? _hz[_cr * _w + _cc] : 0;
+
+        var _fc1 = floor((_sx - _radius - _lay.origin_x) / _lay.tile_w);
+        var _fc2 = floor((_sx + _radius - 0.001 - _lay.origin_x) / _lay.tile_w);
+        var _fr1 = floor((_sy - _radius - _lay.origin_y) / _lay.tile_h);
+        var _fr2 = floor((_sy + _radius - 0.001 - _lay.origin_y) / _lay.tile_h);
+
+        for (var _fr = _fr1; _fr <= _fr2; _fr++) {
+            if (_fr < 0 || _fr >= _h) return false;
+
+            for (var _fc = _fc1; _fc <= _fc2; _fc++) {
+                if (_fc < 0 || _fc >= _w) return false;
+
+                var _fn = _fr * _w + _fc;
+                if ((_fl[_fn] & GMNAV_FLAG_BLOCKED) != 0) return false;
+
+                if (_uses_z) {
+                    var _dz = _hz[_fn] - _here;
+                    if (_dz > _climb || -_dz > _drop) return false;
+                }
+            }
+        }
     }
     return true;
 }

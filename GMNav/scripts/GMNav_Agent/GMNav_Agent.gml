@@ -150,7 +150,7 @@ function __gmnav_agent_collect_ticket(_agent) {
     if (_t.state == gmnav_state.FOUND) {
         var _p = gmnav_path_create(_agent.grid, gmnav_scheduler_get_path(_t));
 
-		gmnav_path_smooth(_p, _agent.max_climb, _agent.max_drop);
+        gmnav_path_smooth(_p, _agent.max_climb, _agent.max_drop, _agent.radius);
         gmnav_path_anchor_start(_p, _agent.x, _agent.y);
         gmnav_path_anchor_end(_p, _agent.goal_x, _agent.goal_y);
         _p.stale = _t.stale;

@@ -189,6 +189,15 @@ function gmnav_search_step(_srch, _budget = global.gmnav.config.DEFAULT_BUDGET) 
                 if (_clr != undefined && (_cd + 1) > _relax) {
                     if (_clr[_f1] < _need || _clr[_f2] < _need) continue;
                 }
+				
+                if (_hz != undefined) {
+                    var _zc  = _hz[_cur];
+                    var _dz1 = _hz[_f1] - _zc;
+                    var _dz2 = _hz[_f2] - _zc;
+
+                    if (_dz1 > _climb || -_dz1 > _drop) continue;
+                    if (_dz2 > _climb || -_dz2 > _drop) continue;
+                }
             }
 
             var _ng = _cg + _ncs[_idx] * _cost[_nn];

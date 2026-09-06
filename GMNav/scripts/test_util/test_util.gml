@@ -551,31 +551,18 @@ function gmt_field_z(_grid, _gc, _gr, _climb = undefined, _drop = undefined) {
 }
 
 function gmt_path_line_max_dz(_grid, _nodes) {
-    var _worst = 0;
+    for (var _lim = 0; _lim <= 32; _lim++) {
+        var _ok = true;
 
-    for (var i = 1; i < array_length(_nodes); i++) {
-        var _c0 = gmnav_grid_col(_grid, _nodes[i - 1]);
-        var _r0 = gmnav_grid_row(_grid, _nodes[i - 1]);
-        var _c1 = gmnav_grid_col(_grid, _nodes[i]);
-        var _r1 = gmnav_grid_row(_grid, _nodes[i]);
-
-        var _steps = max(abs(_c1 - _c0), abs(_r1 - _r0));
-        if (_steps <= 0) continue;
-
-        var _pz = gmnav_grid_height(_grid, _nodes[i - 1]);
-
-        for (var s = 1; s <= _steps; s++) {
-            var _cc = round(lerp(_c0, _c1, s / _steps));
-            var _rr = round(lerp(_r0, _r1, s / _steps));
-            var _nn = gmnav_grid_node(_grid, _cc, _rr);
-            if (_nn == GMNAV_NO_NODE) continue;
-
-            var _z = gmnav_grid_height(_grid, _nn);
-            _worst = max(_worst, abs(_z - _pz));
-            _pz = _z;
+        for (var i = 1; i < array_length(_nodes); i++) {
+            if (!__gmnav_path_line_z_ok(_grid, _nodes[i - 1], _nodes[i], _lim, _lim)) {
+                _ok = false;
+                break;
+            }
         }
+        if (_ok) return _lim;
     }
-    return _worst;
+    return 999;
 }
 
 function gmt_path_points_max_dz(_grid, _path) {
