@@ -1135,3 +1135,451 @@ function gmt_test_sched_domains() {
     gmt_check("no links on grid domain", array_length(gmnav_scheduler_get_links(_r1)), 0);
     gmt_check("none stale", _r1.stale || _r2.stale || _r3.stale, false);
 }
+
+function gmt_test_platagent() {
+    gmt_head("P9 platform agent");
+
+    var _g  = gmt_gap_level(16, 2);
+    var _pg = gmnav_platgraph_create(_g, gmt_mover());
+    gmnav_platgraph_bake(_pg);
+
+    var _sc = gmnav_scheduler_create(_pg, 4000);
+
+    var _w0 = gmnav_platgraph_node_world(_pg, 0);
+    var _pa = gmnav_platagent_create(_sc, _w0[0], _w0[1]);
+
+    // construction and contract
+    gmt_check("snapped to a node",        _pa.node, 0);
+    gmt_check("no goal at rest",          _pa.has_goal, false);
+    gmt_check("not arrived at rest",      gmnav_platagent_arrived(_pa), false);
+    gmt_check("not airborne at rest",     gmnav_platagent_airborne(_pa), false);
+    gmt_check("desync starts at zero",    _pa.desync, 0);
+
+    var _ix = _pa.x;
+    var _iy = _pa.y;
+    repeat (5) gmnav_platagent_update(_pa);
+    gmt_check("idle agent does not drift", (_pa.x == _ix && _pa.y == _iy), true);
+
+    gmt_check("goto off the map refused",
+              gmnav_platagent_goto(_pa, -9999, -9999), false);
+
+    // a route that is walking only
+    var _w3 = gmnav_platgraph_node_world(_pg, 3);
+    gmt_check("goto accepted", gmnav_platagent_goto(_pa, _w3[0], _w3[1]), true);
+    gmt_check("has goal", _pa.has_goal, true);
+
+    var _r = { airborne : false, frames : -1 };
+    var _f = gmt_platagent_run_watch(_sc, _pa, _r);
+    gmt_note("walk route frames", _f);
+
+    gmt_check("walk route arrives",       (_f > 0), true);
+    gmt_check("landed on the goal node",  _pa.node, 3);
+    gmt_check("never airborne walking",   _r.airborne, false);
+    gmt_check("arrival latch holds",      gmnav_platagent_arrived(_pa), true);
+
+    // a route that needs a jump
+    var _w13 = gmnav_platgraph_node_world(_pg, 13);
+    gmnav_platagent_goto(_pa, _w13[0], _w13[1]);
+    gmt_check("goto clears the latch", gmnav_platagent_arrived(_pa), false);
+
+    _r = { airborne : false, frames : -1 };
+    _f = gmt_platagent_run_watch(_sc, _pa, _r);
+    gmt_note("jump route frames", _f);
+
+    gmt_check("jump route arrives",     (_f > 0), true);
+    gmt_check("reached the far side",   _pa.node, 13);
+    gmt_check("went airborne crossing", _r.airborne, true);
+    gmt_check("no desyncs",             _pa.desync, 0);
+
+    // stop clears everything
+    gmnav_platagent_goto(_pa, _w0[0], _w0[1]);
+    gmnav_platagent_stop(_pa);
+    gmt_check("stop clears the goal",  _pa.has_goal, false);
+    gmt_check("stop clears the latch", gmnav_platagent_arrived(_pa), false);
+
+    // retargeting mid arc must not desync
+    gmnav_platagent_goto(_pa, _w0[0], _w0[1]);
+
+    var _guard = 0;
+    while (!gmnav_platagent_airborne(_pa) && _guard++ < 200) {
+        gmnav_scheduler_update(_sc);
+        gmnav_platagent_update(_pa);
+    }
+    gmt_check("got airborne to retarget from", gmnav_platagent_airborne(_pa), true);
+
+    gmnav_platagent_goto(_pa, _w3[0], _w3[1]);
+    _f = gmt_platagent_run(_sc, _pa);
+    gmt_note("mid arc retarget frames", _f);
+
+    gmt_check("mid arc retarget arrives", (_f > 0), true);
+    gmt_check("mid arc retarget lands right", _pa.node, 3);
+    gmt_check("still no desyncs", _pa.desync, 0);
+	
+	gmt_head("P9b platform agent, falls and failures");
+
+    var _sg  = gmt_shelf_level();
+    var _spg = gmnav_platgraph_create(_sg, gmt_mover());
+    gmnav_platgraph_bake(_spg);
+
+    var _ssc = gmnav_scheduler_create(_spg, 4000);
+
+    var _s0  = gmnav_platgraph_node_world(_spg, 0);
+    var _sa  = gmnav_platagent_create(_ssc, _s0[0], _s0[1]);
+
+    var _s15 = gmnav_platgraph_node_world(_spg, 15);
+    gmt_check("goto down accepted",
+              gmnav_platagent_goto(_sa, _s15[0], _s15[1]), true);
+
+    var _sr = { airborne : false, fell : false, jumped : false, frames : -1 };
+    var _sf = gmt_platagent_run_watch(_ssc, _sa, _sr);
+    gmt_note("descent frames", _sf);
+
+    gmt_check("descent arrives",           (_sf > 0), true);
+    gmt_check("descent reaches the floor",  _sa.node, 15);
+    gmt_check("traversed a FALL link",      _sr.fell, true);
+    gmt_check("descent has no desyncs",     _sa.desync, 0);
+
+    gmnav_platagent_goto(_sa, _s0[0], _s0[1]);
+    repeat (60) {
+        gmnav_scheduler_update(_ssc);
+        gmnav_platagent_update(_sa);
+    }
+
+    gmt_check("unreachable goal fails",        _sa.failed, true);
+    gmt_check("failure clears the goal",       _sa.has_goal, false);
+    gmt_check("failure does not latch",        gmnav_platagent_arrived(_sa), false);
+    gmt_check("agent stayed where it was",     _sa.node, 15);
+	
+    gmt_head("P9c stopping mid arc");
+
+    var _c0  = gmnav_platgraph_node_world(_pg, 0);
+    var _c13 = gmnav_platgraph_node_world(_pg, 13);
+    var _c3  = gmnav_platgraph_node_world(_pg, 3);
+    var _cp  = gmnav_platagent_create(_sc, _c0[0], _c0[1]);
+
+    gmnav_platagent_goto(_cp, _c13[0], _c13[1]);
+
+    var _cg = 0;
+    while (!gmnav_platagent_airborne(_cp) && _cg++ < 200) {
+        gmnav_scheduler_update(_sc);
+        gmnav_platagent_update(_cp);
+    }
+    gmt_check("airborne before stop", gmnav_platagent_airborne(_cp), true);
+
+    gmnav_platagent_stop(_cp);
+
+    gmt_check("stop leaves ground mode", _cp.mode, gmnav_pmode.GROUND);
+    gmt_check("stop clears the link",    is_undefined(_cp.link), true);
+    gmt_check("stop is not airborne",    gmnav_platagent_airborne(_cp), false);
+    gmt_check("x agrees with node",      _cp.x, _pg.node_x[_cp.node]);
+    gmt_check("y agrees with node",      _cp.y, _pg.node_y[_cp.node]);
+
+    repeat (10) gmnav_platagent_update(_cp);
+    gmt_check("survives updates after stop", _cp.mode, gmnav_pmode.GROUND);
+
+    gmt_check("goto after stop accepted",
+              gmnav_platagent_goto(_cp, _c3[0], _c3[1]), true);
+
+    var _cf = gmt_platagent_run(_sc, _cp);
+    gmt_note("frames after a mid arc stop", _cf);
+    gmt_check("arrives after a mid arc stop", (_cf > 0), true);
+    gmt_check("no desyncs after a mid arc stop", _cp.desync, 0);
+}
+
+function gmt_test_elevation() {
+    gmt_head("E1 height authoring");
+
+    var _g = gmnav_grid_create(10, 10, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+
+    gmt_check("no heights on a fresh grid", gmnav_grid_has_heights(_g), false);
+    gmt_check("height reads zero anyway",   gmnav_grid_height(_g, gmnav_grid_node(_g, 4, 4)), 0);
+
+    var _v = _g.version;
+    gmnav_grid_set_height(_g, 4, 4, 3);
+
+    gmt_check("heights now present",  gmnav_grid_has_heights(_g), true);
+    gmt_check("reads back",           gmnav_grid_height(_g, gmnav_grid_node(_g, 4, 4)), 3);
+    gmt_check("neighbour untouched",  gmnav_grid_height(_g, gmnav_grid_node(_g, 5, 4)), 0);
+    gmt_check("edit bumps version",   (_g.version > _v), true);
+
+    var _v2 = _g.version;
+    gmnav_grid_set_height(_g, 4, 4, 3);
+    gmt_check("no-op does not bump", _g.version, _v2);
+
+    gmnav_grid_set_height(_g, 99, 99, 5);
+    gmt_check("out of bounds refused", gmnav_grid_has_heights(_g), true);
+
+    gmnav_grid_fill_height(_g, 0, 0, 2, 2, 7);
+    gmt_check("fill corner",  gmnav_grid_height(_g, gmnav_grid_node(_g, 0, 0)), 7);
+    gmt_check("fill far end", gmnav_grid_height(_g, gmnav_grid_node(_g, 2, 2)), 7);
+    gmt_check("fill stops",   gmnav_grid_height(_g, gmnav_grid_node(_g, 3, 3)), 0);
+
+    gmt_head("E2 heights are ignored unless asked for");
+
+    var _c = gmt_cliff_level();
+    var _low  = gmnav_grid_node(_c, 3,  5);
+    var _high = gmnav_grid_node(_c, 10, 5);
+
+    var _p = gmt_solve_z(_c, _low, _high); // no limits passed
+    gmt_check("solves with no limits", is_array(_p), true);
+    gmt_check("walks straight up the cliff", gmt_path_max_dz(_c, _p), 3);
+    gmt_check("ignores the ramp", gmt_path_uses_ramp(_c, _p), false);
+
+    gmt_head("E3 climb and drop gate the cliff");
+
+    _p = gmt_solve_z(_c, _low, _high, 1, 1);
+    gmt_check("climb 1 still solves",    is_array(_p), true);
+    gmt_check("climb 1 never steps >1",  gmt_path_max_dz(_c, _p), 1);
+    gmt_check("climb 1 uses the ramp",   gmt_path_uses_ramp(_c, _p), true);
+
+    _p = gmt_solve_z(_c, _high, _low, 1, 1);
+    gmt_check("coming down uses the ramp too", gmt_path_uses_ramp(_c, _p), true);
+
+    // asymmetric: can leap off a cliff it cannot climb
+    _p = gmt_solve_z(_c, _high, _low, 1, 3);
+    gmt_check("drop 3 skips the ramp", gmt_path_uses_ramp(_c, _p), false);
+    gmt_check("drop 3 takes a 3 step", gmt_path_max_dz(_c, _p), 3);
+
+    _p = gmt_solve_z(_c, _low, _high, 1, 3);
+    gmt_check("climb 1 still needs the ramp going up", gmt_path_uses_ramp(_c, _p), true);
+
+    // climb 0 cannot use the ramp either, so the top is sealed
+    _p = gmt_solve_z(_c, _low, _high, 0, 3);
+    gmt_check("climb 0 seals the plateau", is_undefined(_p), true);
+
+    gmt_head("E4 walking around a cliff is unaffected");
+
+    var _wl = gmnav_grid_node(_c, 3,  5);
+    var _wr = gmnav_grid_node(_c, 18, 5);
+    _p = gmt_solve_z(_c, _wl, _wr, 1, 1);
+    gmt_check("ground route exists",   is_array(_p), true);
+    gmt_check("ground route stays flat", gmt_path_max_dz(_c, _p), 0);
+
+    var _tl = gmnav_grid_node(_c, 9,  4);
+    var _tr = gmnav_grid_node(_c, 12, 4);
+    _p = gmt_solve_z(_c, _tl, _tr, 1, 1);
+    gmt_check("plateau route exists",   is_array(_p), true);
+    gmt_check("plateau route stays flat", gmt_path_max_dz(_c, _p), 0);
+
+    gmt_head("E5 a flat grid is unchanged by limits");
+
+    var _f  = gmt_big_open();
+    var _fa = gmnav_grid_node(_f, 1,  1);
+    var _fb = gmnav_grid_node(_f, 13, 13);
+
+    var _pa = gmt_solve_z(_f, _fa, _fb);
+    var _pb = gmt_solve_z(_f, _fa, _fb, 0, 0);
+    gmt_check("limits change nothing on flat ground",
+              gmt_arr_str(_pa), gmt_arr_str(_pb));
+	
+    gmt_head("E6 flow fields honour climb and drop");
+
+    var _z = gmt_cliff_level();
+
+    var _down = gmt_field_z(_z, 7, 5, 1, 3);    // goal on the ground
+    var _up   = gmt_field_z(_z, 8, 3, 1, 3);    // goal on the plateau
+
+    gmt_check("down field builds", gmnav_flowfield_is_ready(_down), true);
+    gmt_check("up field builds",   gmnav_flowfield_is_ready(_up),   true);
+
+    gmt_check("plateau reachable coming down", gmt_field_reach_cell(_down, 8, 3), true);
+    gmt_check("ground reachable going up",     gmt_field_reach_cell(_up,   7, 5), true);
+
+    var _cd = gmt_field_cost_cell(_down, 8, 3);
+    var _cu = gmt_field_cost_cell(_up,   7, 5);
+    gmt_note("descend cost", string_format(_cd, 1, 2));
+    gmt_note("ascend cost",  string_format(_cu, 1, 2));
+
+    gmt_check("descending is cheaper than ascending", (_cd < _cu), true);
+
+    var _down1 = gmt_field_z(_z, 7, 5, 1, 1);
+    gmt_check("drop 1 still reaches the plateau", gmt_field_reach_cell(_down1, 8, 3), true);
+    gmt_check("drop 1 makes the descent dearer",
+              (gmt_field_cost_cell(_down1, 8, 3) > _cd), true);
+
+    var _up0 = gmt_field_z(_z, 8, 3, 0, 3);
+    gmt_check("climb 0 seals the plateau field", gmt_field_reach_cell(_up0, 7, 5), false);
+
+    gmt_head("E7 fields ignore heights unless asked");
+
+    var _pd = gmt_field_z(_z, 7, 5);
+    var _pu = gmt_field_z(_z, 8, 3);
+
+    gmt_check("no limits, plateau reachable", gmt_field_reach_cell(_pd, 8, 3), true);
+    gmt_check("no limits, ground reachable",  gmt_field_reach_cell(_pu, 7, 5), true);
+    gmt_check("no limits, the cliff is symmetric",
+              gmt_field_cost_cell(_pd, 8, 3), gmt_field_cost_cell(_pu, 7, 5));
+
+    gmt_head("E8 a flat field is unchanged by limits");
+
+    var _fg = gmt_big_open();
+    var _f1 = gmt_field_z(_fg, 2, 2);
+    var _f2 = gmt_field_z(_fg, 2, 2, 0, 0);
+
+    gmt_check("flat field cost unchanged",
+              gmt_field_cost_cell(_f1, 12, 12), gmt_field_cost_cell(_f2, 12, 12));
+    gmt_check("flat field walkable either way",
+              gmt_field_walk_failures(_fg, _f2), 0);
+			  
+    gmt_head("E9 scheduler and agent carry the limits");
+
+    var _eg = gmt_cliff_level();
+    var _es = gmnav_scheduler_create(_eg, 8000);
+
+    var _e_low  = gmnav_grid_node(_eg, 3,  5);
+    var _e_high = gmnav_grid_node(_eg, 10, 5);
+
+    var _t1 = gmnav_scheduler_request(_es, _e_low, _e_high,
+                                      gmnav_priority.IMMEDIATE, false, undefined, 0, 1, 1);
+    gmnav_scheduler_update(_es);
+
+    gmt_check("scheduler with limits found", _t1.state, gmnav_state.FOUND);
+
+    var _sp = gmnav_scheduler_get_path(_t1);
+    gmt_check("scheduler route never steps >1", gmt_path_max_dz(_eg, _sp), 1);
+    gmt_check("scheduler route uses the ramp",  gmt_path_uses_ramp(_eg, _sp), true);
+
+    var _t2 = gmnav_scheduler_request(_es, _e_low, _e_high, gmnav_priority.IMMEDIATE);
+    gmnav_scheduler_update(_es);
+
+    var _sp2 = gmnav_scheduler_get_path(_t2);
+    gmt_check("scheduler without limits ignores the cliff",
+              gmt_path_uses_ramp(_eg, _sp2), false);
+
+    var _wl2 = gmnav_grid_node_to_world(_eg, _e_low);
+    var _wh2 = gmnav_grid_node_to_world(_eg, _e_high);
+
+    var _ag = gmnav_agent_create(_es, _wl2[0], _wl2[1], 8, 2);
+    _ag.max_climb = 1;
+    _ag.max_drop  = 1;
+
+    gmnav_agent_goto(_ag, _wh2[0], _wh2[1], gmnav_priority.IMMEDIATE);
+    gmnav_scheduler_update(_es);
+
+    gmt_check("agent ticket found", _ag.ticket.state, gmnav_state.FOUND);
+
+    var _ap = gmnav_scheduler_get_path(_ag.ticket);
+    gmt_check("agent route never steps >1", gmt_path_max_dz(_eg, _ap), 1);
+    gmt_check("agent route uses the ramp",  gmt_path_uses_ramp(_eg, _ap), true);
+
+    var _ag2 = gmnav_agent_create(_es, _wl2[0], _wl2[1], 8, 2);
+    gmnav_agent_goto(_ag2, _wh2[0], _wh2[1], gmnav_priority.IMMEDIATE);
+    gmnav_scheduler_update(_es);
+
+    gmt_check("agent without limits walks up the cliff",
+              gmt_path_uses_ramp(_eg, gmnav_scheduler_get_path(_ag2.ticket)), false);
+	
+    gmt_head("E10 smoothing must not undo the limits");
+
+    var _mg = gmt_cliff_level();
+    var _ms = gmnav_search_create(_mg);
+
+    gmnav_search_begin(_ms, gmnav_grid_node(_mg, 3, 5),
+                            gmnav_grid_node(_mg, 10, 5),
+                       false, undefined, 0, 1, 1);
+
+    var _mguard = 0;
+    while (_ms.state == gmnav_state.WORKING && _mguard++ < GMNAV_MAX_STEPS) {
+        gmnav_search_step(_ms, 4096);
+    }
+    gmt_check("route found before smoothing", _ms.state, gmnav_state.FOUND);
+
+    var _raw = gmnav_search_get_path(_ms);
+    gmt_check("raw route respects climb 1", gmt_path_max_dz(_mg, _raw), 1);
+    gmt_note("raw waypoints", array_length(_raw));
+
+    var _mp = gmnav_path_create(_mg, _raw);
+    gmnav_path_smooth(_mp, 1, 1);
+    gmt_note("smoothed with limits", array_length(_mp.nodes));
+
+    gmt_check("smoothed route respects climb 1",
+              gmt_path_line_max_dz(_mg, _mp.nodes), 1);
+    gmt_check("smoothed route keeps the ramp",
+              gmt_path_uses_ramp(_mg, _mp.nodes), true);
+
+    var _mp2 = gmnav_path_create(_mg, _raw);
+    gmnav_path_smooth(_mp2);
+    gmt_note("smoothed without limits", array_length(_mp2.nodes));
+    gmt_check("no limits still shortcuts the cliff",
+              (array_length(_mp2.nodes) < array_length(_mp.nodes)), true);
+
+    var _sg  = gmnav_scheduler_create(_mg, 8000);
+    var _sw  = gmnav_grid_node_to_world(_mg, gmnav_grid_node(_mg, 3,  5));
+    var _gw2 = gmnav_grid_node_to_world(_mg, gmnav_grid_node(_mg, 10, 5));
+
+    var _sa = gmnav_agent_create(_sg, _sw[0], _sw[1], 8, 2);
+    _sa.max_climb = 1;
+    _sa.max_drop  = 1;
+
+    gmnav_agent_goto(_sa, _gw2[0], _gw2[1], gmnav_priority.IMMEDIATE);
+    gmnav_scheduler_update(_sg);
+    gmnav_agent_update(_sa);
+
+    gmt_check("agent smoothed path respects climb 1",
+              gmt_path_line_max_dz(_mg, _sa.path.nodes), 1);
+	
+    gmt_head("E11 simplify on a raw route");
+
+    var _qg = gmt_cliff_level();
+
+    var _qc     = gmt_ramp_path(_qg, 1, 1, false);
+    var _before = _qc.count;
+    gmnav_path_simplify(_qc, 0.5);
+    gmt_note("raw points", _before);
+    gmt_note("after simplify at 0.5", _qc.count);
+    gmt_check("simplify actually removes points", (_qc.count < _before), true);
+
+    var _tols = [0.01, 0.1, 0.25, 0.5, 0.75, 0.99];
+    var _qbad = 0;
+
+    for (var q = 0; q < array_length(_tols); q++) {
+        var _qp = gmt_ramp_path(_qg, 1, 1, false);
+        gmnav_path_simplify(_qp, _tols[q], 1, 1);
+
+        var _qdz = gmt_path_points_max_dz(_qg, _qp);
+        gmt_note("tolerance " + string(_tols[q]),
+                 string(_qp.count) + " pts, max dz " + string(_qdz));
+
+        if (_qdz > 1) _qbad++;
+    }
+
+    gmt_check("no tolerance breaks climb 1 when limits are passed", _qbad, 0);
+
+    var _qn = gmt_ramp_path(_qg, 1, 1, false);
+    gmnav_path_simplify(_qn, 0.99);
+    gmt_note("no limits at 0.99", string(_qn.count) + " pts");
+    gmt_check("no limits still cuts the cliff",
+              (gmt_path_points_max_dz(_qg, _qn) > 1), true);
+    
+    gmt_head("E12 the step predicate");
+
+    var _pg2 = gmt_cliff_level();
+
+    var _ground = gmnav_grid_node(_pg2, 7,  5);   // foot of the cliff
+    var _top    = gmnav_grid_node(_pg2, 8,  5);   // plateau, 3 above
+    var _r_low  = gmnav_grid_node(_pg2, 10, 9);   // ramp, z 1
+    var _r_mid  = gmnav_grid_node(_pg2, 10, 8);   // ramp, z 2
+
+    gmt_check("no limits, nothing is blocked",
+              gmnav_grid_step_blocked(_pg2, _ground, _top, undefined, undefined), false);
+
+    gmt_check("climb 1 refuses the cliff",
+              gmnav_grid_step_blocked(_pg2, _ground, _top, 1, 1), true);
+    gmt_check("drop 1 refuses it downward too",
+              gmnav_grid_step_blocked(_pg2, _top, _ground, 1, 1), true);
+    gmt_check("drop 3 allows the descent",
+              gmnav_grid_step_blocked(_pg2, _top, _ground, 1, 3), false);
+    gmt_check("climb 3 allows the ascent",
+              gmnav_grid_step_blocked(_pg2, _ground, _top, 3, 3), false);
+
+    gmt_check("a ramp step is allowed",
+              gmnav_grid_step_blocked(_pg2, _r_low, _r_mid, 1, 1), false);
+    gmt_check("climb 0 refuses even a ramp",
+              gmnav_grid_step_blocked(_pg2, _r_low, _r_mid, 0, 3), true);
+
+    gmt_check("flat ground is never blocked",
+              gmnav_grid_step_blocked(_pg2, _ground, gmnav_grid_node(_pg2, 6, 5), 0, 0), false);
+
+    gmt_check("a grid with no heights is never blocked",
+              gmnav_grid_step_blocked(gmt_big_open(), 0, 1, 0, 0), false);
+}

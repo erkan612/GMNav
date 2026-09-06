@@ -29,7 +29,8 @@ function gmnav_search_create(_grid, _heuristic = gmnav_heuristic.AUTO) {
 }
 
 function gmnav_search_begin(_srch, _start_node, _goal_node, _corner_cut = false,
-                            _profile = undefined, _need_clear = 0) {
+                            _profile = undefined, _need_clear = 0,
+                            _max_climb = undefined, _max_drop = undefined) {
     var _grid = _srch.grid;
 
     gmnav_search_abort(_srch);
@@ -46,7 +47,7 @@ function gmnav_search_begin(_srch, _start_node, _goal_node, _corner_cut = false,
     }
 
     var _slot = gmnav_grid_scratch_acquire(_grid);
-    if (_slot == undefined) return false;   // state stays IDLE - retry later
+    if (_slot == undefined) return false; // state stays IDLE, retry later
 
     var _lay = _grid.layout;
     var _w   = _grid.width;
@@ -62,6 +63,8 @@ function gmnav_search_begin(_srch, _start_node, _goal_node, _corner_cut = false,
     _srch.corner_cut = _corner_cut;
     _srch.profile    = _profile;
     _srch.need_clear = (_grid.clear == undefined) ? 0 : _need_clear;
+    _srch.max_climb = _max_climb;
+    _srch.max_drop  = _max_drop;
     _srch.version    = _grid.version;
     _srch.stale      = false;
     _srch.expansions = 0;
@@ -105,6 +108,10 @@ function gmnav_search_step(_srch, _budget = GMNAV_DEFAULT_BUDGET) {
     var _need  = _srch.need_clear;
     var _clr   = (_need > 1) ? _grid.clear : undefined;
     var _relax = _srch.relax;
+	
+    var _hz    = (_srch.max_climb == undefined) ? undefined : _srch.grid.height_z;
+    var _climb = _srch.max_climb;
+    var _drop  = _srch.max_drop;
 
     var _nbc = _lay.nb_count;
     var _ndc = _lay.nb_dc;
@@ -127,7 +134,7 @@ function gmnav_search_step(_srch, _budget = GMNAV_DEFAULT_BUDGET) {
         _srch.pops++;
 
         var _cur = gmnav_heap_pop(_heap);
-        if (_mark[_cur] == _cgen) continue;   // already closed, stale entry
+        if (_mark[_cur] == _cgen) continue; // already closed, stale entry
         _mark[_cur] = _cgen;
 
         if (_cur == _goal) {
@@ -162,6 +169,11 @@ function gmnav_search_step(_srch, _budget = GMNAV_DEFAULT_BUDGET) {
             var _nn = _nr * _w + _nc;
             if (_mark[_nn] == _cgen) continue;
             if ((_flags[_nn] & GMNAV_FLAG_BLOCKED) != 0) continue;
+
+            if (_hz != undefined) {
+                var _dz = _hz[_nn] - _hz[_cur];
+                if (_dz > _climb || -_dz > _drop) continue;
+            }
 
             if (_clr != undefined && _clr[_nn] < _need) {
                 if (_nn != _goal && (_cd + 1) > _relax) continue;

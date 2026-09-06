@@ -80,7 +80,7 @@ function gmnav_grid_node_line_clear(_grid, _a, _b) {
     return gmnav_grid_line_clear(_grid, _a % _w, _a div _w, _b % _w, _b div _w);
 }
 
-function gmnav_path_smooth(_path) {
+function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined) {
     var _grid = _path.grid;
     var _mode = _grid.layout.mode;
 
@@ -97,7 +97,8 @@ function gmnav_path_smooth(_path) {
         var _best = _i + 1;
 
         for (var _j = _n - 1; _j > _i + 1; _j--) {
-            if (gmnav_grid_node_line_clear(_grid, _src[_i], _src[_j])) {
+            if (gmnav_grid_node_line_clear(_grid, _src[_i], _src[_j])
+            &&  __gmnav_path_line_z_ok(_grid, _src[_i], _src[_j], _max_climb, _max_drop)) {
                 _best = _j;
                 break;
             }
@@ -111,19 +112,24 @@ function gmnav_path_smooth(_path) {
     __gmnav_path_rebuild_points(_path);
 }
 
-function gmnav_path_simplify(_path, _tolerance = 0.01) {
+function gmnav_path_simplify(_path, _tolerance = 0.01,
+                             _max_climb = undefined, _max_drop = undefined) {
     var _n = _path.count;
     if (_n <= 2) return;
 
-    var _px = _path.px;
-    var _py = _path.py;
+    var _grid = _path.grid;
+    var _px   = _path.px;
+    var _py   = _path.py;
 
     var _ox = [_px[0]];
     var _oy = [_py[0]];
 
     for (var i = 1; i < _n - 1; i++) {
-        var _ax = _px[i] - _ox[array_length(_ox) - 1];
-        var _ay = _py[i] - _oy[array_length(_oy) - 1];
+        var _lx = _ox[array_length(_ox) - 1];
+        var _ly = _oy[array_length(_oy) - 1];
+
+        var _ax = _px[i] - _lx;
+        var _ay = _py[i] - _ly;
         var _bx = _px[i + 1] - _px[i];
         var _by = _py[i + 1] - _py[i];
 
@@ -132,7 +138,15 @@ function gmnav_path_simplify(_path, _tolerance = 0.01) {
         if (_la == 0 || _lb == 0) continue;
 
         var _cross = abs((_ax * _by - _ay * _bx) / (_la * _lb));
-        if (_cross > _tolerance) {
+        var _keep  = (_cross > _tolerance);
+
+        if (!_keep && !__gmnav_path_seg_z_ok(_grid, _lx, _ly,
+                                             _px[i + 1], _py[i + 1],
+                                             _max_climb, _max_drop)) {
+            _keep = true;
+        }
+
+        if (_keep) {
             array_push(_ox, _px[i]);
             array_push(_oy, _py[i]);
         }
@@ -144,7 +158,7 @@ function gmnav_path_simplify(_path, _tolerance = 0.01) {
     _path.px    = _ox;
     _path.py    = _oy;
     _path.count = array_length(_ox);
-    _path.nodes = [];   // no longer corresponds 1:1 to cells
+    _path.nodes = []; // no longer corresponds 1:1 to cells
     __gmnav_path_measure(_path);
 }
 
@@ -206,4 +220,64 @@ function __gmnav_path_measure(_path) {
         _len += point_distance(_px[i], _py[i], _px[i + 1], _py[i + 1]);
     }
     _path.length = _len;
+}
+
+function __gmnav_path_line_z_ok(_grid, _a, _b, _climb, _drop) {
+    if (_climb == undefined) return true;
+    if (!gmnav_grid_has_heights(_grid)) return true;
+
+    var _c0 = gmnav_grid_col(_grid, _a);
+    var _r0 = gmnav_grid_row(_grid, _a);
+    var _c1 = gmnav_grid_col(_grid, _b);
+    var _r1 = gmnav_grid_row(_grid, _b);
+
+    var _steps = max(abs(_c1 - _c0), abs(_r1 - _r0));
+    if (_steps <= 0) return true;
+
+    var _pz = gmnav_grid_height(_grid, _a);
+
+    for (var s = 1; s <= _steps; s++) {
+        var _cc = round(lerp(_c0, _c1, s / _steps));
+        var _rr = round(lerp(_r0, _r1, s / _steps));
+
+        var _nn = gmnav_grid_node(_grid, _cc, _rr);
+        if (_nn == GMNAV_NO_NODE) return false;
+
+        var _z  = gmnav_grid_height(_grid, _nn);
+        var _dz = _z - _pz;
+
+        if (_dz > _climb || -_dz > _drop) return false;
+
+        _pz = _z;
+    }
+    return true;
+}
+
+function __gmnav_path_seg_z_ok(_grid, _x0, _y0, _x1, _y1, _climb, _drop) {
+    if (_climb == undefined) return true;
+    if (!gmnav_grid_has_heights(_grid)) return true;
+
+    var _lay  = _grid.layout;
+    var _step = min(_lay.tile_w, _lay.tile_h) * 0.5;
+
+    var _d = point_distance(_x0, _y0, _x1, _y1);
+    var _n = max(1, ceil(_d / _step));
+
+    var _pz = gmnav_grid_height(_grid, gmnav_grid_world_to_node(_grid, _x0, _y0));
+
+    for (var s = 1; s <= _n; s++) {
+        var _sx = lerp(_x0, _x1, s / _n);
+        var _sy = lerp(_y0, _y1, s / _n);
+
+        var _nn = gmnav_grid_world_to_node(_grid, _sx, _sy);
+        if (_nn == GMNAV_NO_NODE) continue;
+
+        var _z  = gmnav_grid_height(_grid, _nn);
+        var _dz = _z - _pz;
+
+        if (_dz > _climb || -_dz > _drop) return false;
+
+        _pz = _z;
+    }
+    return true;
 }

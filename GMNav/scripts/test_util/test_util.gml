@@ -452,3 +452,176 @@ function gmt_plat_replay(_pg, _from, _vx, _vy, _type) {
     }
     return GMNAV_NO_NODE;
 }
+
+function gmt_platagent_run(_sched, _pa, _max_frames = 600) {
+    for (var _f = 1; _f <= _max_frames; _f++) {
+        gmnav_scheduler_update(_sched);
+        gmnav_platagent_update(_pa);
+
+        if (gmnav_platagent_arrived(_pa)) return _f;
+    }
+    return -1;
+}
+
+function gmt_platagent_run_watch(_sched, _pa, _out, _max_frames = 600) {
+    _out.airborne = false;
+    _out.fell     = false;
+    _out.jumped   = false;
+    _out.frames   = -1;
+
+    for (var _f = 1; _f <= _max_frames; _f++) {
+        gmnav_scheduler_update(_sched);
+        gmnav_platagent_update(_pa);
+
+        if (gmnav_platagent_airborne(_pa)) _out.airborne = true;
+
+        if (_pa.mode == gmnav_pmode.LINK && _pa.link != undefined) {
+            if (_pa.link.type == gmnav_link.FALL) _out.fell   = true;
+            if (_pa.link.type == gmnav_link.JUMP) _out.jumped = true;
+        }
+
+        if (gmnav_platagent_arrived(_pa)) {
+            _out.frames = _f;
+            return _f;
+        }
+    }
+    return -1;
+}
+
+function gmt_cliff_level() {
+    var _g = gmnav_grid_create(22, 14, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+
+    gmnav_grid_fill_height(_g, 8, 3, 13, 6, 3);
+
+    gmnav_grid_fill_height(_g, 10, 9, 11, 9, 1);
+    gmnav_grid_fill_height(_g, 10, 8, 11, 8, 2);
+    gmnav_grid_fill_height(_g, 10, 7, 11, 7, 3);
+
+    return _g;
+}
+
+function gmt_solve_z(_grid, _a, _b, _climb = undefined, _drop = undefined) {
+    var _s = gmnav_search_create(_grid);
+
+    if (!gmnav_search_begin(_s, _a, _b, false, undefined, 0, _climb, _drop)) {
+        return undefined;
+    }
+
+    var _guard = 0;
+    while (_s.state == gmnav_state.WORKING && _guard++ < GMNAV_MAX_STEPS) {
+        gmnav_search_step(_s, 4096);
+    }
+    return (_s.state == gmnav_state.FOUND) ? gmnav_search_get_path(_s) : undefined;
+}
+
+function gmt_path_max_dz(_grid, _path) {
+    var _worst = 0;
+    for (var i = 1; i < array_length(_path); i++) {
+        var _dz = gmnav_grid_height(_grid, _path[i]) - gmnav_grid_height(_grid, _path[i - 1]);
+        _worst = max(_worst, abs(_dz));
+    }
+    return _worst;
+}
+
+function gmt_path_uses_ramp(_grid, _path) {
+    for (var i = 0; i < array_length(_path); i++) {
+        var _c = gmnav_grid_col(_grid, _path[i]);
+        var _r = gmnav_grid_row(_grid, _path[i]);
+        if ((_c == 10 || _c == 11) && _r >= 7 && _r <= 9) return true;
+    }
+    return false;
+}
+
+function gmt_field_cost_cell(_field, _col, _row) {
+    var _n = gmnav_grid_node(_field.grid, _col, _row);
+    var _p = gmnav_grid_node_to_world(_field.grid, _n);
+    return gmnav_flowfield_cost_at(_field, _p[0], _p[1]);
+}
+
+function gmt_field_reach_cell(_field, _col, _row) {
+    var _n = gmnav_grid_node(_field.grid, _col, _row);
+    var _p = gmnav_grid_node_to_world(_field.grid, _n);
+    return gmnav_flowfield_is_reachable(_field, _p[0], _p[1]);
+}
+
+function gmt_field_z(_grid, _gc, _gr, _climb = undefined, _drop = undefined) {
+    var _f = gmnav_flowfield_create(_grid, undefined, _climb, _drop);
+    gmnav_flowfield_build(_f, [gmnav_grid_node(_grid, _gc, _gr)]);
+    return _f;
+}
+
+function gmt_path_line_max_dz(_grid, _nodes) {
+    var _worst = 0;
+
+    for (var i = 1; i < array_length(_nodes); i++) {
+        var _c0 = gmnav_grid_col(_grid, _nodes[i - 1]);
+        var _r0 = gmnav_grid_row(_grid, _nodes[i - 1]);
+        var _c1 = gmnav_grid_col(_grid, _nodes[i]);
+        var _r1 = gmnav_grid_row(_grid, _nodes[i]);
+
+        var _steps = max(abs(_c1 - _c0), abs(_r1 - _r0));
+        if (_steps <= 0) continue;
+
+        var _pz = gmnav_grid_height(_grid, _nodes[i - 1]);
+
+        for (var s = 1; s <= _steps; s++) {
+            var _cc = round(lerp(_c0, _c1, s / _steps));
+            var _rr = round(lerp(_r0, _r1, s / _steps));
+            var _nn = gmnav_grid_node(_grid, _cc, _rr);
+            if (_nn == GMNAV_NO_NODE) continue;
+
+            var _z = gmnav_grid_height(_grid, _nn);
+            _worst = max(_worst, abs(_z - _pz));
+            _pz = _z;
+        }
+    }
+    return _worst;
+}
+
+function gmt_path_points_max_dz(_grid, _path) {
+    var _lay   = _grid.layout;
+    var _step  = _lay.tile_w * 0.5;
+    var _worst = 0;
+
+    for (var i = 1; i < _path.count; i++) {
+        var _x0 = _path.px[i - 1];
+        var _y0 = _path.py[i - 1];
+        var _x1 = _path.px[i];
+        var _y1 = _path.py[i];
+
+        var _d = point_distance(_x0, _y0, _x1, _y1);
+        var _n = max(1, ceil(_d / _step));
+
+        var _pz = gmnav_grid_height(_grid, gmnav_grid_world_to_node(_grid, _x0, _y0));
+
+        for (var s = 1; s <= _n; s++) {
+            var _sx = lerp(_x0, _x1, s / _n);
+            var _sy = lerp(_y0, _y1, s / _n);
+
+            var _nn = gmnav_grid_world_to_node(_grid, _sx, _sy);
+            if (_nn == GMNAV_NO_NODE) continue;
+
+            var _z = gmnav_grid_height(_grid, _nn);
+            _worst = max(_worst, abs(_z - _pz));
+            _pz = _z;
+        }
+    }
+    return _worst;
+}
+
+function gmt_ramp_path(_grid, _climb = 1, _drop = 1, _smooth = true) {
+    var _s = gmnav_search_create(_grid);
+
+    gmnav_search_begin(_s, gmnav_grid_node(_grid, 3, 5),
+                           gmnav_grid_node(_grid, 10, 5),
+                      false, undefined, 0, _climb, _drop);
+
+    var _guard = 0;
+    while (_s.state == gmnav_state.WORKING && _guard++ < GMNAV_MAX_STEPS) {
+        gmnav_search_step(_s, 4096);
+    }
+
+    var _p = gmnav_path_create(_grid, gmnav_search_get_path(_s));
+    if (_smooth) gmnav_path_smooth(_p, _climb, _drop);
+    return _p;
+}

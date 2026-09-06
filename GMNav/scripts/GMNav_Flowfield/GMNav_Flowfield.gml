@@ -1,9 +1,13 @@
-function gmnav_flowfield_create(_grid, _profile = undefined) {
+function gmnav_flowfield_create(_grid, _profile = undefined,
+                                _max_climb = undefined, _max_drop = undefined) {
     var _n = _grid.count;
 
     return {
         grid     : _grid,
         profile  : _profile,
+
+        max_climb : _max_climb, // undefined means heights are not consulted, 
+        max_drop  : _max_drop,  // so a grid carrying elevation behaves exactly as before until a caller opts in
 
         dist     : array_create(_n, GMNAV_INF),
         dirx     : array_create(_n, 0),
@@ -132,6 +136,9 @@ function __gmnav_field_expand(_field, _budget) {
 
     var _cap   = _field.max_dist;
     var _check = (_pax == 0) && (_nbc == 8);
+    var _hz    = (_field.max_climb == undefined) ? undefined : _grid.height_z;
+    var _climb = _field.max_climb;
+    var _drop  = _field.max_drop;
     var _left  = _budget;
 
     while (_left > 0) {
@@ -166,6 +173,11 @@ function __gmnav_field_expand(_field, _budget) {
             var _nn = _nr * _w + _nc;
             if (_mark[_nn] == _cgen) continue;
             if ((_flags[_nn] & GMNAV_FLAG_BLOCKED) != 0) continue;
+
+            if (_hz != undefined) {
+                var _dz = _hz[_cur] - _hz[_nn];
+                if (_dz > _climb || -_dz > _drop) continue;
+            }
 
             if (_check && _dc != 0 && _dr != 0) {
                 if ((_flags[_cr * _w + _nc] & GMNAV_FLAG_BLOCKED) != 0) continue;

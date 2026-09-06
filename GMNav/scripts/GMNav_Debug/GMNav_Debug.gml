@@ -7,6 +7,8 @@
 #macro GMNAV_DBG_JUMP      $40A0F0   // orange
 #macro GMNAV_DBG_AGENT     $F040F0   // magenta
 #macro GMNAV_DBG_GOAL      $40F040   // bright green
+#macro GMNAV_DBG_HEIGHT    $60E0E0   // pale yellow, scaled by height
+#macro GMNAV_DBG_STEP      $4040F0   // red, an edge the limits refuse
 
 #macro GMNAV_DBG_MAX_CELLS 8000      // per draw call, before bailing out
 
@@ -475,4 +477,100 @@ function __gmnav_dbg_arc(_x1, _y1, _x2, _y2, _bow, _steps = 8) {
 function __gmnav_dbg_cross(_x, _y, _s) {
     draw_line(_x - _s, _y - _s, _x + _s, _y + _s);
     draw_line(_x - _s, _y + _s, _x + _s, _y - _s);
+}
+
+function gmnav_debug_draw_heights(_grid, _cfg = undefined, _max_z = undefined) {
+    if (!gmnav_grid_has_heights(_grid)) return;
+
+    _cfg = _cfg ?? gmnav_debug_config();
+
+    var _v  = __gmnav_dbg_view(_cfg);
+    var _n  = 0;
+    var _hi = _max_z;
+
+    if (_hi == undefined) {
+        _hi = 1;
+        for (var _i = 0; _i < _grid.count; _i++) _hi = max(_hi, _grid.height_z[_i]);
+    }
+
+    for (var _r = 0; _r < _grid.height; _r++) {
+        for (var _c = 0; _c < _grid.width; _c++) {
+            var _nd = _r * _grid.width + _c;
+
+            if ((_grid.flags[_nd] & GMNAV_FLAG_BLOCKED) != 0) continue;
+            if (_grid.height_z[_nd] == 0) continue;
+            if (!__gmnav_dbg_visible(_grid.layout, _c, _r, _v)) continue;
+
+            if (++_n > _cfg.max_cells) {
+                __gmnav_dbg_bail(_grid, "heights");
+                return;
+            }
+
+            draw_set_color(GMNAV_DBG_HEIGHT);
+            draw_set_alpha(_cfg.alpha * (0.25 + 0.75 * (_grid.height_z[_nd] / _hi)));
+            __gmnav_dbg_cell(_grid.layout, _c, _r);
+
+            if (_cfg.show_labels) {
+                draw_set_alpha(1);
+                draw_set_color(c_white);
+                draw_text(gmnav_layout_cell_x(_grid.layout, _c, _r) - 4,
+                          gmnav_layout_cell_y(_grid.layout, _c, _r) - 6,
+                          string(_grid.height_z[_nd]));
+            }
+        }
+    }
+    __gmnav_dbg_restore();
+}
+
+function gmnav_debug_draw_steps(_grid, _max_climb, _max_drop, _cfg = undefined) {
+    if (!gmnav_grid_has_heights(_grid)) return;
+    if (_max_climb == undefined) return;
+
+    _cfg = _cfg ?? gmnav_debug_config();
+
+    var _v = __gmnav_dbg_view(_cfg);
+    var _n = 0;
+
+    draw_set_color(GMNAV_DBG_STEP);
+    draw_set_alpha(_cfg.line_alpha);
+
+    for (var _r = 0; _r < _grid.height; _r++) {
+        for (var _c = 0; _c < _grid.width; _c++) {
+            var _a = gmnav_grid_node(_grid, _c, _r);
+            if ((_grid.flags[_a] & GMNAV_FLAG_BLOCKED) != 0) continue;
+            if (!__gmnav_dbg_visible(_grid.layout, _c, _r, _v)) continue;
+
+            for (var _d = 0; _d < 2; _d++) {
+                var _nc = _c + (_d == 0 ? 1 : 0);
+                var _nr = _r + (_d == 0 ? 0 : 1);
+
+                var _b = gmnav_grid_node(_grid, _nc, _nr);
+                if (_b == GMNAV_NO_NODE) continue;
+                if ((_grid.flags[_b] & GMNAV_FLAG_BLOCKED) != 0) continue;
+
+                if (!gmnav_grid_step_blocked(_grid, _a, _b, _max_climb, _max_drop)
+                &&  !gmnav_grid_step_blocked(_grid, _b, _a, _max_climb, _max_drop)) continue;
+
+                if (++_n > _cfg.max_cells) {
+                    __gmnav_dbg_bail(_grid, "steps");
+                    return;
+                }
+
+                var _ax = gmnav_layout_cell_x(_grid.layout, _c,  _r);
+                var _ay = gmnav_layout_cell_y(_grid.layout, _c,  _r);
+                var _bx = gmnav_layout_cell_x(_grid.layout, _nc, _nr);
+                var _by = gmnav_layout_cell_y(_grid.layout, _nc, _nr);
+
+                var _mx = (_ax + _bx) * 0.5;
+                var _my = (_ay + _by) * 0.5;
+
+                var _px = (_by - _ay) * 0.5;
+                var _py = (_ax - _bx) * 0.5;
+
+                draw_line_width(_mx - _px, _my - _py,
+                                _mx + _px, _my + _py, _cfg.line_width);
+            }
+        }
+    }
+    __gmnav_dbg_restore();
 }

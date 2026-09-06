@@ -1,5 +1,7 @@
-if (show_grid)  gmnav_debug_draw_grid(grid, cfg);
+if (show_grid) gmnav_debug_draw_grid(grid, cfg);
 
+// one-way decks carry no BLOCKED flag, so the grid overlay skips them.
+// Draw a bar along the top edge, which is the actual collision surface.
 draw_set_color(#7A5AC0);
 for (var _r = 0; _r < grid.height; _r++) {
     for (var _c = 0; _c < grid.width; _c++) {
@@ -16,7 +18,8 @@ draw_set_color(c_white);
 
 if (show_graph) gmnav_debug_draw_platgraph(pg, cfg, link_mask);
 
-if (show_path && demo3_has_route(hero)) {
+// the remaining route, node to node
+if (show_path && gmnav_platagent_has_route(hero)) {
     draw_set_color(#4A9BE0);
 
     for (var i = hero.seek; i < array_length(hero.path) - 1; i++) {
@@ -30,7 +33,8 @@ if (show_path && demo3_has_route(hero)) {
     draw_circle(pg.node_x[_g], pg.node_y[_g], 6, true);
 }
 
-if (show_arc && demo3_has_route(hero)) {
+// the real arc of the link being flown, replayed from its stored launch
+if (show_arc && gmnav_platagent_has_route(hero)) {
     var _pts = demo3_arc_points(pg, hero.path[hero.seek],
                                     hero.path[hero.seek + 1]);
 
@@ -40,10 +44,11 @@ if (show_arc && demo3_has_route(hero)) {
     }
 }
 
+// character, drawn from the feet up
 var _hw = move.width * 0.5;
-draw_set_color(hero.failed            ? #E05A3C
-             : (demo3_airborne(hero)   ? #E0B84A
-             :                          #60C075));
+draw_set_color(hero.failed                  ? #E05A3C
+             : (gmnav_platagent_airborne(hero) ? #E0B84A
+             :                                #60C075));
 draw_rectangle(hero.x - _hw, hero.y - move.height, hero.x + _hw, hero.y, false);
 
 draw_set_color(c_black);

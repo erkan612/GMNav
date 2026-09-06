@@ -14,6 +14,8 @@ function gmnav_grid_create(_w, _h, _layout, _slots = 4) {
 
         clear    : undefined,   // clearance values, built on demand
         clear_v  : -1,          // grid version the clearance was built at
+		
+        height_z : undefined,
 
         version  : 0,
 
@@ -227,4 +229,66 @@ function gmnav_grid_scratch_flush(_grid) {
             _grid.slots[i] = undefined;
         }
     }
+}
+
+function gmnav_grid_has_heights(_grid) {
+    return (_grid.height_z != undefined);
+}
+
+function gmnav_grid_height(_grid, _node) {
+    if (_grid.height_z == undefined) return 0;
+    if (_node < 0 || _node >= _grid.count) return 0;
+    return _grid.height_z[_node];
+}
+
+function gmnav_grid_set_height(_grid, _col, _row, _z) {
+    var _n = gmnav_grid_node(_grid, _col, _row);
+    if (_n == GMNAV_NO_NODE) return false;
+
+    if (_grid.height_z == undefined) {
+        _grid.height_z = array_create(_grid.count, 0);
+    }
+
+    if (_grid.height_z[_n] == _z) return true; // no-op, do not bump
+
+    _grid.height_z[_n] = _z;
+    _grid.version++;
+    return true;
+}
+
+function gmnav_grid_fill_height(_grid, _c1, _r1, _c2, _r2, _z) {
+    var _lo_c = min(_c1, _c2);
+    var _hi_c = max(_c1, _c2);
+    var _lo_r = min(_r1, _r2);
+    var _hi_r = max(_r1, _r2);
+
+    if (_grid.height_z == undefined) {
+        _grid.height_z = array_create(_grid.count, 0);
+    }
+
+    var _changed = false;
+
+    for (var _r = _lo_r; _r <= _hi_r; _r++) {
+        for (var _c = _lo_c; _c <= _hi_c; _c++) {
+            var _n = gmnav_grid_node(_grid, _c, _r);
+            if (_n == GMNAV_NO_NODE) continue;
+            if (_grid.height_z[_n] == _z) continue;
+
+            _grid.height_z[_n] = _z;
+            _changed = true;
+        }
+    }
+
+    if (_changed) _grid.version++;
+    return _changed;
+}
+
+function gmnav_grid_step_blocked(_grid, _a, _b, _max_climb, _max_drop) {
+    if (_max_climb == undefined) return false;
+    if (_grid.height_z == undefined) return false;
+    if (_a == GMNAV_NO_NODE || _b == GMNAV_NO_NODE) return false;
+
+    var _dz = _grid.height_z[_b] - _grid.height_z[_a];
+
+    return (_dz > _max_climb || -_dz > _max_drop);
 }

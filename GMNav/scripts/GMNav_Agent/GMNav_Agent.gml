@@ -5,6 +5,9 @@ function gmnav_agent_create(_sched, _x, _y, _radius = 8, _speed = 2) {
 
         profile    : undefined,     // gmnav_costprofile_create(), or undefined
         need_clear : 0,             // minimum clearance, 0 to ignore
+		
+        max_climb  : undefined,
+        max_drop   : undefined,
 
         x          : _x,
         y          : _y,
@@ -51,7 +54,10 @@ function gmnav_agent_goto(_agent, _gx, _gy, _priority = gmnav_priority.NORMAL) {
     _agent.has_goal = true;
     _agent.arrived  = false;
     _agent.ticket   = gmnav_scheduler_request(_agent.sched, _sn, _gn, _priority,
-                                              false, _agent.profile, _agent.need_clear);
+                                              false, _agent.profile,
+											  _agent.need_clear,
+                                              _agent.max_climb,
+                                              _agent.max_drop);
 
     return true;
 }
@@ -144,7 +150,7 @@ function __gmnav_agent_collect_ticket(_agent) {
     if (_t.state == gmnav_state.FOUND) {
         var _p = gmnav_path_create(_agent.grid, gmnav_scheduler_get_path(_t));
 
-        gmnav_path_smooth(_p);
+		gmnav_path_smooth(_p, _agent.max_climb, _agent.max_drop);
         gmnav_path_anchor_start(_p, _agent.x, _agent.y);
         gmnav_path_anchor_end(_p, _agent.goal_x, _agent.goal_y);
         _p.stale = _t.stale;

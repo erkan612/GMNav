@@ -11,11 +11,8 @@ gmnav_platgraph_bake(pg);
 budget = 1500;
 sched  = gmnav_scheduler_create(pg, budget, 2);
 
-// drop the character on the first surface node on the ground row
 surf_row = grid.height - 5;
-start    = gmnav_platgraph_node_at(pg, 3 * tile, surf_row * tile + 1);
-if (start == GMNAV_NO_NODE) start = 0;
-hero = demo3_character_create(pg, sched, start);
+hero     = gmnav_platagent_create(sched, 3 * tile, surf_row * tile + 1);
 
 cfg = gmnav_debug_config();
 cfg.cull  = false;
@@ -31,7 +28,3 @@ stepping  = false;
 step_now  = false;
 
 bake_ms = 0;
-
-//show_debug_message("demo3: edge_vx " + string(variable_struct_exists(pg, "edge_vx"))
-//                 + "  nodes " + string(pg.count)
-//                 + "  links " + string(array_length(pg.edge_to)));

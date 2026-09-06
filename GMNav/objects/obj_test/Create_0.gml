@@ -11,6 +11,8 @@ gmt_test_dynamic();
 gmt_test_sched_domains();
 gmt_test_platformer();
 gmt_test_agent();
+gmt_test_platagent();
+gmt_test_elevation();
 
 gmt_head("D scheduler (running)");
 
