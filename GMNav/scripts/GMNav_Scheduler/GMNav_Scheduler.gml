@@ -1,4 +1,4 @@
-function gmnav_scheduler_create(_target, _budget = GMNAV_DEFAULT_BUDGET, _concurrent = 4) {
+function gmnav_scheduler_create(_target, _budget = global.gmnav.config.DEFAULT_BUDGET, _concurrent = 4) {
     var _dom = _target[$ "domain"] ?? gmnav_domain.GRID;
 
     return {
@@ -259,7 +259,7 @@ function __gmnav_sched_run_immediate(_sched, _ticket) {
     }
 
     _ticket.search = _srch;
-    var _st = __gmnav_sched_advance(_sched, _srch, GMNAV_MAX_STEPS);
+    var _st = __gmnav_sched_advance(_sched, _srch, global.gmnav.config.MAX_STEPS);
 
     if (_st == gmnav_state.FOUND) __gmnav_sched_collect(_sched, _ticket);
 

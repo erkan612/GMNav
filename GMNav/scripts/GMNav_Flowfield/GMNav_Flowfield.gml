@@ -59,7 +59,7 @@ function gmnav_flowfield_begin(_field, _goal_nodes, _max_dist = GMNAV_INF) {
     return true;
 }
 
-function gmnav_flowfield_step(_field, _budget = GMNAV_DEFAULT_BUDGET) {
+function gmnav_flowfield_step(_field, _budget = global.gmnav.config.DEFAULT_BUDGET) {
     if (_field.state != gmnav_state.WORKING) return _field.state;
 
     var _left = __gmnav_field_expand(_field, _budget);
@@ -75,8 +75,8 @@ function gmnav_flowfield_build(_field, _goal_nodes, _max_dist = GMNAV_INF) {
 
     var _guard = 0;
     while (_field.state == gmnav_state.WORKING) {
-        gmnav_flowfield_step(_field, GMNAV_DEFAULT_BUDGET);
-        if (++_guard > GMNAV_MAX_STEPS) break;
+        gmnav_flowfield_step(_field, global.gmnav.config.DEFAULT_BUDGET);
+        if (++_guard > global.gmnav.config.MAX_STEPS) break;
     }
     return (_field.state == gmnav_state.FOUND);
 }

@@ -400,7 +400,7 @@ function gmt_plat_replay(_pg, _from, _vx, _vy, _type) {
         if (_vx == 0) return GMNAV_NO_NODE;
 
         var _walked = 0;
-        var _limit  = _lay.tile_w * GMNAV_PLAT_FALL_WALK_CELLS;
+        var _limit  = _lay.tile_w * global.gmnav.config.PLAT_FALL_WALK_CELLS;
 
         while (gmnav_platgraph_solid(_pg, _x, _y + 1, 1)) {
             if (_walked > _limit) return GMNAV_NO_NODE;
@@ -413,7 +413,7 @@ function gmt_plat_replay(_pg, _from, _vx, _vy, _type) {
         _armed = true;
     }
 
-    while (_frames < GMNAV_PLAT_MAX_SIM) {
+    while (_frames < global.gmnav.config.PLAT_MAX_SIM) {
         _frames++;
 
         _vy = min(_vy + _mv.gravity, _mv.max_fall);
@@ -508,7 +508,7 @@ function gmt_solve_z(_grid, _a, _b, _climb = undefined, _drop = undefined) {
     }
 
     var _guard = 0;
-    while (_s.state == gmnav_state.WORKING && _guard++ < GMNAV_MAX_STEPS) {
+    while (_s.state == gmnav_state.WORKING && _guard++ < global.gmnav.config.MAX_STEPS) {
         gmnav_search_step(_s, 4096);
     }
     return (_s.state == gmnav_state.FOUND) ? gmnav_search_get_path(_s) : undefined;
@@ -617,7 +617,7 @@ function gmt_ramp_path(_grid, _climb = 1, _drop = 1, _smooth = true) {
                       false, undefined, 0, _climb, _drop);
 
     var _guard = 0;
-    while (_s.state == gmnav_state.WORKING && _guard++ < GMNAV_MAX_STEPS) {
+    while (_s.state == gmnav_state.WORKING && _guard++ < global.gmnav.config.MAX_STEPS) {
         gmnav_search_step(_s, 4096);
     }
 

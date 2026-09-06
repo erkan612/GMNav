@@ -74,7 +74,7 @@ function gmnav_platgraph_bake(_pg) {
     var _guard = 0;
     while (_pg.phase != gmnav_bake.DONE) {
         gmnav_platgraph_bake_step(_pg, 512);
-        if (++_guard > GMNAV_MAX_STEPS) break;
+        if (++_guard > global.gmnav.config.MAX_STEPS) break;
     }
     return (_pg.phase == gmnav_bake.DONE);
 }
@@ -294,7 +294,7 @@ function __gmnav_plat_simulate(_pg, _from, _x0, _y0, _vx, _vy, _type) {
         if (_vx == 0) return;
 
         var _walked = 0;
-        var _limit  = _lay.tile_w * GMNAV_PLAT_FALL_WALK_CELLS;
+        var _limit  = _lay.tile_w * global.gmnav.config.PLAT_FALL_WALK_CELLS;
 
         while (__gmnav_plat_blocked(_pg, _x, _y + 1, 1)) {
             if (_walked > _limit) return;                        // never left the ledge
@@ -309,7 +309,7 @@ function __gmnav_plat_simulate(_pg, _from, _x0, _y0, _vx, _vy, _type) {
         _armed = true;
     }
 
-    while (_frames < GMNAV_PLAT_MAX_SIM) {
+    while (_frames < global.gmnav.config.PLAT_MAX_SIM) {
         _frames++;
 
         _vy = min(_vy + _mv.gravity, _mv.max_fall);
@@ -412,7 +412,7 @@ function __gmnav_plat_add(_pg, _from, _to, _cost, _type, _vx, _vy) {
         }
     }
 
-    if (array_length(_tos) >= GMNAV_PLAT_MAX_LINKS) return;
+    if (array_length(_tos) >= global.gmnav.config.PLAT_MAX_LINKS) return;
 
     array_push(_pg.tmp_to[_from],   _to);
     array_push(_pg.tmp_cost[_from], _cost);

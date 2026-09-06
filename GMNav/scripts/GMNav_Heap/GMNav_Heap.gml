@@ -1,4 +1,4 @@
-function gmnav_heap_create(_capacity = GMNAV_HEAP_INIT) {
+function gmnav_heap_create(_capacity = global.gmnav.config.HEAP_INIT) {
     return {
         count : 0,
         cap   : _capacity,

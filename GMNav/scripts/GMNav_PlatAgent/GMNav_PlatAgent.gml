@@ -196,7 +196,7 @@ function __gmnav_pa_link(_pa, _mv) {
     var _pg  = _pa.pg;
     var _lay = _pg.grid.layout;
 
-    if (++_pa.guard > GMNAV_PLAT_MAX_SIM) { // should never happen
+    if (++_pa.guard > global.gmnav.config.PLAT_MAX_SIM) { // should never happen
         __gmnav_pa_land(_pa, gmnav_platgraph_node_at(_pg, _pa.x, _pa.y));
         return;
     }

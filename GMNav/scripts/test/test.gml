@@ -1479,7 +1479,7 @@ function gmt_test_elevation() {
                        false, undefined, 0, 1, 1);
 
     var _mguard = 0;
-    while (_ms.state == gmnav_state.WORKING && _mguard++ < GMNAV_MAX_STEPS) {
+    while (_ms.state == gmnav_state.WORKING && _mguard++ < global.gmnav.config.MAX_STEPS) {
         gmnav_search_step(_ms, 4096);
     }
     gmt_check("route found before smoothing", _ms.state, gmnav_state.FOUND);

@@ -95,7 +95,7 @@ function gmnav_graphsearch_begin(_gs, _start, _goal) {
     return true;
 }
 
-function gmnav_graphsearch_step(_gs, _budget = GMNAV_DEFAULT_BUDGET) {
+function gmnav_graphsearch_step(_gs, _budget = global.gmnav.config.DEFAULT_BUDGET) {
     if (_gs.state != gmnav_state.WORKING) return _gs.state;
 
     var _pg   = _gs.pg;
@@ -167,7 +167,7 @@ function gmnav_graphsearch_step(_gs, _budget = GMNAV_DEFAULT_BUDGET) {
 
 function gmnav_graphsearch_solve(_gs, _start, _goal) {
     if (!gmnav_graphsearch_begin(_gs, _start, _goal)) return false;
-    return (gmnav_graphsearch_step(_gs, GMNAV_MAX_STEPS) == gmnav_state.FOUND);
+    return (gmnav_graphsearch_step(_gs, global.gmnav.config.MAX_STEPS) == gmnav_state.FOUND);
 }
 
 function gmnav_graphsearch_get_path(_gs)  { return _gs.result; }

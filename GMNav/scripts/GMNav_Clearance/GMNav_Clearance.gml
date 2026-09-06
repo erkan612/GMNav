@@ -17,7 +17,7 @@ function gmnav_clearance_build(_grid) {
     var _fl = _grid.flags;
 
     var _cl  = (_grid.clear == undefined) ? array_create(_n, 0) : _grid.clear;
-    var _cap = GMNAV_CLEARANCE_MAX;
+    var _cap = global.gmnav.config.CLEARANCE_MAX;
 
     var _wm = _w - 1;
     var _hm = _h - 1;

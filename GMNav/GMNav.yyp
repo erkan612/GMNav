@@ -36,6 +36,7 @@
     {"id":{"name":"GMNav_Agent","path":"scripts/GMNav_Agent/GMNav_Agent.yy",},},
     {"id":{"name":"GMNav_Clearance","path":"scripts/GMNav_Clearance/GMNav_Clearance.yy",},},
     {"id":{"name":"GMNav_Config","path":"scripts/GMNav_Config/GMNav_Config.yy",},},
+    {"id":{"name":"GMNav_Core","path":"scripts/GMNav_Core/GMNav_Core.yy",},},
     {"id":{"name":"GMNav_Costfield","path":"scripts/GMNav_Costfield/GMNav_Costfield.yy",},},
     {"id":{"name":"GMNav_Debug","path":"scripts/GMNav_Debug/GMNav_Debug.yy",},},
     {"id":{"name":"GMNav_Flowfield","path":"scripts/GMNav_Flowfield/GMNav_Flowfield.yy",},},

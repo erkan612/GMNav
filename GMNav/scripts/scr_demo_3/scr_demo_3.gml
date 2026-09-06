@@ -65,7 +65,7 @@ function demo3_arc_points(_pg, _from, _to) {
 
     if (_lk.type == gmnav_link.FALL) {
         while (gmnav_platgraph_solid(_pg, _x, _y + 1, 1)) {
-            if (_f++ > GMNAV_PLAT_MAX_SIM) return _out;
+            if (_f++ > global.gmnav.config.PLAT_MAX_SIM) return _out;
             if (gmnav_platgraph_solid(_pg, _x + _vx, _y, 0)) return _out;
             _x += _vx;
             array_push(_out, [_x, _y]);
@@ -73,7 +73,7 @@ function demo3_arc_points(_pg, _from, _to) {
         _armed = true;
     }
 
-    while (_f++ < GMNAV_PLAT_MAX_SIM) {
+    while (_f++ < global.gmnav.config.PLAT_MAX_SIM) {
         _vy = min(_vy + _mv.gravity, _mv.max_fall);
 
         var _nx = _x + _vx;

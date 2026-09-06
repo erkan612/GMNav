@@ -1,3 +1,5 @@
+gmnav_init();
+
 gmt_reset();
 show_debug_message("########## GMNav suite ##########");
 

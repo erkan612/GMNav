@@ -85,7 +85,7 @@ function gmnav_search_begin(_srch, _start_node, _goal_node, _corner_cut = false,
     return true;
 }
 
-function gmnav_search_step(_srch, _budget = GMNAV_DEFAULT_BUDGET) {
+function gmnav_search_step(_srch, _budget = global.gmnav.config.DEFAULT_BUDGET) {
     if (_srch.state != gmnav_state.WORKING) return _srch.state;
 
     var _grid = _srch.grid;
