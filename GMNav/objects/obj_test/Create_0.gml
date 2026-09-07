@@ -21,6 +21,7 @@ gmt_test_agent_layers();
 gmt_test_demo5_level();
 gmt_test_demo6_level();
 gmt_test_costmode();
+gmt_test_demo7_level();
 
 gmt_head("D scheduler (running)");
 

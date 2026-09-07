@@ -2224,3 +2224,71 @@ function gmt_test_costmode() {
     gmt_check("a route still solves on squashed tiles", is_array(_p), true);
     gmt_note("squashed run", string(array_length(_p)) + " steps");
 }
+
+function gmt_test_demo7_level() {
+    gmt_head("Q1 the demo 7 level");
+
+    var _g = demo7_make_grid();
+
+    gmt_check("three levels of elevation", _g.overlay.max_layer, 2);
+    gmt_note("deck cells", gmnav_overlay_count(_g.overlay));
+
+    // the river seals, the crossing is the only way through
+    var _p = gmt_solve_z(_g, gmnav_grid_node(_g, 20, 8),
+                             gmnav_grid_node(_g, 20, 18));
+    gmt_check("north reaches south", is_array(_p), true);
+    gmt_check("only over the crossing",
+              (array_get_index(_p, demo7_deck_at(_g, DEMO7_XING_C, DEMO7_RIVER_R1)) >= 0),
+              true);
+
+    // the flyover: over it, and under it
+    var _fw = gmnav_grid_node(_g, DEMO7_FLY_C1 - 1, DEMO7_FLY_R);
+    var _fe = gmnav_grid_node(_g, DEMO7_FLY_C2 + 1, DEMO7_FLY_R);
+    var _fd = demo7_deck_at(_g, DEMO7_FLY_C1 + 2, DEMO7_FLY_R);
+
+    gmt_check("you can get onto it", is_array(gmt_solve_z(_g, _fw, _fd)), true);
+    gmt_check("the ground below it is open",
+              gmnav_grid_is_blocked(_g,
+                  gmnav_grid_node(_g, DEMO7_FLY_C1 + 2, DEMO7_FLY_R)), false);
+
+    // end to end along the row, the deck is a straight line between the two points, so A* takes it. expected behaviour, correctly
+    var _along = gmt_solve_z(_g, _fw, _fe);
+    gmt_check("along the row it uses the deck",
+              (array_get_index(_along, _fd) >= 0), true);
+
+    // crossing the row instead, the deck is off the line, so the route passes underneath it
+    var _cross = gmt_solve_z(_g, gmnav_grid_node(_g, DEMO7_FLY_C1 + 2, DEMO7_FLY_R - 3),
+                                 gmnav_grid_node(_g, DEMO7_FLY_C1 + 2, DEMO7_FLY_R + 3));
+    gmt_check("crossing the row goes underneath", is_array(_cross), true);
+    gmt_check("without touching the deck", (array_get_index(_cross, _fd) < 0), true);
+    gmt_check("through the cell below it",
+              (array_get_index(_cross,
+                   gmnav_grid_node(_g, DEMO7_FLY_C1 + 2, DEMO7_FLY_R)) >= 0), true);
+
+    // the cliff is solid, unlike the flyover
+    gmt_check("the cliff is solid below",
+              gmnav_grid_is_blocked(_g, gmnav_grid_node(_g, 8, 17)), true);
+
+    var _south = gmnav_grid_node(_g, 20, 18);
+    var _cliff = demo7_deck_at(_g, DEMO7_CLIFF_C1, DEMO7_CLIFF_R1, 1);
+    var _cp = gmt_solve_z(_g, _south, _cliff);
+    gmt_check("the cliff is reachable", is_array(_cp), true);
+    gmt_check("by its ramp",
+              (array_get_index(_cp, demo7_deck_at(_g, DEMO7_RAMP_C,
+                                                  DEMO7_CLIFF_R2, 1)) >= 0), true);
+
+    var _peak = demo7_deck_at(_g, DEMO7_PEAK_C1, DEMO7_PEAK_R1, 2);
+    var _pp = gmt_solve_z(_g, _south, _peak);
+    gmt_check("the peak is reachable", is_array(_pp), true);
+    gmt_check("only through the cliff",
+              (array_get_index(_pp, demo7_deck_at(_g, DEMO7_RAMP_C,
+                                                  DEMO7_PEAK_R2 + 1, 1)) >= 0), true);
+    gmt_note("ground to the peak", string(array_length(_pp)) + " steps");
+
+    // you walk around the cliff, not through it
+    var _round = gmt_solve_z(_g, gmnav_grid_node(_g, 2, 17),
+                                 gmnav_grid_node(_g, 20, 17));
+    gmt_check("you can get around the cliff", is_array(_round), true);
+    gmt_check("without passing through it",
+              (array_get_index(_round, gmnav_grid_node(_g, 8, 17)) < 0), true);
+}
