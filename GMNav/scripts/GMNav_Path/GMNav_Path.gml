@@ -100,7 +100,8 @@ function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
         var _best = _i + 1;
 
         for (var _j = _n - 1; _j > _i + 1; _j--) {
-            if (__gmnav_path_corridor_ok(_grid, _src[_i], _src[_j],
+            if (__gmnav_path_same_layer(_grid, _src, _i, _j)
+            &&  __gmnav_path_corridor_ok(_grid, _src[_i], _src[_j],
                                          _max_climb, _max_drop, _radius)) {
                 _best = _j;
                 break;
@@ -352,6 +353,17 @@ function __gmnav_path_corridor_ok(_grid, _a, _b, _climb, _drop, _radius) {
                 }
             }
         }
+    }
+    return true;
+}
+
+function __gmnav_path_same_layer(_grid, _nodes, _i, _j) {
+    if (!gmnav_grid_has_overlay(_grid)) return true;
+
+    var _l = gmnav_grid_node_layer(_grid, _nodes[_i]);
+
+    for (var k = _i + 1; k <= _j; k++) {
+        if (gmnav_grid_node_layer(_grid, _nodes[k]) != _l) return false;
     }
     return true;
 }

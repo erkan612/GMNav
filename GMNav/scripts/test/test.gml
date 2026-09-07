@@ -1917,3 +1917,114 @@ function gmt_test_overlay() {
     gmt_check("every layout is sealed without the bridge", _sealed, 5);
     gmt_check("every layout crosses with it",              _crossed, 5);
 }
+
+function gmt_test_agent_layers() {
+    gmt_head("B7 the agent carries a layer");
+
+    var _g  = gmt_bridge_level();
+    var _sc = gmnav_scheduler_create(_g, 8000);
+
+    var _ground = gmnav_grid_node(_g, 5, 1);
+    var _deck   = gmnav_grid_world_to_node(_g,
+                      gmnav_grid_node_to_world(_g, gmnav_grid_node(_g, 5, 5))[0],
+                      gmnav_grid_node_to_world(_g, gmnav_grid_node(_g, 5, 5))[1], 1);
+
+    var _gw = gmnav_grid_node_to_world(_g, _ground);
+    var _a  = gmnav_agent_create(_sc, _gw[0], _gw[1], 8, 3);
+
+    gmt_check("a new agent is on layer 0", gmnav_agent_layer(_a), 0);
+
+    gmt_head("B8 it can be sent to a deck");
+
+    var _dw = gmnav_grid_node_to_world(_g, _deck);
+
+    gmt_check("goto with no layer means the ground",
+              gmnav_agent_goto(_a, _dw[0], _dw[1], gmnav_priority.IMMEDIATE), true);
+    gmnav_scheduler_update(_sc);
+    var _p0 = gmnav_scheduler_get_path(_a.ticket);
+    gmt_check("so it routes to the road, not the deck",
+              (array_get_index(_p0, _deck) < 0), true);
+
+    gmt_check("goto naming layer 1 is accepted",
+              gmnav_agent_goto(_a, _dw[0], _dw[1], gmnav_priority.IMMEDIATE, 1), true);
+    gmnav_scheduler_update(_sc);
+    var _p1 = gmnav_scheduler_get_path(_a.ticket);
+    gmt_check("and routes onto the deck",
+              (array_get_index(_p1, _deck) >= 0), true);
+
+    gmt_check("a layer with no cell there is refused",
+              gmnav_agent_goto(_a, 2 * 32 + 16, 2 * 32 + 16,
+                               gmnav_priority.IMMEDIATE, 1), false);
+
+    gmt_head("B9 the layer follows the agent");
+
+    gmnav_agent_goto(_a, _dw[0], _dw[1], gmnav_priority.IMMEDIATE, 1);
+
+    var _r = { layers : [], frames : -1 };
+    var _f = gmt_agent_run_layers(_sc, _a, _r);
+    gmt_note("frames onto the deck", _f);
+    gmt_note("layers visited", gmt_arr_str(_r.layers));
+
+    gmt_check("it arrives", (_f > 0), true);
+    gmt_check("and is standing on the deck", gmnav_agent_layer(_a), 1);
+
+    // from the deck, back down to the far side of the road
+    var _far = gmnav_grid_node(_g, 5, 10);
+    var _fw  = gmnav_grid_node_to_world(_g, _far);
+
+    gmt_check("goto from the deck is accepted",
+              gmnav_agent_goto(_a, _fw[0], _fw[1], gmnav_priority.IMMEDIATE), true);
+    gmnav_scheduler_update(_sc);
+
+    var _p2 = gmnav_scheduler_get_path(_a.ticket);
+    gmt_check("it leaves from the deck, not the road below",
+              _p2[0], gmnav_grid_world_to_node(_g, _a.x, _a.y, 1));
+
+    _r = { layers : [], frames : -1 };
+    _f = gmt_agent_run_layers(_sc, _a, _r);
+    gmt_note("frames back down", _f);
+    gmt_note("layers visited", gmt_arr_str(_r.layers));
+
+    gmt_check("it arrives back on the ground", (_f > 0), true);
+    gmt_check("on layer 0", gmnav_agent_layer(_a), 0);
+	
+    gmt_head("B10 smoothing must not shortcut across a layer");
+
+    var _og = gmnav_grid_create(12, 12, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+
+    var _oo = gmnav_overlay_create(_og);
+    var _k1 = gmnav_overlay_add(_oo, 5, 4, 1);
+    var _k2 = gmnav_overlay_add(_oo, 5, 5, 1);
+    var _k3 = gmnav_overlay_add(_oo, 5, 6, 1);
+
+    gmnav_overlay_link(_oo, gmnav_grid_node(_og, 5, 3), _k1, gmnav_link.STAIR, true);
+    gmnav_overlay_link(_oo, _k3, gmnav_grid_node(_og, 5, 7), gmnav_link.STAIR, true);
+    gmnav_overlay_finish(_oo);
+
+    var _route = [gmnav_grid_node(_og, 5, 2), gmnav_grid_node(_og, 5, 3),
+                  _k1, _k2, _k3,
+                  gmnav_grid_node(_og, 5, 7), gmnav_grid_node(_og, 5, 8)];
+
+    var _sp = gmnav_path_create(_og, _route);
+    gmt_check("seven waypoints before smoothing", _sp.count, 7);
+
+    gmnav_path_smooth(_sp);
+    gmt_note("after smoothing", gmt_arr_str(_sp.nodes));
+
+    gmt_check("the deck survives",
+              ((array_get_index(_sp.nodes, _k1) >= 0)
+            || (array_get_index(_sp.nodes, _k2) >= 0)
+            || (array_get_index(_sp.nodes, _k3) >= 0)), true);
+    gmt_check("the stair up survives",
+              (array_get_index(_sp.nodes, gmnav_grid_node(_og, 5, 3)) >= 0), true);
+    gmt_check("the stair down survives",
+              (array_get_index(_sp.nodes, gmnav_grid_node(_og, 5, 7)) >= 0), true);
+
+    // within one layer it should still shorten freely
+    var _flat = gmnav_path_create(_og, [gmnav_grid_node(_og, 1, 1),
+                                        gmnav_grid_node(_og, 2, 1),
+                                        gmnav_grid_node(_og, 3, 1),
+                                        gmnav_grid_node(_og, 4, 1)]);
+    gmnav_path_smooth(_flat);
+    gmt_check("a same layer run still collapses", _flat.count, 2);
+}

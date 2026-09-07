@@ -612,3 +612,49 @@ function gmt_ramp_path(_grid, _climb = 1, _drop = 1, _smooth = true) {
     if (_smooth) gmnav_path_smooth(_p, _climb, _drop);
     return _p;
 }
+
+function gmt_bridge_level() {
+    var _g = gmnav_grid_create(12, 12, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+
+    gmnav_grid_fill_blocked(_g, 0, 4, 11, 4, true);
+    gmnav_grid_fill_blocked(_g, 0, 6, 11, 6, true);
+
+    var _ov = gmnav_overlay_create(_g);
+
+    var _d1 = gmnav_overlay_add(_ov, 5, 4, 1);
+    var _d2 = gmnav_overlay_add(_ov, 5, 5, 1);
+    var _d3 = gmnav_overlay_add(_ov, 5, 6, 1);
+
+    gmnav_overlay_link(_ov, gmnav_grid_node(_g, 5, 3), _d1, gmnav_link.STAIR, true);
+    gmnav_overlay_link(_ov, _d3, gmnav_grid_node(_g, 5, 7), gmnav_link.STAIR, true);
+
+    gmnav_overlay_finish(_ov);
+    return _g;
+}
+
+function gmt_agent_run_layers(_sched, _agent, _out, _max_frames = 900) {
+    _out.layers = [];
+    _out.frames = -1;
+
+    var _last = -1;
+
+    for (var _f = 1; _f <= _max_frames; _f++) {
+        gmnav_scheduler_update(_sched);
+        gmnav_agent_update(_agent);
+
+        _agent.x += _agent.vx;
+        _agent.y += _agent.vy;
+
+        var _l = gmnav_agent_layer(_agent);
+        if (_l != _last) {
+            array_push(_out.layers, _l);
+            _last = _l;
+        }
+
+        if (gmnav_agent_arrived(_agent)) {
+            _out.frames = _f;
+            return _f;
+        }
+    }
+    return -1;
+}

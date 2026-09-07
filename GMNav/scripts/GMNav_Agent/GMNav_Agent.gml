@@ -6,6 +6,8 @@ function gmnav_agent_create(_sched, _x, _y, _radius = 8, _speed = 2) {
         profile    : undefined,     // gmnav_costprofile_create(), or undefined
         need_clear : 0,             // minimum clearance, 0 to ignore
 		
+        layer      : 0,				// the layer that the agent stands on
+		
         max_climb  : undefined,
         max_drop   : undefined,
 
@@ -37,11 +39,17 @@ function gmnav_agent_create(_sched, _x, _y, _radius = 8, _speed = 2) {
     };
 }
 
-function gmnav_agent_goto(_agent, _gx, _gy, _priority = gmnav_priority.NORMAL) {
+function gmnav_agent_goto(_agent, _gx, _gy, _priority = gmnav_priority.NORMAL,
+                          _goal_layer = 0) {
     var _grid = _agent.grid;
 
-    var _sn = gmnav_grid_world_to_node(_grid, _agent.x, _agent.y);
-    var _gn = gmnav_grid_world_to_node(_grid, _gx, _gy);
+    var _sn = gmnav_grid_world_to_node(_grid, _agent.x, _agent.y, _agent.layer);
+    var _gn = gmnav_grid_world_to_node(_grid, _gx, _gy, _goal_layer);
+
+    if (_sn == GMNAV_NO_NODE && _agent.layer != 0) {
+        _sn = gmnav_grid_world_to_node(_grid, _agent.x, _agent.y, 0);
+        if (_sn != GMNAV_NO_NODE) _agent.layer = 0;
+    }
 
     if (_sn == GMNAV_NO_NODE || _gn == GMNAV_NO_NODE) return false;
 
@@ -54,10 +62,8 @@ function gmnav_agent_goto(_agent, _gx, _gy, _priority = gmnav_priority.NORMAL) {
     _agent.has_goal = true;
     _agent.arrived  = false;
     _agent.ticket   = gmnav_scheduler_request(_agent.sched, _sn, _gn, _priority,
-                                              false, _agent.profile,
-											  _agent.need_clear,
-                                              _agent.max_climb,
-                                              _agent.max_drop);
+                                              false, _agent.profile, _agent.need_clear,
+                                              _agent.max_climb, _agent.max_drop);
 
     return true;
 }
@@ -182,6 +188,16 @@ function __gmnav_agent_advance_waypoint(_agent) {
         var _dl = point_distance(_agent.x, _agent.y, _p.px[_n - 1], _p.py[_n - 1]);
         if (_dl <= _agent.reach_dist) _agent.seek_i = _n;
     }
+
+    var _nodes = _p.nodes;
+    var _cnt   = array_length(_nodes);
+
+    if (_cnt > 0) {
+        var _idx = clamp(_agent.seek_i - 1, 0, _cnt - 1);
+        var _l   = gmnav_grid_node_layer(_agent.grid, _nodes[_idx]);
+
+        if (_l >= 0) _agent.layer = _l;
+    }
 }
 
 function __gmnav_agent_try_repath(_agent) {
@@ -236,4 +252,8 @@ function __gmnav_agent_avoidance(_agent, _neighbours) {
     if (_m < 0.0001) return [0, 0];
 
     return [_sx / _m, _sy / _m];
+}
+
+function gmnav_agent_layer(_agent) { // 0 is the base grid
+    return _agent.layer;
 }

@@ -17,6 +17,7 @@ gmt_test_platagent();
 gmt_test_elevation();
 gmt_test_layers();
 gmt_test_overlay();
+gmt_test_agent_layers();
 
 gmt_head("D scheduler (running)");
 
