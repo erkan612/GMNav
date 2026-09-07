@@ -2098,3 +2098,78 @@ function gmt_test_demo5_level() {
     var _ep = gmt_solve_z(_g, gmnav_grid_node(_g, 17, 4), gmnav_grid_node(_g, 17, 15));
     gmt_check("the east route uses bridge B", (array_get_index(_ep, _db) >= 0), true);
 }
+
+function gmt_test_demo6_level() {
+    gmt_head("B13 the demo 6 level");
+
+    var _g = gmnav_grid_create(DEMO6_W, DEMO6_H,
+                               gmnav_layout_create(gmnav_layout.ISO_DIAMOND, 64, 32));
+    demo6_build_level(_g);
+    gmnav_grid_set_layer_lift(_g, DEMO6_LIFT);
+
+    gmt_check("three levels of elevation", _g.overlay.max_layer, 2);
+    gmt_note("deck cells", gmnav_overlay_count(_g.overlay));
+
+    // the river is the only crossing
+    var _west = gmnav_grid_node(_g, 4,  20);
+    var _east = gmnav_grid_node(_g, 28, 20);
+
+    var _p = gmt_solve_z(_g, _west, _east);
+    gmt_check("west reaches east", is_array(_p), true);
+    gmt_check("only over the river crossing",
+              (array_get_index(_p, demo6_deck_at(_g, DEMO6_RIVER_C1, DEMO6_XING_R)) >= 0),
+              true);
+
+    // the flyover: over it and under it
+    var _fw = gmnav_grid_node(_g, DEMO6_FLY_C1 - 1, DEMO6_FLY_R);
+    var _fe = gmnav_grid_node(_g, DEMO6_FLY_C2 + 1, DEMO6_FLY_R);
+    var _fd = demo6_deck_at(_g, DEMO6_FLY_C1 + 1, DEMO6_FLY_R);
+
+    gmt_check("you can get onto the flyover", is_array(gmt_solve_z(_g, _fw, _fd)), true);
+
+    var _under = gmt_solve_z(_g, _fw, _fe);
+    gmt_check("and across underneath it", is_array(_under), true);
+    gmt_check("the underneath route ignores the deck",
+              (array_get_index(_under, _fd) < 0), true);
+
+    // a bridge is open below, a cliff is not
+    gmt_check("the flyover is open below",
+              gmnav_grid_is_blocked(_g,
+                  gmnav_grid_node(_g, DEMO6_FLY_C1 + 1, DEMO6_FLY_R)), false);
+    gmt_check("the cliff is solid at ground level",
+              gmnav_grid_is_blocked(_g, gmnav_grid_node(_g, 23, 10)), true);
+
+    // the cliff, and the cliff on the cliff
+    var _cliff = demo6_deck_at(_g, 23, DEMO6_CLIFF_R1, 1);
+    var _peak  = demo6_deck_at(_g, 23, DEMO6_PEAK_R1,  2);
+
+    var _cp = gmt_solve_z(_g, _east, _cliff);
+    gmt_check("the cliff is reachable", is_array(_cp), true);
+    gmt_check("by its ramp",
+              (array_get_index(_cp, demo6_deck_at(_g, 23, DEMO6_CLIFF_R2, 1)) >= 0), true);
+
+    var _pp = gmt_solve_z(_g, _east, _peak);
+    gmt_check("the upper cliff is reachable", is_array(_pp), true);
+    gmt_check("only through the lower one",
+              (array_get_index(_pp, demo6_deck_at(_g, 23, DEMO6_PEAK_R2 + 1, 1)) >= 0),
+              true);
+    gmt_note("ground to the peak", string(array_length(_pp)) + " steps");
+
+    // and you walk around the cliff, not through it
+    var _behind = gmt_solve_z(_g, gmnav_grid_node(_g, 19, 3),
+                                  gmnav_grid_node(_g, 28, 3));
+    gmt_check("you can walk behind the cliff", is_array(_behind), true);
+    gmt_check("without passing through it",
+              (array_get_index(_behind, gmnav_grid_node(_g, 23, 10)) < 0), true);
+	
+    gmt_check("the peak is solid at deck level",
+              demo6_deck_at(_g, 23, DEMO6_PEAK_R1 + 1, 1), GMNAV_NO_NODE);
+
+    // crossing the cliff top has to go around the peak, not through it
+    var _across = gmt_solve_z(_g, demo6_deck_at(_g, DEMO6_CLIFF_C1, DEMO6_PEAK_R1, 1),
+                                  demo6_deck_at(_g, DEMO6_CLIFF_C2, DEMO6_PEAK_R1, 1));
+    gmt_check("you can cross the cliff top", is_array(_across), true);
+    gmt_check("without passing through the peak",
+              (array_get_index(_across,
+                   demo6_deck_at(_g, 23, DEMO6_PEAK_R1 + 1, 1)) < 0), true);
+}
