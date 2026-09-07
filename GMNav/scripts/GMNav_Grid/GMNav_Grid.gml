@@ -73,24 +73,28 @@ function gmnav_grid_node_layer(_grid, _node) {
     return gmnav_overlay_layer(_grid.overlay, _node);
 }
 
-function gmnav_grid_node_to_world(_grid, _node) {
-    var _c = gmnav_grid_col(_grid, _node);
-    var _r = gmnav_grid_row(_grid, _node);
-
-    if (_c < 0 || _r < 0) return [0, 0];
-
-    return [gmnav_layout_cell_x(_grid.layout, _c, _r),
-            gmnav_layout_cell_y(_grid.layout, _c, _r)];
-}
-
 function gmnav_grid_world_to_node(_grid, _x, _y, _layer = 0) {
-    var _cr = gmnav_layout_world_to_cell(_grid.layout, _x, _y);
+    var _yy = _y + _layer * gmnav_grid_layer_lift(_grid);
+    var _cr = gmnav_layout_world_to_cell(_grid.layout, _x, _yy);
 
     if (_layer == 0) return gmnav_grid_node(_grid, _cr[0], _cr[1]);
 
     if (!gmnav_grid_has_overlay(_grid)) return GMNAV_NO_NODE;
 
     return gmnav_overlay_node_at(_grid.overlay, _cr[0], _cr[1], _layer);
+}
+
+function gmnav_grid_node_to_world(_grid, _node) {
+    var _c = gmnav_grid_col(_grid, _node);
+    var _r = gmnav_grid_row(_grid, _node);
+
+    if (_c < 0 || _r < 0) return [0, 0];
+
+    var _l = gmnav_grid_node_layer(_grid, _node);
+
+    return [gmnav_layout_cell_x(_grid.layout, _c, _r),
+            gmnav_layout_cell_y(_grid.layout, _c, _r)
+                - _l * gmnav_grid_layer_lift(_grid)];
 }
 
 function gmnav_grid_world_to_node_top(_grid, _x, _y) {
@@ -373,4 +377,13 @@ function gmnav_grid_step_blocked(_grid, _a, _b, _max_climb, _max_drop) {
     var _dz = _grid.height_z[_b] - _grid.height_z[_a];
 
     return (_dz > _max_climb || -_dz > _max_drop);
+}
+
+function gmnav_grid_set_layer_lift(_grid, _lift) {
+    _grid.layer_lift = _lift;
+}
+
+function gmnav_grid_layer_lift(_grid) {
+    if (!variable_struct_exists(_grid, "layer_lift")) return 0;
+    return _grid.layer_lift;
 }

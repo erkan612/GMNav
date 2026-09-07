@@ -2027,4 +2027,74 @@ function gmt_test_agent_layers() {
                                         gmnav_grid_node(_og, 4, 1)]);
     gmnav_path_smooth(_flat);
     gmt_check("a same layer run still collapses", _flat.count, 2);
+	
+    gmt_head("B12 lifted layers round trip");
+
+    var _lg = gmt_bridge_level();
+    gmnav_grid_set_layer_lift(_lg, 20);
+
+    var _lbase = gmnav_grid_node(_lg, 5, 5);
+    var _ldeck = gmnav_overlay_node_at(_lg.overlay, 5, 5, 1);
+
+    var _wb = gmnav_grid_node_to_world(_lg, _lbase);
+    var _wd = gmnav_grid_node_to_world(_lg, _ldeck);
+
+    gmt_check("same column", _wd[0], _wb[0]);
+    gmt_check("the deck is drawn a lift higher", _wb[1] - _wd[1], 20);
+
+    gmt_check("the base point resolves back to the base",
+              gmnav_grid_world_to_node(_lg, _wb[0], _wb[1], 0), _lbase);
+    gmt_check("the deck point resolves back to the deck",
+              gmnav_grid_world_to_node(_lg, _wd[0], _wd[1], 1), _ldeck);
+    gmt_check("topmost picks the deck",
+              gmnav_grid_world_to_node_top(_lg, _wd[0], _wd[1]), _ldeck);
+
+    var _lp = gmnav_path_create(_lg, [_lbase, _ldeck]);
+    gmt_check("path points carry the lift", _lp.py[0] - _lp.py[1], 20);
+
+    gmnav_grid_set_layer_lift(_lg, 0);
+    gmt_check("with no lift they coincide",
+              gmnav_grid_node_to_world(_lg, _ldeck)[1],
+              gmnav_grid_node_to_world(_lg, _lbase)[1]);
+}
+
+function gmt_test_demo5_level() {
+    gmt_head("B11 the demo 5 level");
+
+    var _lay = gmnav_layout_create(gmnav_layout.ISO_DIAMOND, 64, 32);
+    var _g   = gmnav_grid_create(20, 20, _lay);
+    demo5_build_level(_g);
+
+    gmt_check("the bridges attached", gmnav_grid_has_overlay(_g), true);
+    gmt_check("six deck cells", gmnav_overlay_count(_g.overlay), 6);
+
+    var _north = gmnav_grid_node(_g, 10, 4);
+    var _south = gmnav_grid_node(_g, 10, 15);
+
+    var _p = gmt_solve_z(_g, _north, _south);
+    gmt_check("north reaches south", is_array(_p), true);
+    gmt_note("crossing", string(array_length(_p)) + " steps");
+
+    var _da = demo5_deck_at(_g, DEMO5_BRIDGE_A, DEMO5_ROAD_R);
+    var _db = demo5_deck_at(_g, DEMO5_BRIDGE_B, DEMO5_ROAD_R);
+
+    gmt_check("over one of the bridges",
+              ((array_get_index(_p, _da) >= 0) || (array_get_index(_p, _db) >= 0)), true);
+    gmt_check("and not through the road",
+              (array_get_index(_p, gmnav_grid_node(_g, 10, DEMO5_ROAD_R)) < 0), true);
+
+    // the road runs the full width underneath, untouched by either bridge
+    var _r = gmt_solve_z(_g, gmnav_grid_node(_g, 1,  DEMO5_ROAD_R),
+                             gmnav_grid_node(_g, 18, DEMO5_ROAD_R));
+    gmt_check("the road runs end to end", is_array(_r), true);
+    gmt_check("passing under both decks",
+              ((array_get_index(_r, _da) < 0) && (array_get_index(_r, _db) < 0)), true);
+    gmt_check("in a straight line", array_length(_r), 18);
+
+    // the nearer bridge should win from either side
+    var _wp = gmt_solve_z(_g, gmnav_grid_node(_g, 3, 4), gmnav_grid_node(_g, 3, 15));
+    gmt_check("the west route uses bridge A", (array_get_index(_wp, _da) >= 0), true);
+
+    var _ep = gmt_solve_z(_g, gmnav_grid_node(_g, 17, 4), gmnav_grid_node(_g, 17, 15));
+    gmt_check("the east route uses bridge B", (array_get_index(_ep, _db) >= 0), true);
 }

@@ -200,12 +200,21 @@ function __gmnav_path_rebuild_points(_path) {
     var _px = array_create(_n, 0);
     var _py = array_create(_n, 0);
 
-    for (var i = 0; i < _n; i++) { // through the accessors, not a modulo, so overlay ids resolve
-        var _c = gmnav_grid_col(_grid, _src[i]);
-        var _r = gmnav_grid_row(_grid, _src[i]);
+    //var _lift = gmnav_grid_layer_lift(_grid);
 
-        _px[i] = gmnav_layout_cell_x(_lay, _c, _r);
-        _py[i] = gmnav_layout_cell_y(_lay, _c, _r);
+    //for (var i = 0; i < _n; i++) { // through the accessors, not a modulo, so overlay ids resolve
+    //    var _c = gmnav_grid_col(_grid, _src[i]);
+    //    var _r = gmnav_grid_row(_grid, _src[i]);
+    //    var _l = gmnav_grid_node_layer(_grid, _src[i]);
+
+    //    _px[i] = gmnav_layout_cell_x(_lay, _c, _r);
+    //    _py[i] = gmnav_layout_cell_y(_lay, _c, _r) - _l * _lift;
+    //}
+	
+    for (var i = 0; i < _n; i++) {
+        var _p = gmnav_grid_node_to_world(_grid, _src[i]);
+        _px[i] = _p[0];
+        _py[i] = _p[1];
     }
 
     _path.px    = _px;
