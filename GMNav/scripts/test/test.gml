@@ -2173,3 +2173,54 @@ function gmt_test_demo6_level() {
               (array_get_index(_across,
                    demo6_deck_at(_g, 23, DEMO6_PEAK_R1 + 1, 1)) < 0), true);
 }
+
+function gmt_test_costmode() {
+    gmt_head("V1 non square tiles and cost mode");
+
+    // a three quarter view tile: 32 wide, 24 tall
+    var _log = gmnav_layout_create(gmnav_layout.ORTHO, 32, 24, gmnav_neighbours.EIGHT,
+                                   gmnav_costmode.LOGICAL);
+    var _vis = gmnav_layout_create(gmnav_layout.ORTHO, 32, 24, gmnav_neighbours.EIGHT,
+                                   gmnav_costmode.VISUAL);
+
+    gmt_note("true diagonal px", string_format(point_distance(0, 0, 32, 24), 1, 2));
+
+    var _lh = gmt_nb_cost(_log, 1, 0);
+    var _lv = gmt_nb_cost(_log, 0, 1);
+    var _ld = gmt_nb_cost(_log, 1, 1);
+    gmt_note("logical h / v / d",
+             string_format(_lh, 1, 3) + " / " + string_format(_lv, 1, 3)
+           + " / " + string_format(_ld, 1, 3));
+
+    gmt_check("logical ignores tile shape", _lh, _lv);
+    gmt_check("logical diagonal is root 2", (abs(_ld / _lh - 1.414214) < 0.001), true);
+
+    var _vh = gmt_nb_cost(_vis, 1, 0);
+    var _vv = gmt_nb_cost(_vis, 0, 1);
+    var _vd = gmt_nb_cost(_vis, 1, 1);
+    gmt_note("visual h / v / d",
+             string_format(_vh, 1, 3) + " / " + string_format(_vv, 1, 3)
+           + " / " + string_format(_vd, 1, 3));
+
+    gmt_check("visual vertical is cheaper", (_vv < _vh), true);
+    gmt_check("visual matches the tile ratio", (abs(_vv / _vh - 24 / 32) < 0.001), true);
+    gmt_check("visual diagonal is the real length",
+              (abs(_vd / _vh - point_distance(0, 0, 32, 24) / 32) < 0.001), true);
+
+    // square tiles must behave identically in both modes, or switching to VISUAL for a three quarter view would change every other project
+    var _sq_l = gmnav_layout_create(gmnav_layout.ORTHO, 32, 32,
+                                    gmnav_neighbours.EIGHT, gmnav_costmode.LOGICAL);
+    var _sq_v = gmnav_layout_create(gmnav_layout.ORTHO, 32, 32,
+                                    gmnav_neighbours.EIGHT, gmnav_costmode.VISUAL);
+
+    gmt_check("square tiles agree, cardinal",
+              (abs(gmt_nb_cost(_sq_v, 1, 0) / gmt_nb_cost(_sq_l, 1, 0) - 1) < 0.001), true);
+    gmt_check("square tiles agree, diagonal",
+              (abs(gmt_nb_cost(_sq_v, 1, 1) / gmt_nb_cost(_sq_l, 1, 1) - 1) < 0.001), true);
+
+    // and it bends a real route: on a squashed tile a vertical detour can beat a straight horizontal run
+    var _g = gmnav_grid_create(12, 12, _vis);
+    var _p = gmt_solve_z(_g, gmnav_grid_node(_g, 1, 6), gmnav_grid_node(_g, 10, 6));
+    gmt_check("a route still solves on squashed tiles", is_array(_p), true);
+    gmt_note("squashed run", string(array_length(_p)) + " steps");
+}

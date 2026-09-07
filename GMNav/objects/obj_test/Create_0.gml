@@ -20,6 +20,7 @@ gmt_test_overlay();
 gmt_test_agent_layers();
 gmt_test_demo5_level();
 gmt_test_demo6_level();
+gmt_test_costmode();
 
 gmt_head("D scheduler (running)");
 

@@ -658,3 +658,10 @@ function gmt_agent_run_layers(_sched, _agent, _out, _max_frames = 900) {
     }
     return -1;
 }
+
+function gmt_nb_cost(_lay, _dc, _dr) {
+    for (var i = 0; i < _lay.nb_count; i++) {
+        if (_lay.nb_dc[i] == _dc && _lay.nb_dr[i] == _dr) return _lay.nb_cost[i];
+    }
+    return -1;
+}
