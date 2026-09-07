@@ -1658,3 +1658,262 @@ function gmt_test_elevation() {
     var _dn = gmt_solve_z(_dg, _da, _db);
     gmt_check("with no limits the diagonal is fine", array_length(_dn), 2);
 }
+
+function gmt_test_layers() {
+    var _mk = function() {
+        var _lg = gmnav_layergraph_create(gmt_big_open());
+
+        for (var _c = 0; _c < 5; _c++) {
+            gmnav_layergraph_add_node(_lg, _c * 32 + 16, 200, 0);
+        }
+        for (var _c = 1; _c < 4; _c++) {
+            gmnav_layergraph_add_node(_lg, _c * 32 + 16, 140, 1);
+        }
+
+        for (var _i = 0; _i < 4; _i++) {
+            gmnav_layergraph_link(_lg, _i, _i + 1, gmnav_link.WALK, true);
+        }
+        for (var _i = 5; _i < 7; _i++) {
+            gmnav_layergraph_link(_lg, _i, _i + 1, gmnav_link.WALK, true);
+        }
+        gmnav_layergraph_link(_lg, 0, 5, gmnav_link.STAIR, true);
+
+        gmnav_layergraph_finish(_lg);
+        return _lg;
+    };
+
+    gmt_head("G1 a layered graph is just a graph");
+
+    var _lg = _mk();
+
+    gmt_check("node count", _lg.count, 8);
+    gmt_check("edge count", array_length(_lg.edge_to), 14);
+    gmt_check("road node 2 layer",   gmnav_layergraph_layer(_lg, 2), 0);
+    gmt_check("bridge node 6 layer", gmnav_layergraph_layer(_lg, 6), 1);
+
+    // the case a height field cannot express: same x, two surfaces
+    gmt_check("road and bridge share a column", (_lg.node_x[2] == _lg.node_x[6]), true);
+    gmt_check("but not a height",               (_lg.node_y[2] != _lg.node_y[6]), true);
+
+    gmt_head("G2 gmnav_graphsearch routes it unchanged");
+
+    var _s = gmnav_graphsearch_create(_lg);
+
+    gmt_check("road end to road end", gmnav_graphsearch_solve(_s, 0, 4), true);
+    var _p = gmnav_graphsearch_get_path(_s);
+    gmt_check("stays on the road", array_length(_p), 5);
+    gmt_note("road path", gmt_arr_str(_p));
+
+    gmt_check("road to bridge", gmnav_graphsearch_solve(_s, 4, 7), true);
+    _p = gmnav_graphsearch_get_path(_s);
+    gmt_note("crossing path", gmt_arr_str(_p));
+
+    gmt_check("crossing uses the stair",
+              gmt_has_link(gmnav_graphsearch_get_links(_s), gmnav_link.STAIR), true);
+    gmt_check("crossing starts on the road", _p[0], 4);
+    gmt_check("crossing ends on the bridge", _p[array_length(_p) - 1], 7);
+
+    gmt_head("G3 layers do not leak into one another");
+
+    // the only stair is at the far end, so getting up is a walk back first
+    gmt_check("cannot step straight up under the bridge", (array_length(_p) > 3), true);
+
+    var _iso = gmnav_layergraph_create(gmt_big_open());
+    gmnav_layergraph_add_node(_iso, 100, 100, 0);
+    gmnav_layergraph_add_node(_iso, 100, 60,  1);
+    gmnav_layergraph_finish(_iso);
+
+    var _s3 = gmnav_graphsearch_create(_iso);
+    gmt_check("unlinked layers are unreachable", gmnav_graphsearch_solve(_s3, 0, 1), false);
+}
+
+function gmt_test_overlay() {
+    var _mk = function(_with_bridge) {
+        var _g = gmnav_grid_create(12, 12, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+
+        gmnav_grid_fill_blocked(_g, 0, 4, 11, 4, true);
+        gmnav_grid_fill_blocked(_g, 0, 6, 11, 6, true);
+
+        if (!_with_bridge) return _g;
+
+        var _ov = gmnav_overlay_create(_g);
+
+        var _d1 = gmnav_overlay_add(_ov, 5, 4, 1);
+        var _d2 = gmnav_overlay_add(_ov, 5, 5, 1);
+        var _d3 = gmnav_overlay_add(_ov, 5, 6, 1);
+
+        gmnav_overlay_link(_ov, gmnav_grid_node(_g, 5, 3), _d1, gmnav_link.STAIR, true);
+        gmnav_overlay_link(_ov, _d3, gmnav_grid_node(_g, 5, 7), gmnav_link.STAIR, true);
+
+        gmnav_overlay_finish(_ov);
+        return _g;
+    };
+
+    gmt_head("B1 an overlay sits beside the grid, not inside it");
+
+    var _plain = _mk(false);
+    gmt_check("a fresh grid has no overlay", gmnav_grid_has_overlay(_plain), false);
+
+    var _g  = _mk(true);
+    var _ov = _g.overlay;
+
+    gmt_check("the bridge attaches", gmnav_grid_has_overlay(_g), true);
+    gmt_check("three deck cells",    gmnav_overlay_count(_ov), 3);
+
+    var _deck = gmnav_overlay_node_at(_ov, 5, 5, 1);
+    gmt_check("deck ids sit past the grid", (_deck >= _g.count), true);
+    gmt_check("node_at finds the deck", (_deck != GMNAV_NO_NODE), true);
+    gmt_check("nothing on layer 1 elsewhere",
+              gmnav_overlay_node_at(_ov, 2, 2, 1), GMNAV_NO_NODE);
+
+    gmt_check("a base node is layer 0",
+              gmnav_overlay_layer(_ov, gmnav_grid_node(_g, 5, 5)), 0);
+    gmt_check("the deck is layer 1", gmnav_overlay_layer(_ov, _deck), 1);
+
+    gmt_head("B2 the deck and the road are separate surfaces");
+
+    var _north = gmnav_grid_node(_g, 5, 1);
+    var _south = gmnav_grid_node(_g, 5, 10);
+
+    var _np = gmnav_grid_node(_plain, 5, 1);
+    var _sp = gmnav_grid_node(_plain, 5, 10);
+    gmt_check("without the bridge there is no crossing",
+              is_undefined(gmt_solve_z(_plain, _np, _sp)), true);
+
+    var _p = gmt_solve_z(_g, _north, _south);
+    gmt_check("with the bridge there is", is_array(_p), true);
+    gmt_note("crossing", gmt_arr_str(_p));
+
+    gmt_check("the crossing uses the deck",
+              (array_get_index(_p, _deck) >= 0), true);
+    gmt_check("and not the road cell beneath it",
+              (array_get_index(_p, gmnav_grid_node(_g, 5, 5)) < 0), true);
+
+    // traffic along the road is untouched by the bridge overhead
+    var _west = gmnav_grid_node(_g, 1,  5);
+    var _east = gmnav_grid_node(_g, 10, 5);
+
+    var _r = gmt_solve_z(_g, _west, _east);
+    gmt_check("the road still runs", is_array(_r), true);
+    gmt_check("passing under the deck, not over it",
+              (array_get_index(_r, _deck) < 0), true);
+    gmt_check("the road goes through the cell below",
+              (array_get_index(_r, gmnav_grid_node(_g, 5, 5)) >= 0), true);
+	
+    gmt_head("B3 overlay nodes convert to world positions");
+
+    var _t = _g.layout.tile_w;
+
+    var _base65 = gmnav_grid_node(_g, 5, 5);
+    var _wb = gmnav_grid_node_to_world(_g, _base65);
+    var _wd = gmnav_grid_node_to_world(_g, _deck);
+
+    gmt_check("a base node is unchanged", _wb[0], 5 * _t + _t * 0.5);
+    gmt_check("the deck sits over the same column", _wd[0], _wb[0]);
+    gmt_check("and the same row, since it is directly above", _wd[1], _wb[1]);
+
+    gmt_head("B4 a path across the bridge has real points");
+
+    var _pp = gmnav_path_create(_g, _p);
+
+    gmt_check("a point per node", _pp.count, array_length(_p));
+
+    var _bad = 0;
+    for (var i = 0; i < _pp.count; i++) {
+        if (_pp.px[i] < 0 || _pp.px[i] > _g.width  * _t) _bad++;
+        if (_pp.py[i] < 0 || _pp.py[i] > _g.height * _t) _bad++;
+    }
+    gmt_check("no point lands off the map", _bad, 0);
+
+    gmt_note("path length px", string_format(gmnav_path_get_length(_pp), 1, 1));
+    gmt_check("the length is sane",
+              (gmnav_path_get_length(_pp) > 0
+            && gmnav_path_get_length(_pp) < _g.height * _t * 3), true);
+	
+    gmt_head("B5 the caller names the layer");
+
+    var _wp = gmnav_grid_node_to_world(_g, gmnav_grid_node(_g, 5, 5));
+    var _wx = _wp[0];
+    var _wy = _wp[1];
+
+    gmt_check("the default layer is 0",
+              gmnav_grid_world_to_node(_g, _wx, _wy), gmnav_grid_node(_g, 5, 5));
+    gmt_check("layer 0 asked for explicitly matches",
+              gmnav_grid_world_to_node(_g, _wx, _wy, 0), gmnav_grid_node(_g, 5, 5));
+    gmt_check("layer 1 finds the deck",
+              gmnav_grid_world_to_node(_g, _wx, _wy, 1), _deck);
+
+    var _ep = gmnav_grid_node_to_world(_g, gmnav_grid_node(_g, 2, 2));
+    gmt_check("layer 1 where there is no deck is nothing",
+              gmnav_grid_world_to_node(_g, _ep[0], _ep[1], 1), GMNAV_NO_NODE);
+    gmt_check("a layer that does not exist is nothing",
+              gmnav_grid_world_to_node(_g, _wx, _wy, 2), GMNAV_NO_NODE);
+    gmt_check("a grid with no overlay has no layer 1",
+              gmnav_grid_world_to_node(_plain, _wx, _wy, 1), GMNAV_NO_NODE);
+
+    gmt_check("top finds the deck", gmnav_grid_world_to_node_top(_g, _wx, _wy), _deck);
+    gmt_check("top falls back to the base",
+              gmnav_grid_world_to_node_top(_g, _ep[0], _ep[1]), gmnav_grid_node(_g, 2, 2));
+    gmt_check("top on a plain grid is the base",
+              gmnav_grid_world_to_node_top(_plain, _wx, _wy), gmnav_grid_node(_plain, 5, 5));
+	
+    gmt_head("B6 overlays work on every layout");
+
+    // Two rows thick either side of the road, because ISO_STAGGERED can step
+    // across a single blocked row on purpose, which N3b already pins down.
+    var _mkl = function(_mode, _nb, _bridge) {
+        var _gg = gmnav_grid_create(12, 12, gmnav_layout_create(_mode, 32, 32, _nb));
+
+        gmnav_grid_fill_blocked(_gg, 0, 3, 11, 4, true);
+        gmnav_grid_fill_blocked(_gg, 0, 6, 11, 7, true);
+
+        if (!_bridge) return _gg;
+
+        var _o = gmnav_overlay_create(_gg);
+        var _a = gmnav_overlay_add(_o, 5, 3, 1);
+        var _b = gmnav_overlay_add(_o, 5, 4, 1);
+        var _c = gmnav_overlay_add(_o, 5, 5, 1);
+        var _d = gmnav_overlay_add(_o, 5, 6, 1);
+        var _e = gmnav_overlay_add(_o, 5, 7, 1);
+
+        gmnav_overlay_link(_o, gmnav_grid_node(_gg, 5, 2), _a, gmnav_link.STAIR, true);
+        gmnav_overlay_link(_o, _e, gmnav_grid_node(_gg, 5, 8), gmnav_link.STAIR, true);
+
+        gmnav_overlay_finish(_o);
+        return _gg;
+    };
+
+    var _modes = [gmnav_layout.ORTHO,       gmnav_layout.ISO_DIAMOND,
+                  gmnav_layout.ISO_STAGGERED, gmnav_layout.HEX_POINTY,
+                  gmnav_layout.HEX_FLAT];
+    var _mnames = ["ORTHO", "ISO_DIAMOND", "ISO_STAGGERED", "HEX_POINTY", "HEX_FLAT"];
+
+    var _sealed = 0;
+    var _crossed = 0;
+
+    for (var m = 0; m < array_length(_modes); m++) {
+        var _nb = (m >= 3) ? gmnav_neighbours.SIX : gmnav_neighbours.EIGHT;
+
+        var _no = _mkl(_modes[m], _nb, false);
+        var _yes = _mkl(_modes[m], _nb, true);
+
+        var _n1 = gmnav_grid_node(_no,  5, 1);
+        var _s1 = gmnav_grid_node(_no,  5, 10);
+        var _n2 = gmnav_grid_node(_yes, 5, 1);
+        var _s2 = gmnav_grid_node(_yes, 5, 10);
+
+        var _blocked_ok = is_undefined(gmt_solve_z(_no,  _n1, _s1));
+        var _cross      = gmt_solve_z(_yes, _n2, _s2);
+
+        if (_blocked_ok) _sealed++;
+        if (is_array(_cross)) _crossed++;
+
+        gmt_note(_mnames[m], (_blocked_ok ? "sealed" : "LEAKS")
+                           + ", " + (is_array(_cross)
+                                     ? string(array_length(_cross)) + " step crossing"
+                                     : "NO CROSSING"));
+    }
+
+    gmt_check("every layout is sealed without the bridge", _sealed, 5);
+    gmt_check("every layout crosses with it",              _crossed, 5);
+}

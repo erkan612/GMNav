@@ -86,7 +86,7 @@ function gmnav_debug_draw_costs(_grid, _profile = undefined, _cfg = undefined) {
 
     var _max = 1;
     for (var i = 0; i < _grid.count; i++) _max = max(_max, _src[i]);
-    if (_max <= 1) return;   // nothing to show
+    if (_max <= 1) return; // nothing to show
 
     var _n = 0;
     draw_set_alpha(_cfg.alpha);

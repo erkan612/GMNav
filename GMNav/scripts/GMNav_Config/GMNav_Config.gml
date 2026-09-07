@@ -51,7 +51,8 @@ enum gmnav_pmode {
 enum gmnav_link {						
     WALK,								// along a contiguous ledge
     FALL,								// stepped off an edge, no jump input
-    JUMP								// ballistic arc from a jump input
+    JUMP,								// ballistic arc from a jump input
+    STAIR								// authored crossing between two layers
 }										
 										
 enum gmnav_domain {						

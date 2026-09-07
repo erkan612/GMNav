@@ -77,7 +77,9 @@ function gmnav_grid_line_clear(_grid, _c0, _r0, _c1, _r1) {
 
 function gmnav_grid_node_line_clear(_grid, _a, _b) {
     var _w = _grid.width;
-    return gmnav_grid_line_clear(_grid, _a % _w, _a div _w, _b % _w, _b div _w);
+    return gmnav_grid_line_clear(_grid,
+                                 gmnav_grid_col(_grid, _a), gmnav_grid_row(_grid, _a),
+                                 gmnav_grid_col(_grid, _b), gmnav_grid_row(_grid, _b));
 }
 
 function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
@@ -191,17 +193,16 @@ function gmnav_path_sample(_path, _dist) {
 function __gmnav_path_rebuild_points(_path) {
     var _grid = _path.grid;
     var _lay  = _grid.layout;
-    var _w    = _grid.width;
     var _src  = _path.nodes;
     var _n    = array_length(_src);
 
     var _px = array_create(_n, 0);
     var _py = array_create(_n, 0);
 
-    for (var i = 0; i < _n; i++) {
-        var _nd = _src[i];
-        var _c  = _nd % _w;
-        var _r  = _nd div _w;
+    for (var i = 0; i < _n; i++) { // through the accessors, not a modulo, so overlay ids resolve
+        var _c = gmnav_grid_col(_grid, _src[i]);
+        var _r = gmnav_grid_row(_grid, _src[i]);
+
         _px[i] = gmnav_layout_cell_x(_lay, _c, _r);
         _py[i] = gmnav_layout_cell_y(_lay, _c, _r);
     }

@@ -35,18 +35,64 @@ function gmnav_grid_node(_grid, _col, _row) {
     return _row * _grid.width + _col;
 }
 
-function gmnav_grid_col(_grid, _node) { return _node % _grid.width; }
-function gmnav_grid_row(_grid, _node) { return _node div _grid.width; }
+function gmnav_grid_col(_grid, _node) {
+    if (_node < 0) return -1;
 
-function gmnav_grid_world_to_node(_grid, _x, _y) {
-    var _cr = gmnav_layout_world_to_cell(_grid.layout, _x, _y);
-    return gmnav_grid_node(_grid, _cr[0], _cr[1]);
+    if (_node >= _grid.count) {
+        if (!variable_struct_exists(_grid, "overlay")) return -1;
+        if (_grid.overlay == undefined) return -1;
+
+        var _i = _node - _grid.overlay.base;
+        if (_i < 0 || _i >= _grid.overlay.count) return -1;
+
+        return _grid.overlay.col[_i];
+    }
+    return _node % _grid.width;
+}
+
+function gmnav_grid_row(_grid, _node) {
+    if (_node < 0) return -1;
+
+    if (_node >= _grid.count) {
+        if (!variable_struct_exists(_grid, "overlay")) return -1;
+        if (_grid.overlay == undefined) return -1;
+
+        var _i = _node - _grid.overlay.base;
+        if (_i < 0 || _i >= _grid.overlay.count) return -1;
+
+        return _grid.overlay.row[_i];
+    }
+    return _node div _grid.width;
 }
 
 function gmnav_grid_node_to_world(_grid, _node) {
-    return gmnav_layout_cell_to_world(_grid.layout,
-                                      _node % _grid.width,
-                                      _node div _grid.width);
+    var _c = gmnav_grid_col(_grid, _node);
+    var _r = gmnav_grid_row(_grid, _node);
+
+    if (_c < 0 || _r < 0) return [0, 0];
+
+    return [gmnav_layout_cell_x(_grid.layout, _c, _r),
+            gmnav_layout_cell_y(_grid.layout, _c, _r)];
+}
+
+function gmnav_grid_world_to_node(_grid, _x, _y, _layer = 0) {
+    var _cr = gmnav_layout_world_to_cell(_grid.layout, _x, _y);
+
+    if (_layer == 0) return gmnav_grid_node(_grid, _cr[0], _cr[1]);
+
+    if (!gmnav_grid_has_overlay(_grid)) return GMNAV_NO_NODE;
+
+    return gmnav_overlay_node_at(_grid.overlay, _cr[0], _cr[1], _layer);
+}
+
+function gmnav_grid_world_to_node_top(_grid, _x, _y) {
+    if (gmnav_grid_has_overlay(_grid)) {
+        for (var _l = _grid.overlay.max_layer; _l >= 1; _l--) {
+            var _n = gmnav_grid_world_to_node(_grid, _x, _y, _l);
+            if (_n != GMNAV_NO_NODE) return _n;
+        }
+    }
+    return gmnav_grid_world_to_node(_grid, _x, _y, 0);
 }
 
 function gmnav_grid_is_blocked(_grid, _node) {
@@ -192,15 +238,20 @@ function gmnav_grid_import_callback(_grid, _fn) {
 }
 
 function gmnav_grid_scratch_acquire(_grid) {
+    var _n = _grid.count;
+    if (variable_struct_exists(_grid, "overlay") && _grid.overlay != undefined) {
+        _n += _grid.overlay.count;
+    }
+
     for (var i = 0; i < _grid.slot_max; i++) {
         var _s = _grid.slots[i];
 
         if (_s == undefined) {
-            var _n = _grid.count;
             _s = {
                 index  : i,
                 busy   : true,
                 gen    : 1,
+                size   : _n,
                 mark   : array_create(_n, 0),
                 g      : array_create(_n, 0),
                 parent : array_create(_n, GMNAV_NO_NODE),
@@ -213,6 +264,17 @@ function gmnav_grid_scratch_acquire(_grid) {
         if (!_s.busy) {
             _s.busy = true;
             _s.gen++;
+
+            if (_s.size < _n) {
+                array_resize(_s.mark,   _n);
+                array_resize(_s.g,      _n);
+                array_resize(_s.parent, _n);
+                array_resize(_s.depth,  _n);
+
+                for (var k = _s.size; k < _n; k++) _s.parent[k] = GMNAV_NO_NODE;
+
+                _s.size = _n;
+            }
             return _s;
         }
     }
