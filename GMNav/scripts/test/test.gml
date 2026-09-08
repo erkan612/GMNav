@@ -2366,3 +2366,168 @@ function gmt_test_overlay_cells() {
               (gmnav_clearance_at(_og, gmnav_grid_node(_og, 6, 6))
              > gmnav_clearance_at(_og, _wide)), true);
 }
+
+function gmt_test_overlay_offset() {
+    gmt_head("O1 a cell can sit between layers");
+
+    var _g = gmnav_grid_create(12, 12,
+                 gmnav_layout_create(gmnav_layout.ORTHO, 32, 24));
+    var _ov = gmnav_overlay_create(_g);
+    gmnav_grid_set_layer_lift(_g, 24);
+
+    var _flat = gmnav_overlay_add(_ov, 2, 2, 1);
+    var _half = gmnav_overlay_add(_ov, 3, 2, 1);
+    gmnav_overlay_finish(_ov);
+
+    gmt_check("a new cell has no offset", gmnav_overlay_offset(_ov, _half), 0);
+
+    gmt_check("setting one is accepted",
+              gmnav_overlay_set_offset(_ov, _half, -0.5), true);
+    gmt_check("it reads back", gmnav_overlay_offset(_ov, _half), -0.5);
+
+    var _wf = gmnav_grid_node_to_world(_g, _flat);
+    var _wh = gmnav_grid_node_to_world(_g, _half);
+
+    gmt_check("a flat cell sits at one lift",
+              _wf[1], gmnav_layout_cell_y(_g.layout, 2, 2) - 24);
+    gmt_check("an offset cell sits between",
+              _wh[1], gmnav_layout_cell_y(_g.layout, 3, 2) - 12);
+
+    gmt_head("O2 the round trip still holds");
+
+    gmt_check("the flat cell resolves back",
+              gmnav_grid_world_to_node(_g, _wf[0], _wf[1], 1), _flat);
+    gmt_check("the offset cell resolves back",
+              gmnav_grid_world_to_node(_g, _wh[0], _wh[1], 1), _half);
+    gmt_check("topmost finds the offset cell",
+              gmnav_grid_world_to_node_top(_g, _wh[0], _wh[1]), _half);
+
+    gmt_head("O3 a ramp climbing east");
+
+    // six cells on layer 1, offsets stepping from the ground to the top, so
+    // the ramp rises smoothly rather than popping at its link
+    var _r = gmnav_grid_create(16, 12,
+                 gmnav_layout_create(gmnav_layout.ORTHO, 32, 24));
+    var _ro = gmnav_overlay_create(_r);
+    gmnav_grid_set_layer_lift(_r, 24);
+
+    var _cells = [];
+    for (var _c = 4; _c <= 9; _c++) {
+        array_push(_cells, gmnav_overlay_add(_ro, _c, 5, 1));
+    }
+    gmnav_overlay_ramp(_ro, _cells);
+
+    gmnav_overlay_link(_ro, gmnav_grid_node(_r, 3, 5),
+                       gmnav_overlay_node_at(_ro, 4, 5, 1),
+                       gmnav_link.STAIR, true);
+    gmnav_overlay_finish(_ro);
+
+    var _prev = gmnav_grid_node_to_world(_r, gmnav_grid_node(_r, 3, 5))[1];
+    var _worst = 0;
+
+    for (var _c = 4; _c <= 9; _c++) {
+        var _y = gmnav_grid_node_to_world(_r, gmnav_overlay_node_at(_ro, _c, 5, 1))[1];
+        _worst = max(_worst, abs(_y - _prev));
+        _prev  = _y;
+    }
+
+    gmt_note("largest single step in px", string_format(_worst, 1, 2));
+    gmt_check("no step is a whole lift", (_worst < 24), true);
+    gmt_check("the ramp ends at full height",
+              gmnav_grid_node_to_world(_r, gmnav_overlay_node_at(_ro, 9, 5, 1))[1],
+              gmnav_layout_cell_y(_r.layout, 9, 5) - 24);
+
+    // and a path across it carries those heights
+    var _p = gmnav_path_create(_r, [gmnav_grid_node(_r, 3, 5),
+                                    gmnav_overlay_node_at(_ro, 4, 5, 1),
+                                    gmnav_overlay_node_at(_ro, 9, 5, 1)]);
+    gmt_check("path points climb", (_p.py[0] > _p.py[2]), true);
+}
+
+function gmt_test_demo8_level() {
+    gmt_head("R1 four ramps, one per side");
+
+    var _g = demo8_make_grid();
+    var _ov = _g.overlay;
+
+    gmt_check("one layer", _ov.max_layer, 1);
+    gmt_note("deck cells", gmnav_overlay_count(_ov));
+
+    var _top = demo8_deck_at(_g, 17, 14);
+    gmt_check("the plateau exists", (_top != GMNAV_NO_NODE), true);
+    gmt_check("solid at ground level",
+              gmnav_grid_is_blocked(_g, gmnav_grid_node(_g, 17, 14)), true);
+
+    // one approach from each side, all four reaching the top
+    var _feet = [[15, DEMO8_PLAT_R2 + DEMO8_RAMP_LEN + 1],
+                 [20, DEMO8_PLAT_R1 - DEMO8_RAMP_LEN - 1],
+                 [DEMO8_PLAT_C1 - DEMO8_RAMP_LEN - 1, 12],
+                 [DEMO8_PLAT_C2 + DEMO8_RAMP_LEN + 1, 17]];
+    var _names = ["south", "north", "west", "east"];
+    var _ok = 0;
+
+    for (var i = 0; i < 4; i++) {
+        var _p = gmt_solve_z(_g, gmnav_grid_node(_g, _feet[i][0], _feet[i][1]), _top);
+        if (is_array(_p)) _ok++;
+        gmt_note(_names[i], is_array(_p) ? string(array_length(_p)) + " steps"
+                                         : "NO ROUTE");
+    }
+    gmt_check("all four sides reach the top", _ok, 4);
+
+    gmt_head("R2 every ramp climbs smoothly");
+
+    // ::measure the height alone, not the screen y. a north or south step moves a row as well as climbing, and a row is a whole tile, which has nothing to do with whether the climb pops
+    var _worst = 0;
+    var _where = "";
+
+    for (var i = 0; i < 4; i++) {
+        var _p = gmt_solve_z(_g, gmnav_grid_node(_g, _feet[i][0], _feet[i][1]), _top);
+        if (!is_array(_p)) continue;
+
+        var _prev = gmt_node_height(_g, _p[0]);
+
+        for (var _k = 1; _k < array_length(_p); _k++) {
+            var _h = gmt_node_height(_g, _p[_k]);
+            var _d = abs(_h - _prev);
+
+            if (_d > _worst) {
+                _worst = _d;
+                _where = _names[i] + " step " + string(_k)
+                       + ": node " + string(_p[_k - 1])
+                       + " at " + string_format(_prev, 1, 3)
+                       + " -> node " + string(_p[_k])
+                       + " at " + string_format(_h, 1, 3);
+            }
+            _prev = _h;
+        }
+    }
+
+    gmt_note("largest height step in lifts", string_format(_worst, 1, 3));
+    gmt_note("where", _where);
+
+    // the ramp's own offsets, straight from the overlay
+    var _dbg = [];
+    for (var _i = 0; _i < DEMO8_RAMP_LEN; _i++) {
+        var _n = demo8_deck_at(_g, 15, DEMO8_PLAT_R2 + DEMO8_RAMP_LEN - _i);
+        array_push(_dbg, (_n == GMNAV_NO_NODE)
+                       ? "none"
+                       : string_format(gmnav_overlay_offset(_g.overlay, _n), 1, 3));
+    }
+    gmt_note("south lane offsets, foot to top", string_join(", ", _dbg));
+
+    gmt_check("every step is an equal fraction of a lift",
+              (abs(_worst - 1 / DEMO8_RAMP_LEN) < 0.001), true);
+
+    gmt_head("R3 both lanes of every ramp");
+
+    var _lanes = 0;
+    for (var i = 0; i < 4; i++) {
+        for (var _l = 0; _l < 2; _l++) {
+            var _fc = _feet[i][0] + ((i >= 2) ? 0 : _l);
+            var _fr = _feet[i][1] + ((i >= 2) ? _l : 0);
+
+            if (is_array(gmt_solve_z(_g, gmnav_grid_node(_g, _fc, _fr), _top))) _lanes++;
+        }
+    }
+    gmt_check("all eight lanes climb", _lanes, 8);
+}

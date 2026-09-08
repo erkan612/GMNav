@@ -13,6 +13,7 @@ function gmnav_overlay_create(_grid) {
         clear : [],
         key   : {},               // "layer,col,row" -> node id
         links : [],               // authored crossings, kept so finish can re-run
+        offset : [],
 
         // adjacency out of overlay nodes, built by finish
         tmp_to    : [],
@@ -356,4 +357,28 @@ function __gmnav_ov_clearance(_ov) {
             }
         }
     }
+}
+
+function gmnav_overlay_offset(_ov, _node) {
+    var _i = _node - _ov.base;
+    if (_i < 0 || _i >= array_length(_ov.offset)) return 0;
+    return _ov.offset[_i];
+}
+
+function gmnav_overlay_set_offset(_ov, _node, _offset) {
+    var _i = _node - _ov.base;
+    if (_i < 0 || _i >= _ov.count) return false;
+
+    _ov.offset[_i] = _offset;
+    return true;
+}
+
+function gmnav_overlay_ramp(_ov, _nodes) {
+    var _n = array_length(_nodes);
+    if (_n < 1) return false;
+
+    for (var i = 0; i < _n; i++) {
+        gmnav_overlay_set_offset(_ov, _nodes[i], -1 + (i + 1) / _n);
+    }
+    return true;
 }

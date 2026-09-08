@@ -23,6 +23,8 @@ gmt_test_demo6_level();
 gmt_test_costmode();
 gmt_test_demo7_level();
 gmt_test_overlay_cells();
+gmt_test_overlay_offset();
+gmt_test_demo8_level();
 
 gmt_head("D scheduler (running)");
 

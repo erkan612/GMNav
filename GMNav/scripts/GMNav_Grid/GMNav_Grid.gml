@@ -74,14 +74,34 @@ function gmnav_grid_node_layer(_grid, _node) {
 }
 
 function gmnav_grid_world_to_node(_grid, _x, _y, _layer = 0) {
-    var _yy = _y + _layer * gmnav_grid_layer_lift(_grid);
-    var _cr = gmnav_layout_world_to_cell(_grid.layout, _x, _yy);
-
-    if (_layer == 0) return gmnav_grid_node(_grid, _cr[0], _cr[1]);
+    if (_layer == 0) {
+        var _cr0 = gmnav_layout_world_to_cell(_grid.layout, _x, _y);
+        return gmnav_grid_node(_grid, _cr0[0], _cr0[1]);
+    }
 
     if (!gmnav_grid_has_overlay(_grid)) return GMNAV_NO_NODE;
 
-    return gmnav_overlay_node_at(_grid.overlay, _cr[0], _cr[1], _layer);
+    var _lift = gmnav_grid_layer_lift(_grid);
+    var _lay  = _grid.layout;
+
+    var _cr = gmnav_layout_world_to_cell(_lay, _x, _y + _layer * _lift);
+    var _c  = _cr[0];
+
+    var _span = (_lift <= 0) ? 0 : (ceil(_lift / _lay.tile_h) + 1);
+
+    for (var _d = -_span; _d <= _span; _d++) {
+        var _r = _cr[1] + _d;
+        var _n = gmnav_overlay_node_at(_grid.overlay, _c, _r, _layer);
+        if (_n == GMNAV_NO_NODE) continue;
+
+        var _cy = gmnav_layout_cell_y(_lay, _c, _r) // where this cell is actually drawn, offset included
+                - (_layer + gmnav_overlay_offset(_grid.overlay, _n)) * _lift;
+
+        if (_y >= _cy - _lay.tile_h * 0.5 && _y < _cy + _lay.tile_h * 0.5) {
+            return _n;
+        }
+    }
+    return GMNAV_NO_NODE;
 }
 
 function gmnav_grid_node_to_world(_grid, _node) {
@@ -90,11 +110,15 @@ function gmnav_grid_node_to_world(_grid, _node) {
 
     if (_c < 0 || _r < 0) return [0, 0];
 
-    var _l = gmnav_grid_node_layer(_grid, _node);
+    var _h = gmnav_grid_node_layer(_grid, _node);
+
+    if (_node >= _grid.count && gmnav_grid_has_overlay(_grid)) {
+        _h += gmnav_overlay_offset(_grid.overlay, _node);
+    }
 
     return [gmnav_layout_cell_x(_grid.layout, _c, _r),
             gmnav_layout_cell_y(_grid.layout, _c, _r)
-                - _l * gmnav_grid_layer_lift(_grid)];
+                - _h * gmnav_grid_layer_lift(_grid)];
 }
 
 function gmnav_grid_world_to_node_top(_grid, _x, _y) {

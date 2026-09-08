@@ -680,3 +680,12 @@ function gmt_solve_cost(_grid, _a, _b, _climb = undefined, _drop = undefined) { 
 
     return _s.slot_g_final;
 }
+
+function gmt_node_height(_grid, _node) {
+    var _h = gmnav_grid_node_layer(_grid, _node);
+
+    if (_node >= _grid.count && gmnav_grid_has_overlay(_grid)) {
+        _h += gmnav_overlay_offset(_grid.overlay, _node);
+    }
+    return _h;
+}
