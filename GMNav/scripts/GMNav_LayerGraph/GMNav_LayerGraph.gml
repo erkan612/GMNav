@@ -1,14 +1,15 @@
-/// SPIKE. Stage 1 of the layered top-down domain.
-///
-/// The question this answers is whether gmnav_graphsearch really is agnostic
-/// about what a node means, or whether it is quietly a platformer searcher.
-/// It touches twelve fields on the graph it is given and none of them is a
-/// grid index, so satisfying that list should be enough.
-///
-/// Deliberately absent: authoring, storage, picking, the scheduler, clearance,
-/// cost profiles and flow fields. add_node taking raw world coordinates is not
-/// a real API, it is the shortest path to an answer. Throw this away if the
-/// answer is no.
+/**********************************************************
+                   NOT USED BY ANYTHING
+-----------------------------------------------------------
+It's purpose was to answer a question to understand that; 
+is gmnav_graphsearch genunely graph agnostic, or is it 
+secretly a platformer searcher? It routes across two hand 
+built layers joined by a stair with no change to the 
+searcher which gives us the answer; yes.
+
+I will keep this module, just in case for the future use.
+**********************************************************/
+
 function gmnav_layergraph_create(_grid) {
     return {
         grid       : _grid,
@@ -28,8 +29,7 @@ function gmnav_layergraph_create(_grid) {
         edge_cost  : [],
         edge_type  : [],
 
-        // edge cost is world distance, so a straight line to the goal is an
-        // exact lower bound and the heuristic stays admissible
+        // edge cost is world distance, so a straight line to the goal is an exact lower bound and the heuristic stays admissible
         max_step   : 1,
 
         slots      : array_create(2, undefined),
@@ -40,8 +40,7 @@ function gmnav_layergraph_create(_grid) {
     };
 }
 
-/// Returns the new node's index.
-function gmnav_layergraph_add_node(_lg, _x, _y, _layer) {
+function gmnav_layergraph_add_node(_lg, _x, _y, _layer) { // returns the new node's index.
     var _i = _lg.count;
 
     array_push(_lg.node_x,     _x);
@@ -61,9 +60,7 @@ function gmnav_layergraph_layer(_lg, _node) {
     return _lg.node_layer[_node];
 }
 
-/// Joins two nodes. _both makes it traversable in either direction, which is
-/// what a walk or a stair usually is. Pass false for a one way drop.
-function gmnav_layergraph_link(_lg, _a, _b, _type = gmnav_link.WALK, _both = true) {
+function gmnav_layergraph_link(_lg, _a, _b, _type = gmnav_link.WALK, _both = true) { // joins two nodes. _both makes it traversable in either direction, which is what a walk or a stair usually is. Pass false for a one way drop.
     if (_a < 0 || _a >= _lg.count) return false;
     if (_b < 0 || _b >= _lg.count) return false;
     if (_a == _b) return false;
@@ -95,9 +92,7 @@ function __gmnav_lg_add(_lg, _from, _to, _cost, _type) {
     array_push(_lg.tmp_type[_from], _type);
 }
 
-/// Flattens the scratch lists into the CSR arrays gmnav_graphsearch reads,
-/// and marks the graph ready.
-function gmnav_layergraph_finish(_lg) {
+function gmnav_layergraph_finish(_lg) { // flattens the scratch lists into the CSR arrays gmnav_graphsearch reads, and marks the graph ready.
     var _n = _lg.count;
 
     var _start = array_create(_n + 1, 0);

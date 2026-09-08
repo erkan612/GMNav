@@ -2292,3 +2292,77 @@ function gmt_test_demo7_level() {
     gmt_check("without passing through it",
               (array_get_index(_round, gmnav_grid_node(_g, 8, 17)) < 0), true);
 }
+
+function gmt_test_overlay_cells() {
+    gmt_head("B14 an overlay cell is a real cell");
+
+    var _g  = gmt_bridge_level();
+    var _ov = _g.overlay;
+    var _d1 = gmnav_overlay_node_at(_ov, 5, 4, 1);
+    var _d2 = gmnav_overlay_node_at(_ov, 5, 5, 1);
+    var _d3 = gmnav_overlay_node_at(_ov, 5, 6, 1);
+
+    gmt_check("a deck cell starts unblocked", gmnav_grid_is_blocked(_g, _d2), false);
+    gmt_check("and at base cost", gmnav_grid_cost(_g, _d2), 1);
+
+    gmt_head("B15 a collapsed span");
+
+    gmt_check("blocking is accepted", gmnav_overlay_set_blocked(_ov, _d2, true), true);
+    gmt_check("it reads back blocked", gmnav_grid_is_blocked(_g, _d2), true);
+    gmt_check("its neighbours are not", gmnav_grid_is_blocked(_g, _d1), false);
+    gmt_check("the road below is untouched",
+              gmnav_grid_is_blocked(_g, gmnav_grid_node(_g, 5, 5)), false);
+
+    gmnav_overlay_finish(_ov);
+
+    var _north = gmnav_grid_node(_g, 5, 1);
+    var _south = gmnav_grid_node(_g, 5, 10);
+    gmt_check("the bridge no longer crosses",
+              is_undefined(gmt_solve_z(_g, _north, _south)), true);
+
+    gmnav_overlay_set_blocked(_ov, _d2, false);
+    gmnav_overlay_finish(_ov);
+    gmt_check("unblocking restores it", is_array(gmt_solve_z(_g, _north, _south)), true);
+
+    gmt_head("B16 cost on a deck");
+
+    gmt_check("cost is accepted", gmnav_overlay_set_cost(_ov, _d2, 9), true);
+    gmt_check("it reads back", gmnav_grid_cost(_g, _d2), 9);
+    gmt_check("the road below is unchanged",
+              gmnav_grid_cost(_g, gmnav_grid_node(_g, 5, 5)), 1);
+
+    gmnav_overlay_finish(_ov);
+
+    // a route that must cross gets dearer, since there is no alternative
+    var _cheap = gmt_solve_cost(_g, _north, _south);
+    gmnav_overlay_set_cost(_ov, _d2, 1);
+    gmnav_overlay_finish(_ov);
+    var _plain = gmt_solve_cost(_g, _north, _south);
+
+    gmt_note("crossing cost, deck at 9 / at 1",
+             string_format(_cheap, 1, 2) + " / " + string_format(_plain, 1, 2));
+    gmt_check("an expensive deck costs more to cross", (_cheap > _plain), true);
+
+    gmt_head("B17 clearance on a deck over open ground");
+
+    // a two cell wide deck over a wide open field, so the deck's own width is the only thing that could produce a clearance of 2
+    var _og = gmnav_grid_create(14, 14,
+                  gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+    var _oo = gmnav_overlay_create(_og);
+
+    for (var _c = 4; _c <= 9; _c++) {
+        gmnav_overlay_add(_oo, _c, 6, 1);
+        gmnav_overlay_add(_oo, _c, 7, 1);
+    }
+    gmnav_overlay_finish(_oo);
+    gmnav_clearance_build(_og);
+
+    var _wide = gmnav_overlay_node_at(_oo, 6, 6, 1);
+    var _end  = gmnav_overlay_node_at(_oo, 4, 6, 1);
+
+    gmt_note("open ground below", gmnav_clearance_at(_og, gmnav_grid_node(_og, 6, 6)));
+    gmt_check("a two wide deck measures 1 at its edge", gmnav_clearance_at(_og, _end), 1);
+    gmt_check("and the ground below measures more",
+              (gmnav_clearance_at(_og, gmnav_grid_node(_og, 6, 6))
+             > gmnav_clearance_at(_og, _wide)), true);
+}

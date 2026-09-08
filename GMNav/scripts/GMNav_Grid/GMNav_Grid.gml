@@ -109,22 +109,32 @@ function gmnav_grid_world_to_node_top(_grid, _x, _y) {
 
 function gmnav_grid_is_blocked(_grid, _node) {
     if (_node < 0) return true;
-    if (_node >= _grid.count) return false;
 
+    if (_node >= _grid.count) {
+        if (!gmnav_grid_has_overlay(_grid)) return true;
+        return gmnav_overlay_is_blocked(_grid.overlay, _node);
+    }
     return (_grid.flags[_node] & GMNAV_FLAG_BLOCKED) != 0;
+}
+
+function gmnav_grid_cost(_grid, _node) {
+    if (_node < 0) return 1;
+
+    if (_node >= _grid.count) {
+        if (!gmnav_grid_has_overlay(_grid)) return 1;
+
+        var _i = _node - _grid.overlay.base;
+        if (_i < 0 || _i >= _grid.overlay.count) return 1;
+
+        return _grid.overlay.cost[_i];
+    }
+    return _grid.cost[_node];
 }
 
 function gmnav_grid_has_flag(_grid, _node, _flag) {
     if (_node < 0 || _node >= _grid.count) return false;
 
     return (_grid.flags[_node] & _flag) != 0;
-}
-
-function gmnav_grid_cost(_grid, _node) {
-    if (_node < 0) return 0;
-    if (_node >= _grid.count) return 1; // overlay cells are base cost
-
-    return _grid.cost[_node];
 }
 
 function gmnav_grid_get_cost(_grid, _node) {

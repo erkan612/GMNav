@@ -1,11 +1,3 @@
-/// A sparse set of extra walkable cells stacked over a grid, for the cases one
-/// height per cell cannot express: a bridge over a road, a gantry over a floor.
-///
-/// Sparse on purpose. Materialising a second full layer of a 200x200 grid as
-/// edges costs about 15 MB against 1.8 MB of actual layer data, and seconds to
-/// build. A bridge is twenty cells and a few KB.
-///
-/// Node ids start at grid.count, so every existing base id is unchanged.
 function gmnav_overlay_create(_grid) {
     var _ov = {
         grid  : _grid,
@@ -16,7 +8,11 @@ function gmnav_overlay_create(_grid) {
         col   : [],
         row   : [],
         layer : [],
+        flags : [],
+        cost  : [],
+        clear : [],
         key   : {},               // "layer,col,row" -> node id
+        links : [],               // authored crossings, kept so finish can re-run
 
         // adjacency out of overlay nodes, built by finish
         tmp_to    : [],
@@ -27,8 +23,7 @@ function gmnav_overlay_create(_grid) {
         edge_cost  : [],
         edge_type  : [],
 
-        // authored links out of BASE nodes into the overlay, CSR over the
-        // base grid so the expansion can read them in O(1)
+        // authored links out of BASE nodes into the overlay, CSR over the base grid so the expansion can read them in O(1)
         up_tmp   : {},
         up_start : [],
         up_to    : [],
@@ -52,8 +47,7 @@ function gmnav_overlay_count(_ov) {
     return _ov.count;
 }
 
-/// Layer 0 is the base grid itself, so any id below the offset is layer 0.
-function gmnav_overlay_layer(_ov, _node) {
+function gmnav_overlay_layer(_ov, _node) { // layer 0 is the base grid itself, so any id below the offset is layer 0.
     if (_node < 0) return -1;
     if (_node < _ov.base) return 0;
 
@@ -82,8 +76,7 @@ function gmnav_overlay_row(_ov, _node) {
     return _ov.row[_node - _ov.base];
 }
 
-/// Adds one walkable cell on a layer above the base. Returns its node id.
-function gmnav_overlay_add(_ov, _col, _row, _layer) {
+function gmnav_overlay_add(_ov, _col, _row, _layer) { // adds one walkable cell on a layer above the base. Returns its node id.
     if (_layer <= 0) return GMNAV_NO_NODE;
 
     var _k = string(_layer) + "," + string(_col) + "," + string(_row);
@@ -98,6 +91,10 @@ function gmnav_overlay_add(_ov, _col, _row, _layer) {
     array_push(_ov.tmp_to,   []);
     array_push(_ov.tmp_cost, []);
     array_push(_ov.tmp_type, []);
+	
+    array_push(_ov.flags, 0);
+    array_push(_ov.cost,  1);
+    array_push(_ov.clear, 0);
 
     _ov.key[$ _k] = _id;
     _ov.count++;
@@ -107,9 +104,7 @@ function gmnav_overlay_add(_ov, _col, _row, _layer) {
     return _id;
 }
 
-/// An authored crossing between layers, a stair or a ramp. Cells on the same
-/// layer join automatically, so this is only needed where layers meet.
-function gmnav_overlay_link(_ov, _a, _b, _type = gmnav_link.STAIR, _both = true) {
+function gmnav_overlay_link(_ov, _a, _b, _type = gmnav_link.STAIR, _both = true) { // an authored crossing between layers, a stair or a ramp. Cells on the same layer join automatically, so this is only needed where layers meet.
     if (_a == GMNAV_NO_NODE || _b == GMNAV_NO_NODE || _a == _b) return false;
 
     var _lay = _ov.grid.layout;
@@ -121,8 +116,10 @@ function gmnav_overlay_link(_ov, _a, _b, _type = gmnav_link.STAIR, _both = true)
 
     var _cost = max(1, point_distance(_ax, _ay, _bx, _by) / _lay.tile_w);
 
-    __gmnav_ov_add(_ov, _a, _b, _cost, _type);
-    if (_both) __gmnav_ov_add(_ov, _b, _a, _cost, _type);
+    array_push(_ov.links, [_a, _b, _type, _both]);
+
+    //__gmnav_ov_add(_ov, _a, _b, _cost, _type);
+    //if (_both) __gmnav_ov_add(_ov, _b, _a, _cost, _type);
 
     _ov.ready = false;
     return true;
@@ -144,9 +141,39 @@ function __gmnav_ov_add(_ov, _from, _to, _cost, _type) {
     array_push(_ov.up_tmp[$ _k], [_to, _cost, _type]);
 }
 
-/// Joins same layer neighbours automatically, then flattens everything into
-/// the CSR arrays the search reads.
-function gmnav_overlay_finish(_ov) {
+function gmnav_overlay_finish(_ov) { // joins same layer neighbours automatically, then flattens everything into the CSR arrays the search reads.
+    _ov.tmp_to   = array_create(_ov.count, undefined);
+    _ov.tmp_cost = array_create(_ov.count, undefined);
+    _ov.tmp_type = array_create(_ov.count, undefined);
+
+    for (var _i = 0; _i < _ov.count; _i++) {
+        _ov.tmp_to[_i]   = [];
+        _ov.tmp_cost[_i] = [];
+        _ov.tmp_type[_i] = [];
+    }
+
+    _ov.up_tmp = {};
+
+    for (var _i = 0; _i < array_length(_ov.links); _i++) {
+        var _lk = _ov.links[_i];
+        var _a  = _lk[0];
+        var _b  = _lk[1];
+
+        if (gmnav_grid_is_blocked(_ov.grid, _a)) continue;
+        if (gmnav_grid_is_blocked(_ov.grid, _b)) continue;
+
+        var _lay = _ov.grid.layout;
+        var _ax = _lay.origin_x + (gmnav_grid_col(_ov.grid, _a) + 0.5) * _lay.tile_w;
+        var _ay = _lay.origin_y + (gmnav_grid_row(_ov.grid, _a) + 0.5) * _lay.tile_h;
+        var _bx = _lay.origin_x + (gmnav_grid_col(_ov.grid, _b) + 0.5) * _lay.tile_w;
+        var _by = _lay.origin_y + (gmnav_grid_row(_ov.grid, _b) + 0.5) * _lay.tile_h;
+
+        var _cost = max(1, point_distance(_ax, _ay, _bx, _by) / _lay.tile_w);
+
+        __gmnav_ov_add(_ov, _a, _b, _cost, _lk[2]);
+        if (_lk[3]) __gmnav_ov_add(_ov, _b, _a, _cost, _lk[2]);
+    }
+	
     var _grid = _ov.grid;
     var _lay  = _grid.layout;
     var _nbc  = _lay.nb_count;
@@ -156,6 +183,8 @@ function gmnav_overlay_finish(_ov) {
     var _pax  = _lay.parity_axis;
 
     for (var _i = 0; _i < _ov.count; _i++) {
+        if ((_ov.flags[_i] & GMNAV_FLAG_BLOCKED) != 0) continue;
+
         var _c = _ov.col[_i];
         var _r = _ov.row[_i];
         var _l = _ov.layer[_i];
@@ -170,6 +199,7 @@ function gmnav_overlay_finish(_ov) {
             var _nb  = gmnav_overlay_node_at(_ov, _c + _ndc[_idx], _r + _ndr[_idx], _l);
             if (_nb == GMNAV_NO_NODE) continue;
 
+            if (_nb >= _ov.base && gmnav_overlay_is_blocked(_ov, _nb)) continue;
             __gmnav_ov_add(_ov, _ov.base + _i, _nb, _ncs[_idx], gmnav_link.WALK);
         }
     }
@@ -246,7 +276,84 @@ function gmnav_overlay_finish(_ov) {
     _ov.up_tmp   = {};
 
     _ov.version = _grid.version;
+    __gmnav_ov_clearance(_ov);
     _ov.ready   = true;
 
     return true;
+}
+
+function gmnav_overlay_set_blocked(_ov, _node, _on) {
+    var _i = _node - _ov.base;
+    if (_i < 0 || _i >= _ov.count) return false;
+
+    var _f = _on ? (_ov.flags[_i] | GMNAV_FLAG_BLOCKED)
+                 : (_ov.flags[_i] & ~GMNAV_FLAG_BLOCKED);
+
+    if (_f != _ov.flags[_i]) {
+        _ov.flags[_i] = _f;
+        _ov.ready = false;
+        _ov.grid.version++;
+    }
+    return true;
+}
+
+function gmnav_overlay_set_cost(_ov, _node, _cost) {
+    var _i = _node - _ov.base;
+    if (_i < 0 || _i >= _ov.count) return false;
+
+    if (_ov.cost[_i] != _cost) {
+        _ov.cost[_i] = max(1, _cost);
+        _ov.grid.version++;
+    }
+    return true;
+}
+
+function gmnav_overlay_is_blocked(_ov, _node) {
+    var _i = _node - _ov.base;
+    if (_i < 0 || _i >= _ov.count) return true;
+    return ((_ov.flags[_i] & GMNAV_FLAG_BLOCKED) != 0);
+}
+
+function __gmnav_ov_clearance(_ov) {
+    var _n = _ov.count;
+    var _cap = global.gmnav.config.CLEARANCE_MAX;
+
+    for (var _i = 0; _i < _n; _i++) {
+        _ov.clear[_i] = ((_ov.flags[_i] & GMNAV_FLAG_BLOCKED) != 0) ? 0 : _cap;
+    }
+
+    var _changed = true;
+    var _guard   = 0;
+
+    while (_changed && _guard++ <= _cap) {
+        _changed = false;
+
+        for (var _i = 0; _i < _n; _i++) {
+            if (_ov.clear[_i] == 0) continue;
+
+            var _c = _ov.col[_i];
+            var _r = _ov.row[_i];
+            var _l = _ov.layer[_i];
+            var _lo = _cap;
+
+            for (var _dr = -1; _dr <= 1; _dr++) {
+                for (var _dc = -1; _dc <= 1; _dc++) {
+                    if (_dc == 0 && _dr == 0) continue;
+
+                    var _nb = gmnav_overlay_node_at(_ov, _c + _dc, _r + _dr, _l);
+                    var _v  = 0;
+
+                    if (_nb != GMNAV_NO_NODE) _v = _ov.clear[_nb - _ov.base];
+
+                    _lo = min(_lo, _v);
+                }
+            }
+
+            var _want = min(_cap, _lo + 1);
+            if (_want < _ov.clear[_i]) {
+                _ov.clear[_i] = _want;
+                _changed = true;
+            }
+        }
+    }
 }

@@ -166,7 +166,11 @@ function gmnav_search_step(_srch, _budget = global.gmnav.config.DEFAULT_BUDGET) 
 
                 if (_on < _obase && (_flags[_on] & GMNAV_FLAG_BLOCKED) != 0) continue; // a link may land back on the base grid, which can be blocked
 
-                var _og = _cg + _ov.edge_cost[e];
+                var _ocost = (_on >= _obase)
+                           ? _ov.cost[_on - _obase]
+                           : _cost[_on];
+
+                var _og = _cg + _ov.edge_cost[e] * _ocost;
                 if (_mark[_on] == _gen && _og >= _gc[_on]) continue;
 
                 _gc[_on]   = _og;
@@ -259,7 +263,11 @@ function gmnav_search_step(_srch, _budget = global.gmnav.config.DEFAULT_BUDGET) 
                 var _un = _ov.up_to[u];
                 if (_mark[_un] == _cgen) continue;
 
-                var _ug = _cg + _ov.up_cost[u];
+                var _ucost = (_un >= _obase)
+                           ? _ov.cost[_un - _obase]
+                           : _cost[_un];
+
+                var _ug = _cg + _ov.up_cost[u] * _ucost;
                 if (_mark[_un] == _gen && _ug >= _gc[_un]) continue;
 
                 _gc[_un]   = _ug;

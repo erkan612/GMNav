@@ -665,3 +665,18 @@ function gmt_nb_cost(_lay, _dc, _dr) {
     }
     return -1;
 }
+
+function gmt_solve_cost(_grid, _a, _b, _climb = undefined, _drop = undefined) { // total path cost of a solve, or -1 if there is no route.
+    var _s = gmnav_search_create(_grid);
+
+    if (!gmnav_search_begin(_s, _a, _b, false, undefined, 0, _climb, _drop)) return -1;
+
+    var _guard = 0;
+    while (_s.state == gmnav_state.WORKING
+        && _guard++ < global.gmnav.config.MAX_STEPS) {
+        gmnav_search_step(_s, 4096);
+    }
+    if (_s.state != gmnav_state.FOUND) return -1;
+
+    return _s.slot_g_final;
+}

@@ -77,6 +77,17 @@ function gmnav_clearance_build_if_stale(_grid) {
 }
 
 function gmnav_clearance_at(_grid, _node) {
+    if (_node < 0) return 0;
+
+    if (_node >= _grid.count) {
+        if (!gmnav_grid_has_overlay(_grid)) return 0;
+
+        var _i = _node - _grid.overlay.base;
+        if (_i < 0 || _i >= _grid.overlay.count) return 0;
+
+        return _grid.overlay.clear[_i];
+    }
+
     if (_grid.clear == undefined) return 0;
     return _grid.clear[_node];
 }
