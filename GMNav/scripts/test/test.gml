@@ -3482,3 +3482,208 @@ function gmt_test_curve() {
               (abs(_cn.px[_cn.count - 1] - _base.px[_base.count - 1]) < 0.5
             && abs(_sn.px[_sn.count - 1] - _base.px[_base.count - 1]) < 0.5), true);
 }
+
+function gmt_test_stamp_path() {
+    gmt_head("U1 a straight stamp");
+
+    var _g = gmt_room_grid(24, 18);
+    var _l = gmnav_costlayer_create(_g, "trail");
+
+    // along row 8, from cell 4 to cell 16, tile 32 so centres sit at 32c + 16
+    var _pts = [[4 * 32 + 16, 8 * 32 + 16], [16 * 32 + 16, 8 * 32 + 16]];
+    var _rect = gmnav_costlayer_stamp_path(_l, _pts, 48, 12, 2);
+
+    gmt_note("rect", gmt_arr_str(_rect));
+
+    gmt_check_f("the centreline takes the peak", gmnav_costlayer_get(_l, 10, 8), 12.0);
+    gmt_check("one cell off is less but present",
+              (gmnav_costlayer_get(_l, 10, 7) > 0
+            && gmnav_costlayer_get(_l, 10, 7) < 12), true);
+    gmt_check("beyond the width is untouched", gmnav_costlayer_get(_l, 10, 4), 0);
+    gmt_check("and so is the far end of the room", gmnav_costlayer_get(_l, 21, 8), 0);
+
+    gmt_check("the rect covers what changed",
+              gmt_layer_all_inside(_l, _rect), true);
+
+    gmt_head("U2 a corner is stamped on both legs");
+
+    var _l2 = gmnav_costlayer_create(_g, "corner");
+    var _cp = [[4 * 32 + 16, 4 * 32 + 16],
+               [4 * 32 + 16, 12 * 32 + 16],
+               [16 * 32 + 16, 12 * 32 + 16]];
+
+    var _r2 = gmnav_costlayer_stamp_path(_l2, _cp, 40, 10, 1);
+
+    gmt_check("the first leg is stamped",  (gmnav_costlayer_get(_l2, 4, 8) > 0), true);
+    gmt_check("the second leg too",        (gmnav_costlayer_get(_l2, 10, 12) > 0), true);
+    gmt_check_f("and the corner itself",    gmnav_costlayer_get(_l2, 4, 12), 10.0);
+    gmt_check("the inside of the turn is clear",
+              gmnav_costlayer_get(_l2, 12, 5), 0);
+    gmt_check("the rect covers it",  gmt_layer_all_inside(_l2, _r2), true);
+
+    gmt_head("U3 stamps combine with max");
+
+    var _before = gmnav_costlayer_get(_l2, 4, 12);
+    gmnav_costlayer_stamp_path(_l2, _cp, 40, 10, 1);
+    gmt_check_f("restamping changes nothing", gmnav_costlayer_get(_l2, 4, 12), _before);
+
+    gmnav_costlayer_stamp_path(_l2, _cp, 40, 4, 1);
+    gmt_check_f("a weaker stamp does not lower it",
+                gmnav_costlayer_get(_l2, 4, 12), _before);
+
+    gmt_head("U4 a stamped corridor bends a route");
+
+    var _rg = gmt_room_grid(24, 18);
+    var _rl = gmnav_costlayer_create(_rg, "hazard");
+
+    // a wall of cost across the middle, with the route having to cross it
+    gmnav_costlayer_stamp_path(_rl, [[12 * 32 + 16, 1 * 32 + 16],
+                                     [12 * 32 + 16, 12 * 32 + 16]], 40, 30, 1);
+
+    var _prof = gmnav_costprofile_create(_rg, "wary");
+    gmnav_costprofile_add(_prof, _rl, 1);
+    gmnav_costprofile_bake(_prof);
+
+    var _from = gmnav_grid_node(_rg, 2, 6);
+    var _to   = gmnav_grid_node(_rg, 21, 6);
+
+    var _plain = gmt_solve_z(_rg, _from, _to);
+    var _wary  = gmt_solve_profile(_rg, _from, _to, _prof);
+
+    gmt_check("both find a route",
+              (is_array(_plain) && is_array(_wary)), true);
+    // node count is the wrong measure on an eight way grid, where a detour can swap one set of diagonals for another and come out the same length
+    var _straight = 0;
+    for (var _q = 0; _q < array_length(_plain); _q++) {
+        _straight += gmnav_costlayer_get_node(_rl, _plain[_q]);
+    }
+
+    var _round = 0;
+    for (var _z = 0; _z < array_length(_wary); _z++) {
+        _round += gmnav_costlayer_get_node(_rl, _wary[_z]);
+    }
+
+    gmt_note("hazard crossed, plain / wary",
+             string_format(_straight, 1, 1) + " / " + string_format(_round, 1, 1));
+
+    gmt_check("the plain route walks into the hazard", (_straight > 0), true);
+    gmt_check("the wary one picks up far less", (_round < _straight * 0.5), true);
+    gmt_check("and goes round the end of the stamp",
+              gmt_path_visits_row(_rg, _wary, 14, 0, 23), true);
+    gmt_note("plain / wary", string(array_length(_plain)) + " / " + string(array_length(_wary)));
+	
+    gmt_head("U5 the demo 13 level");
+
+    var _dg = demo13_make_grid();
+    var _dl = gmnav_costlayer_create(_dg, "guard");
+
+    var _dp = gmnav_costprofile_create(_dg, "traveller");
+    gmnav_costprofile_add(_dp, _dl, 1);
+    gmnav_costprofile_bake(_dp);
+
+    var _a = gmnav_grid_node(_dg, 2, 10);
+    var _b = gmnav_grid_node(_dg, 27, 10);
+
+    var _clear = gmt_solve_z(_dg, _a, _b);
+    gmt_check("the room has a route", is_array(_clear), true);
+
+    var _row0 = gmt_path_cross_row(_dg, _clear, DEMO13_LANE_C);
+    gmt_note("crosses the lane at row", _row0);
+    gmt_check("and it does cross the lane", (_row0 >= 0), true);
+
+    gmt_head("U6 the guard's projected path pushes the crossing");
+
+    // the stretch the guard is about to walk, centred on where the traveller would have crossed
+    _rect = gmnav_costlayer_stamp_path(_dl, demo13_ahead(_row0 - 3, 1, 6), 56, 40, 1);
+    gmnav_costprofile_bake_region(_dp, _rect[0], _rect[1], _rect[2], _rect[3]);
+
+    gmt_note("stamp rect", gmt_arr_str(_rect));
+
+    _wary = gmt_solve_profile(_dg, _a, _b, _dp);
+    gmt_check("a route still exists", is_array(_wary), true);
+
+    var _row1 = gmt_path_cross_row(_dg, _wary, DEMO13_LANE_C);
+    gmt_note("now crosses at row", _row1);
+
+    gmt_check("it still has to cross", (_row1 >= 0), true);
+    gmt_check("but no longer where the guard is heading",
+              (abs(_row1 - _row0) >= 3), true);
+
+    gmt_head("U7 clearing the old footprint puts it back");
+
+    // both rectangles, always. Skip the old one and the danger stays burned in
+    gmnav_costlayer_clear_region(_dl, _rect[0], _rect[1], _rect[2], _rect[3]);
+    gmnav_costprofile_bake_region(_dp, _rect[0], _rect[1], _rect[2], _rect[3]);
+
+    var _again = gmt_solve_profile(_dg, _a, _b, _dp);
+    gmt_check("the original route returns", gmt_arr_same(_again, _clear), true);
+    gmt_check("and nothing is left in the layer",
+              gmnav_costlayer_get(_dl, DEMO13_LANE_C, _row0), 0);
+	
+    gmt_head("U8 smoothing must not string pull through cost");
+
+    var _sg = gmt_room_grid(24, 18);
+    var _sl = gmnav_costlayer_create(_sg, "band");
+
+    // rows 2 to 10 only, so there is a genuinely free way round underneath and the cost aware smooth has a detour worth keeping
+    gmnav_costlayer_stamp_path(_sl, [[12 * 32 + 16, 1 * 32 + 16],
+                                     [12 * 32 + 16, 10 * 32 + 16]], 40, 40, 1);
+
+    var _sp2 = gmnav_costprofile_create(_sg, "wary");
+    gmnav_costprofile_add(_sp2, _sl, 1);
+    gmnav_costprofile_bake(_sp2);
+
+    var _sa = gmnav_grid_node(_sg, 2, 8);
+    var _sb = gmnav_grid_node(_sg, 21, 8);
+
+    var _route = gmt_solve_profile(_sg, _sa, _sb, _sp2);
+    gmt_check("the search finds a way round", is_array(_route), true);
+
+    var _raw_hit = 0;
+    for (var _q2 = 0; _q2 < array_length(_route); _q2++) {
+        _raw_hit += gmnav_costlayer_get_node(_sl, _route[_q2]);
+    }
+    gmt_note("danger on the raw route", string_format(_raw_hit, 1, 1));
+    gmt_check("and the raw route is cheap", (_raw_hit < 1), true);
+
+    // smoothed with no profile, the shortcut is taken and the cost is thrown away
+    var _blind = gmnav_path_create(_sg, _route);
+    gmnav_path_smooth(_blind);
+    gmt_note("blind smoothed waypoints", _blind.count);
+    gmt_check("a cost blind smooth walks into it",
+              (gmt_path_line_cost(_sg, _sl, _blind) > 20), true);
+
+    // told what the path costs, it keeps the detour
+    var _aware = gmnav_path_create(_sg, _route);
+    gmnav_path_smooth(_aware, undefined, undefined, 0, 0, _sp2);
+    gmt_note("cost aware waypoints", _aware.count);
+    gmt_check("a cost aware smooth does not",
+              (gmt_path_line_cost(_sg, _sl, _aware) < 1), true);
+    gmt_check("but it still removes something",
+              (_aware.count < array_length(_route)), true);
+	
+    gmt_head("U9 a dearer shortcut is still taken when it is cheaper overall");
+
+    var _mg = gmt_room_grid(20, 16);
+    var _ml = gmnav_costlayer_create(_mg, "mud");
+
+    // one patch of mud, cheap enough that cutting across it beats walking round
+    gmnav_costlayer_set(_ml, 9, 7, 2);
+    gmnav_costlayer_set(_ml, 10, 8, 2);
+
+    var _mp = gmnav_costprofile_create(_mg, "walker");
+    gmnav_costprofile_add(_mp, _ml, 1);
+    gmnav_costprofile_bake(_mp);
+
+    var _mr = gmt_solve_profile(_mg, gmnav_grid_node(_mg, 3, 3),
+                                     gmnav_grid_node(_mg, 16, 12), _mp);
+    gmt_check("a route exists", is_array(_mr), true);
+
+    var _mm = gmnav_path_create(_mg, _mr);
+    gmnav_path_smooth(_mm, undefined, undefined, 0, 0, _mp);
+
+    gmt_note("raw / smoothed", string(array_length(_mr)) + " / " + string(_mm.count));
+
+    // the old rule refused any shortcut touching a cell dearer than the run's dearest, which on a map with any terrain variation is most of them
+    gmt_check("mild terrain does not block smoothing", (_mm.count <= 4), true);
+}

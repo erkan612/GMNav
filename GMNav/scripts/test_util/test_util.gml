@@ -869,3 +869,57 @@ function gmt_path_has_point(_path, _x, _y, _eps = 0.5) {
     }
     return false;
 }
+
+function gmt_layer_all_inside(_layer, _rect) { // is every non zero cell inside the rect the stamp reported
+    var _g = _layer.grid;
+    var _v = _layer.values;
+
+    for (var _r = 0; _r < _g.height; _r++) {
+        for (var _c = 0; _c < _g.width; _c++) {
+            if (_v[_r * _g.width + _c] == 0) continue;
+
+            if (_c < _rect[0] || _c > _rect[2]) return false;
+            if (_r < _rect[1] || _r > _rect[3]) return false;
+        }
+    }
+    return true;
+}
+
+function gmt_path_cross_row(_grid, _path, _col) { // the row at which a path first reaches a column, or -1
+    for (var i = 0; i < array_length(_path); i++) {
+        var _n = _path[i];
+        if (_n >= _grid.count) continue;
+
+        if (gmnav_grid_col(_grid, _n) == _col) return gmnav_grid_row(_grid, _n);
+    }
+    return -1;
+}
+
+function gmt_arr_same(_a, _b) {
+    if (!is_array(_a) || !is_array(_b)) return false;
+    if (array_length(_a) != array_length(_b)) return false;
+
+    for (var i = 0; i < array_length(_a); i++) {
+        if (_a[i] != _b[i]) return false;
+    }
+    return true;
+}
+
+function gmt_path_line_cost(_grid, _layer, _path, _step = 8) { // what a path picks up along its drawn line, not its waypoints
+    var _sum = 0;
+
+    for (var i = 0; i < _path.count - 1; i++) {
+        var _n = ceil(point_distance(_path.px[i], _path.py[i],
+                                     _path.px[i + 1], _path.py[i + 1]) / _step);
+
+        for (var s = 0; s <= _n; s++) {
+            var _t  = s / max(1, _n);
+            var _nx = gmnav_grid_world_to_node(_grid,
+                          lerp(_path.px[i], _path.px[i + 1], _t),
+                          lerp(_path.py[i], _path.py[i + 1], _t));
+
+            if (_nx != GMNAV_NO_NODE) _sum = max(_sum, gmnav_costlayer_get_node(_layer, _nx));
+        }
+    }
+    return _sum;
+}

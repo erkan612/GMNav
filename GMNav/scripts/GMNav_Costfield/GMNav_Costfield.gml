@@ -254,3 +254,79 @@ function __gmnav_costprofile_mark_clean(_profile) {
         _profile.seen[i] = _profile.layers[i].version;
     }
 }
+
+function __gmnav_seg_distance(_px, _py, _x1, _y1, _x2, _y2) { // shortest distance from a point to a segment
+    var _dx = _x2 - _x1;
+    var _dy = _y2 - _y1;
+    var _l2 = _dx * _dx + _dy * _dy;
+
+    if (_l2 <= 0.0001) return point_distance(_px, _py, _x1, _y1);
+
+    var _t = clamp(((_px - _x1) * _dx + (_py - _y1) * _dy) / _l2, 0, 1);
+
+    return point_distance(_px, _py, _x1 + _dx * _t, _y1 + _dy * _t);
+}
+
+function gmnav_costlayer_stamp_path(_layer, _points, _width, _peak, _falloff = 1) { // paints a band of cost along a polyline, for a road, a patrol route, a spreading fire
+    var _n = array_length(_points);
+    if (_n == 0) return [0, 0, -1, -1];
+
+    var _grid = _layer.grid;
+    var _lay  = _grid.layout;
+    var _v    = _layer.values;
+    var _w    = _grid.width;
+    var _iw   = 1 / max(0.0001, _width);
+
+    var _mc1 = _grid.width, _mr1 = _grid.height, _mc2 = -1, _mr2 = -1;
+
+    var _segs = max(1, _n - 1);
+
+    for (var _s = 0; _s < _segs; _s++) {
+        var _x1 = _points[_s][0];
+        var _y1 = _points[_s][1];
+        var _x2 = (_n == 1) ? _x1 : _points[_s + 1][0];
+        var _y2 = (_n == 1) ? _y1 : _points[_s + 1][1];
+
+        var _lo_x = min(_x1, _x2) - _width;
+        var _hi_x = max(_x1, _x2) + _width;
+        var _lo_y = min(_y1, _y2) - _width;
+        var _hi_y = max(_y1, _y2) + _width;
+
+        var _a = gmnav_layout_world_to_cell(_lay, _lo_x, _lo_y);
+        var _b = gmnav_layout_world_to_cell(_lay, _hi_x, _lo_y);
+        var _c = gmnav_layout_world_to_cell(_lay, _lo_x, _hi_y);
+        var _d = gmnav_layout_world_to_cell(_lay, _hi_x, _hi_y);
+
+        var _c1 = clamp(min(_a[0], _b[0], _c[0], _d[0]) - 1, 0, _grid.width  - 1);
+        var _c2 = clamp(max(_a[0], _b[0], _c[0], _d[0]) + 1, 0, _grid.width  - 1);
+        var _r1 = clamp(min(_a[1], _b[1], _c[1], _d[1]) - 1, 0, _grid.height - 1);
+        var _r2 = clamp(max(_a[1], _b[1], _c[1], _d[1]) + 1, 0, _grid.height - 1);
+
+        for (var _r = _r1; _r <= _r2; _r++) {
+            var _base = _r * _w;
+
+            for (var _cc = _c1; _cc <= _c2; _cc++) {
+                var _cx = gmnav_layout_cell_x(_lay, _cc, _r);
+                var _cy = gmnav_layout_cell_y(_lay, _cc, _r);
+
+                var _dd = __gmnav_seg_distance(_cx, _cy, _x1, _y1, _x2, _y2);
+                if (_dd > _width) continue;
+
+                var _val = _peak * power(1 - (_dd * _iw), _falloff);
+                var _i   = _base + _cc;
+
+                if (_val > _v[_i]) _v[_i] = _val;
+
+                if (_cc < _mc1) _mc1 = _cc;
+                if (_cc > _mc2) _mc2 = _cc;
+                if (_r  < _mr1) _mr1 = _r;
+                if (_r  > _mr2) _mr2 = _r;
+            }
+        }
+    }
+
+    _layer.version++;
+
+    if (_mc2 < 0) return [0, 0, -1, -1];
+    return [_mc1, _mr1, _mc2, _mr2];
+}

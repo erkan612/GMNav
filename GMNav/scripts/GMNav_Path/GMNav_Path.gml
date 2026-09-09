@@ -143,8 +143,59 @@ function __gmnav_path_two_leg(_grid, _a, _b, _dirs, _mc, _md, _rad) { // can a t
     return GMNAV_NO_NODE;
 }
 
+function __gmnav_path_run_cost(_grid, _src, _i, _j, _res, _inv) { // what the stretch being skipped costs to walk
+    var _sum = 0;
+
+    for (var _k = _i; _k < _j; _k++) {
+        var _a = gmnav_grid_node_to_world(_grid, _src[_k]);
+        var _b = gmnav_grid_node_to_world(_grid, _src[_k + 1]);
+
+        var _d = point_distance(_a[0], _a[1], _b[0], _b[1]) * _inv;
+        var _n = _src[_k + 1];
+
+        _sum += _d * ((_n >= 0 && _n < array_length(_res)) ? _res[_n] : 1);
+    }
+    return _sum;
+}
+
+function __gmnav_path_line_cost(_grid, _a, _b, _res, _inv) { // what the straight line would cost instead
+    var _pa = gmnav_grid_node_to_world(_grid, _a);
+    var _pb = gmnav_grid_node_to_world(_grid, _b);
+
+    var _c1 = gmnav_grid_col(_grid, _a), _r1 = gmnav_grid_row(_grid, _a);
+    var _c2 = gmnav_grid_col(_grid, _b), _r2 = gmnav_grid_row(_grid, _b);
+
+    var _steps = max(abs(_c2 - _c1), abs(_r2 - _r1));
+    if (_steps <= 0) return 0;
+
+    var _len = point_distance(_pa[0], _pa[1], _pb[0], _pb[1]) * _inv;
+    var _sum = 0;
+
+    for (var _s = 1; _s <= _steps; _s++) {
+        var _t  = _s / _steps;
+        var _nn = gmnav_grid_node(_grid, round(lerp(_c1, _c2, _t)),
+                                         round(lerp(_r1, _r2, _t)));
+
+        _sum += (_nn != GMNAV_NO_NODE && _nn < array_length(_res)) ? _res[_nn] : 1;
+    }
+
+    return (_len / _steps) * _sum;
+}
+
+function __gmnav_path_cost_ok(_grid, _src, _i, _j, _profile) { // is the straight line no dearer than the run it replaces
+    if (_profile == undefined) return true;
+
+    var _res = _profile.resolved;
+    var _inv = 1 / max(0.0001, _grid.layout.step_min_world);
+
+    var _run = __gmnav_path_run_cost(_grid, _src, _i, _j, _res, _inv);
+
+    return (__gmnav_path_line_cost(_grid, _src[_i], _src[_j], _res, _inv)
+            <= _run * 1.001 + 0.001);
+}
+
 function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
-                           _radius = 0, _headings = 0) {
+                           _radius = 0, _headings = 0, _profile = undefined) {
     var _grid = _path.grid;
     var _mode = _grid.layout.mode;
 
@@ -164,6 +215,8 @@ function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
         for (var _j = _n - 1; _j > _i + 1; _j--) {
             if (!__gmnav_path_same_layer(_grid, _src, _i, _j)) continue;
 
+            if (!__gmnav_path_cost_ok(_grid, _src, _i, _j, _profile)) continue;
+
             if (__gmnav_path_heading_ok(_grid, _src[_i], _src[_j], _headings)
             &&  __gmnav_path_corridor_ok(_grid, _src[_i], _src[_j],
                                          _max_climb, _max_drop, _radius)) {
@@ -175,6 +228,7 @@ function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
         if (_headings > 0 && _best == _i + 1) {
             for (var _k = _n - 1; _k > _i + 1; _k--) {
                 if (!__gmnav_path_same_layer(_grid, _src, _i, _k)) continue;
+                if (!__gmnav_path_cost_ok(_grid, _src, _i, _k, _profile)) continue;
 
                 var _c = __gmnav_path_two_leg(_grid, _src[_i], _src[_k], _headings,
                                               _max_climb, _max_drop, _radius);
