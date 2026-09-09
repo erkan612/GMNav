@@ -46,7 +46,10 @@ function gmnav_init(_overrides = undefined) {
         DEFAULT_BUDGET       : 2000,     // node expansions per frame, all searches combined
         HEAP_INIT            : 256,      // initial open-set capacity
         MAX_STEPS            : 1000000,  // hard abort guard per search
-        CLEARANCE_MAX        : 16        // largest clearance value stored per cell
+        CLEARANCE_MAX        : 16,       // largest clearance value stored per cell
+
+        // repathing
+        EDIT_RING            : 32        // recent grid edits kept, so an agent repaths only when a change lands on its route. Past this it falls back to repathing on any change, and the scan in changed_since is linear in this
     };
 
     if (_overrides != undefined) {

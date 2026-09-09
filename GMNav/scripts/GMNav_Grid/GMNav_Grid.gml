@@ -1,6 +1,9 @@
 function gmnav_grid_create(_w, _h, _layout, _slots = 4) {
     var _n = _w * _h;
 
+    // sized once here, so the ring arrays and the cap can never disagree
+    var _ring = max(1, global.gmnav.config.EDIT_RING);
+
     return {
         domain   : gmnav_domain.GRID,
 
@@ -14,10 +17,19 @@ function gmnav_grid_create(_w, _h, _layout, _slots = 4) {
 
         clear    : undefined,   // clearance values, built on demand
         clear_v  : -1,          // grid version the clearance was built at
-		
+
         height_z : undefined,
 
         version  : 0,
+
+        edit_cap  : _ring,      // set from config at creation, do not write to it
+        edit_c1   : array_create(_ring, 0),
+        edit_r1   : array_create(_ring, 0),
+        edit_c2   : array_create(_ring, 0),
+        edit_r2   : array_create(_ring, 0),
+        edit_v    : array_create(_ring, -1),
+        edit_at   : 0,
+        edit_lost : -1,         // newest version whose rect has been overwritten
 
         slots    : array_create(_slots, undefined),
         slot_max : _slots
@@ -165,16 +177,17 @@ function gmnav_grid_get_cost(_grid, _node) {
     return _grid.cost[_node];
 }
 
-function gmnav_grid_set_blocked(_grid, _col, _row, _blocked) {
+function gmnav_grid_set_blocked(_grid, _col, _row, _on) {
     var _n = gmnav_grid_node(_grid, _col, _row);
     if (_n == GMNAV_NO_NODE) return false;
 
-    var _f  = _grid.flags[_n];
-    var _nf = _blocked ? (_f | GMNAV_FLAG_BLOCKED) : (_f & ~GMNAV_FLAG_BLOCKED);
+    var _f = _on ? (_grid.flags[_n] | GMNAV_FLAG_BLOCKED)
+                 : (_grid.flags[_n] & ~GMNAV_FLAG_BLOCKED);
 
-    if (_nf != _f) {
-        _grid.flags[_n] = _nf;
+    if (_f != _grid.flags[_n]) {
+        _grid.flags[_n] = _f;
         _grid.version++;
+        __gmnav_grid_note_edit(_grid, _col, _row, _col, _row);
     }
     return true;
 }
@@ -184,9 +197,11 @@ function gmnav_grid_set_cost(_grid, _col, _row, _cost) {
     if (_n == GMNAV_NO_NODE) return false;
 
     var _c = max(1, _cost);
+
     if (_grid.cost[_n] != _c) {
         _grid.cost[_n] = _c;
         _grid.version++;
+        __gmnav_grid_note_edit(_grid, _col, _row, _col, _row);
     }
     return true;
 }
@@ -201,28 +216,38 @@ function gmnav_grid_set_flag(_grid, _col, _row, _flag, _on) {
     if (_nf != _f) {
         _grid.flags[_n] = _nf;
         _grid.version++;
+        __gmnav_grid_note_edit(_grid, _col, _row, _col, _row);
     }
     return true;
 }
 
-function gmnav_grid_fill_blocked(_grid, _c1, _r1, _c2, _r2, _blocked) {
-    var _cl = clamp(min(_c1, _c2), 0, _grid.width  - 1);
-    var _cr = clamp(max(_c1, _c2), 0, _grid.width  - 1);
-    var _rt = clamp(min(_r1, _r2), 0, _grid.height - 1);
-    var _rb = clamp(max(_r1, _r2), 0, _grid.height - 1);
+function gmnav_grid_fill_blocked(_grid, _c1, _r1, _c2, _r2, _on) {
+    var _lo_c = max(0, min(_c1, _c2));
+    var _hi_c = min(_grid.width  - 1, max(_c1, _c2));
+    var _lo_r = max(0, min(_r1, _r2));
+    var _hi_r = min(_grid.height - 1, max(_r1, _r2));
 
-    var _fl = _grid.flags;
-    var _w  = _grid.width;
+    var _changed = false;
 
-    for (var _r = _rt; _r <= _rb; _r++) {
-        var _base = _r * _w;
-        for (var _c = _cl; _c <= _cr; _c++) {
-            var _i = _base + _c;
-            _fl[_i] = _blocked ? (_fl[_i] | GMNAV_FLAG_BLOCKED)
-                               : (_fl[_i] & ~GMNAV_FLAG_BLOCKED);
+    for (var _r = _lo_r; _r <= _hi_r; _r++) {
+        for (var _c = _lo_c; _c <= _hi_c; _c++) {
+            var _n = _r * _grid.width + _c;
+            var _f = _on ? (_grid.flags[_n] | GMNAV_FLAG_BLOCKED)
+                         : (_grid.flags[_n] & ~GMNAV_FLAG_BLOCKED);
+
+            if (_f != _grid.flags[_n]) {
+                _grid.flags[_n] = _f;
+                _changed = true;
+            }
         }
     }
-    _grid.version++;
+
+    // one bump for the whole rectangle, so a door re-asserting itself is free
+    if (_changed) {
+        _grid.version++;
+        __gmnav_grid_note_edit(_grid, _lo_c, _lo_r, _hi_c, _hi_r);
+    }
+    return _changed;
 }
 
 function gmnav_grid_import_tilemap(_grid, _tilemap, _is_blocked = undefined) {
@@ -245,6 +270,9 @@ function gmnav_grid_import_tilemap(_grid, _tilemap, _is_blocked = undefined) {
         }
     }
     _grid.version++;
+
+    // an import rewrites everything it covers, so the rect is the whole area
+    __gmnav_grid_note_edit(_grid, 0, 0, _w - 1, _h - 1);
 }
 
 function gmnav_grid_import_dsgrid(_grid, _ds, _is_blocked = undefined) {
@@ -267,6 +295,7 @@ function gmnav_grid_import_dsgrid(_grid, _ds, _is_blocked = undefined) {
         }
     }
     _grid.version++;
+    __gmnav_grid_note_edit(_grid, 0, 0, _w - 1, _h - 1);
 }
 
 function gmnav_grid_import_callback(_grid, _fn) {
@@ -293,6 +322,7 @@ function gmnav_grid_import_callback(_grid, _fn) {
         }
     }
     _grid.version++;
+    __gmnav_grid_note_edit(_grid, 0, 0, _grid.width - 1, _grid.height - 1);
 }
 
 function gmnav_grid_scratch_acquire(_grid) {
@@ -373,6 +403,7 @@ function gmnav_grid_set_height(_grid, _col, _row, _z) {
 
     _grid.height_z[_n] = _z;
     _grid.version++;
+    __gmnav_grid_note_edit(_grid, _col, _row, _col, _row);
     return true;
 }
 
@@ -399,7 +430,10 @@ function gmnav_grid_fill_height(_grid, _c1, _r1, _c2, _r2, _z) {
         }
     }
 
-    if (_changed) _grid.version++;
+    if (_changed) {
+        _grid.version++;
+        __gmnav_grid_note_edit(_grid, _lo_c, _lo_r, _hi_c, _hi_r);
+    }
     return _changed;
 }
 
@@ -420,4 +454,34 @@ function gmnav_grid_set_layer_lift(_grid, _lift) {
 function gmnav_grid_layer_lift(_grid) {
     if (!variable_struct_exists(_grid, "layer_lift")) return 0;
     return _grid.layer_lift;
+}
+
+function __gmnav_grid_note_edit(_grid, _c1, _r1, _c2, _r2) { // call after the version bump, so the entry carries the new version
+    var _i = _grid.edit_at;
+
+    if (_grid.edit_v[_i] >= 0) _grid.edit_lost = max(_grid.edit_lost, _grid.edit_v[_i]);
+
+    _grid.edit_c1[_i] = _c1;
+    _grid.edit_r1[_i] = _r1;
+    _grid.edit_c2[_i] = _c2;
+    _grid.edit_r2[_i] = _r2;
+    _grid.edit_v[_i]  = _grid.version;
+
+    _grid.edit_at = (_i + 1) % _grid.edit_cap;
+}
+
+function gmnav_grid_changed_since(_grid, _version, _c1, _r1, _c2, _r2) { // has anything since _version touched this cell rect
+    if (_version <= _grid.edit_lost) return true;
+    if (_version == _grid.version)   return false;
+
+    for (var i = 0; i < _grid.edit_cap; i++) {
+        var _v = _grid.edit_v[i];
+        if (_v <= _version) continue;
+
+        if (_grid.edit_c2[i] < _c1 || _grid.edit_c1[i] > _c2) continue;
+        if (_grid.edit_r2[i] < _r1 || _grid.edit_r1[i] > _r2) continue;
+
+        return true;
+    }
+    return false;
 }

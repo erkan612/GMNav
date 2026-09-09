@@ -722,3 +722,106 @@ function gmt_field_exits_via(_grid, _field, _from, _deck, _max_hops = 128) { // 
     }
     return false;
 }
+
+function gmt_ov_clearance_brute(_ov, _index) { // the definition, checked the slow way
+    var _cap = global.gmnav.config.CLEARANCE_MAX;
+
+    if ((_ov.flags[_index] & GMNAV_FLAG_BLOCKED) != 0) return 0;
+
+    var _c = _ov.col[_index];
+    var _r = _ov.row[_index];
+    var _l = _ov.layer[_index];
+
+    for (var _rad = 1; _rad <= _cap; _rad++) {
+        for (var _dr = -(_rad - 1); _dr <= (_rad - 1); _dr++) {
+            for (var _dc = -(_rad - 1); _dc <= (_rad - 1); _dc++) {
+                var _nb = gmnav_overlay_node_at(_ov, _c + _dc, _r + _dr, _l);
+
+                if (_nb == GMNAV_NO_NODE) return _rad - 1;
+                if (gmnav_overlay_is_blocked(_ov, _nb)) return _rad - 1;
+            }
+        }
+    }
+    return _cap;
+}
+
+function gmt_path_keeps_layers(_grid, _path, _nodes) { // does the simplified path still touch every layer the route did
+    var _want = {};
+    for (var i = 0; i < array_length(_nodes); i++) {
+        _want[$ string(gmnav_grid_node_layer(_grid, _nodes[i]))] = true;
+    }
+
+    var _got = {};
+    for (var j = 0; j < _path.count; j++) {
+        var _n = gmnav_grid_world_to_node_top(_grid, _path.px[j], _path.py[j]);
+        if (_n == GMNAV_NO_NODE) continue;
+        _got[$ string(gmnav_grid_node_layer(_grid, _n))] = true;
+    }
+
+    var _keys = variable_struct_get_names(_want);
+    for (var k = 0; k < array_length(_keys); k++) {
+        if (!variable_struct_exists(_got, _keys[k])) return false;
+    }
+    return true;
+}
+
+function gmt_path_visits_row(_grid, _path, _row, _c1, _c2) { // does a path cross a given row anywhere between two columns
+    for (var i = 0; i < array_length(_path); i++) {
+        var _n = _path[i];
+        if (_n >= _grid.count) continue;
+
+        if (gmnav_grid_row(_grid, _n) != _row) continue;
+
+        var _c = gmnav_grid_col(_grid, _n);
+        if (_c >= _c1 && _c <= _c2) return true;
+    }
+    return false;
+}
+
+function gmt_solve_cost_p(_grid, _a, _b, _profile) { // total path cost under a profile, or -1 if there is no route
+    var _s = gmnav_search_create(_grid);
+
+    if (!gmnav_search_begin(_s, _a, _b, false, _profile)) return -1;
+
+    var _guard = 0;
+    while (_s.state == gmnav_state.WORKING
+        && _guard++ < global.gmnav.config.MAX_STEPS) {
+        gmnav_search_step(_s, 4096);
+    }
+    if (_s.state != gmnav_state.FOUND) return -1;
+
+    return _s.slot_g_final;
+}
+
+function gmt_solve_profile(_grid, _a, _b, _profile) { // a route under a cost profile, or undefined
+    var _s = gmnav_search_create(_grid);
+    if (!gmnav_search_begin(_s, _a, _b, false, _profile)) return undefined;
+
+    var _guard = 0;
+    while (_s.state == gmnav_state.WORKING
+        && _guard++ < global.gmnav.config.MAX_STEPS) {
+        gmnav_search_step(_s, 4096);
+    }
+    return (_s.state == gmnav_state.FOUND) ? gmnav_search_get_path(_s) : undefined;
+}
+
+function gmt_solve_clear(_grid, _a, _b, _need) { // a route for a unit of a given clearance, or undefined
+    var _s = gmnav_search_create(_grid);
+    if (!gmnav_search_begin(_s, _a, _b, false, undefined, _need)) return undefined;
+
+    var _guard = 0;
+    while (_s.state == gmnav_state.WORKING
+        && _guard++ < global.gmnav.config.MAX_STEPS) {
+        gmnav_search_step(_s, 4096);
+    }
+    return (_s.state == gmnav_state.FOUND) ? gmnav_search_get_path(_s) : undefined;
+}
+
+function gmt_agent_grid() { // a plain open room with a clear row 1 to walk along
+    var _g = gmnav_grid_create(20, 16, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+    gmnav_grid_fill_blocked(_g, 0, 0, 19, 0, true);
+    gmnav_grid_fill_blocked(_g, 0, 15, 19, 15, true);
+    gmnav_grid_fill_blocked(_g, 0, 0, 0, 15, true);
+    gmnav_grid_fill_blocked(_g, 19, 0, 19, 15, true);
+    return _g;
+}

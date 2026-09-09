@@ -6,7 +6,8 @@ function gmnav_path_create(_grid, _nodes) {
         py     : [],
         count  : 0,
         length : 0,
-        stale  : false
+        stale  : false,
+		version : _grid.version,
     };
     __gmnav_path_rebuild_points(_p);
     return _p;
@@ -124,6 +125,9 @@ function gmnav_path_simplify(_path, _tolerance = 0.01,
     var _grid = _path.grid;
     var _px   = _path.px;
     var _py   = _path.py;
+    var _nd   = _path.nodes;
+
+    var _has_nodes = (array_length(_nd) == _n);
 
     var _ox = [_px[0]];
     var _oy = [_py[0]];
@@ -143,6 +147,14 @@ function gmnav_path_simplify(_path, _tolerance = 0.01,
 
         var _cross = abs((_ax * _by - _ay * _bx) / (_la * _lb));
         var _keep  = (_cross > _tolerance);
+
+        if (!_keep && _has_nodes) {
+            var _lp = gmnav_grid_node_layer(_grid, _nd[i - 1]);
+            var _lc = gmnav_grid_node_layer(_grid, _nd[i]);
+            var _lx2 = gmnav_grid_node_layer(_grid, _nd[i + 1]);
+
+            if (_lc != _lp || _lc != _lx2) _keep = true;
+        }
 
         if (!_keep && !__gmnav_path_seg_z_ok(_grid, _lx, _ly,
                                              _px[i + 1], _py[i + 1],

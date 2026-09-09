@@ -1,13 +1,34 @@
+function __gmnav_cost_capacity(_grid) { // overlay ids continue past grid.count, so cost data has to cover both
+    var _n = _grid.count;
+
+    if (variable_struct_exists(_grid, "overlay") && _grid.overlay != undefined) {
+        _n += _grid.overlay.count;
+    }
+    return _n;
+}
+
+function __gmnav_cost_fit(_arr, _grid, _fill) { // an overlay can be attached, or grown, after the array was made
+    var _n = __gmnav_cost_capacity(_grid);
+    var _o = array_length(_arr);
+    if (_o >= _n) return _arr;
+
+    array_resize(_arr, _n);
+    for (var i = _o; i < _n; i++) _arr[i] = _fill;
+    return _arr;
+}
+
 function gmnav_costlayer_create(_grid, _name = "") {
     return {
         name    : _name,
         grid    : _grid,
-        values  : array_create(_grid.count, 0),
+        values  : array_create(__gmnav_cost_capacity(_grid), 0),
         version : 1
     };
 }
 
 function gmnav_costlayer_clear(_layer) {
+    _layer.values = __gmnav_cost_fit(_layer.values, _layer.grid, 0);
+
     var _v = _layer.values;
     for (var i = 0; i < array_length(_v); i++) _v[i] = 0;
     _layer.version++;
@@ -27,6 +48,23 @@ function gmnav_costlayer_set(_layer, _col, _row, _value) {
 function gmnav_costlayer_get(_layer, _col, _row) {
     var _n = gmnav_grid_node(_layer.grid, _col, _row);
     return (_n == GMNAV_NO_NODE) ? 0 : _layer.values[_n];
+}
+
+function gmnav_costlayer_set_node(_layer, _node, _value) { // addresses any node, base or overlay, since an overlay cell has no unique col/row
+    _layer.values = __gmnav_cost_fit(_layer.values, _layer.grid, 0);
+
+    if (_node < 0 || _node >= array_length(_layer.values)) return false;
+
+    if (_layer.values[_node] != _value) {
+        _layer.values[_node] = _value;
+        _layer.version++;
+    }
+    return true;
+}
+
+function gmnav_costlayer_get_node(_layer, _node) {
+    if (_node < 0 || _node >= array_length(_layer.values)) return 0;
+    return _layer.values[_node];
 }
 
 function gmnav_costlayer_stamp_radial(_layer, _wx, _wy, _radius, _peak, _falloff = 1) {
@@ -90,7 +128,7 @@ function gmnav_costprofile_create(_grid, _name = "") {
         layers   : [],
         weights  : [],
         seen     : [],                          // last baked layer versions
-        resolved : array_create(_grid.count, 1),
+        resolved : array_create(__gmnav_cost_capacity(_grid), 1),
         gver     : -1,                          // last baked grid version
         baked    : false
     };
@@ -143,24 +181,34 @@ function gmnav_costprofile_bake(_profile) {
     var _grid = _profile.grid;
     var _n    = _grid.count;
     var _base = _grid.cost;
-    var _out  = _profile.resolved;
     var _ln   = array_length(_profile.layers);
 
-    if (_ln == 0) {
-        for (var i = 0; i < _n; i++) _out[i] = _base[i];
-    } else {
-        for (var i = 0; i < _n; i++) _out[i] = _base[i];
+    _profile.resolved = __gmnav_cost_fit(_profile.resolved, _grid, 1);
+    var _out = _profile.resolved;
 
+    for (var i = 0; i < _n; i++) _out[i] = _base[i];
+
+    var _ov = undefined;
+    if (variable_struct_exists(_grid, "overlay") && _grid.overlay != undefined) {
+        _ov = _grid.overlay;
+        for (var _k = 0; _k < _ov.count; _k++) _out[_n + _k] = _ov.cost[_k];
+    }
+
+    var _total = array_length(_out);
+
+    if (_ln > 0) {
         for (var _l = 0; _l < _ln; _l++) {
             var _wt = _profile.weights[_l];
             if (_wt == 0) continue;
 
-            var _vals = _profile.layers[_l].values;
-            for (var i = 0; i < _n; i++) _out[i] += _vals[i] * _wt;
+            var _vals = __gmnav_cost_fit(_profile.layers[_l].values, _grid, 0);
+            _profile.layers[_l].values = _vals;
+
+            for (var j = 0; j < _total; j++) _out[j] += _vals[j] * _wt;
         }
 
-        for (var i = 0; i < _n; i++) {
-            if (_out[i] < 1) _out[i] = 1;
+        for (var m = 0; m < _total; m++) {
+            if (_out[m] < 1) _out[m] = 1;
         }
     }
 

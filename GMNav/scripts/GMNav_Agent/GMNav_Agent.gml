@@ -27,9 +27,11 @@ function gmnav_agent_create(_sched, _x, _y, _radius = 8, _speed = 2) {
         seek_i     : 1,             // index of the waypoint being steered toward
 
         arrived    : false,
+        failed : false,				// the last goal could not be routed to. cleared by the next goto or stop
 
         goal_x     : 0,
         goal_y     : 0,
+        goal_layer : 0,
         has_goal   : false,
         repath_at  : 0,             // guard against repath spam
         repath_gap : 20,
@@ -57,13 +59,15 @@ function gmnav_agent_goto(_agent, _gx, _gy, _priority = gmnav_priority.NORMAL,
         gmnav_scheduler_cancel(_agent.sched, _agent.ticket);
     }
 
-    _agent.goal_x   = _gx;
-    _agent.goal_y   = _gy;
-    _agent.has_goal = true;
-    _agent.arrived  = false;
-    _agent.ticket   = gmnav_scheduler_request(_agent.sched, _sn, _gn, _priority,
-                                              false, _agent.profile, _agent.need_clear,
-                                              _agent.max_climb, _agent.max_drop);
+    _agent.goal_x     = _gx;
+    _agent.goal_y     = _gy;
+    _agent.goal_layer = _goal_layer;   // kept so a repath asks for the same surface
+    _agent.has_goal   = true;
+    _agent.arrived    = false;
+    _agent.failed	  = false;
+    _agent.ticket     = gmnav_scheduler_request(_agent.sched, _sn, _gn, _priority,
+                                                false, _agent.profile, _agent.need_clear,
+                                                _agent.max_climb, _agent.max_drop);
 
     return true;
 }
@@ -87,6 +91,10 @@ function gmnav_agent_arrived(_agent) {
     return _agent.arrived;
 }
 
+function gmnav_agent_failed(_agent) { // the last goal could not be routed to, latched like arrived
+    return _agent.failed;
+}
+
 function gmnav_agent_update(_agent, _neighbours = undefined) {
     __gmnav_agent_collect_ticket(_agent);
 
@@ -96,7 +104,10 @@ function gmnav_agent_update(_agent, _neighbours = undefined) {
         return;
     }
 
-    if (_agent.path.stale) {
+    //if (_agent.path.stale || _agent.path.version != _agent.grid.version) {
+    //    __gmnav_agent_try_repath(_agent);
+    //}
+    if (_agent.path.stale || __gmnav_agent_path_disturbed(_agent)) {
         __gmnav_agent_try_repath(_agent);
     }
 
@@ -168,6 +179,7 @@ function __gmnav_agent_collect_ticket(_agent) {
     } else if (_t.state == gmnav_state.FAILED) {
         _agent.ticket   = undefined;
         _agent.has_goal = false;
+        _agent.failed   = true;
     }
 }
 
@@ -207,13 +219,23 @@ function __gmnav_agent_try_repath(_agent) {
 
     _agent.repath_at = current_time + _agent.repath_gap * (1000 / max(1, game_get_speed(gamespeed_fps)));
 
-    var _sn = gmnav_grid_world_to_node(_agent.grid, _agent.x, _agent.y);
-    var _gn = gmnav_grid_world_to_node(_agent.grid, _agent.goal_x, _agent.goal_y);
+    var _grid = _agent.grid;
+
+    var _sn = gmnav_grid_world_to_node(_grid, _agent.x, _agent.y, _agent.layer);
+
+    if (_sn == GMNAV_NO_NODE && _agent.layer != 0) {
+        _sn = gmnav_grid_world_to_node(_grid, _agent.x, _agent.y, 0);
+        if (_sn != GMNAV_NO_NODE) _agent.layer = 0;
+    }
+
+    var _gn = gmnav_grid_world_to_node(_grid, _agent.goal_x, _agent.goal_y,
+                                       _agent.goal_layer);
     if (_sn == GMNAV_NO_NODE || _gn == GMNAV_NO_NODE) return;
 
     _agent.ticket = gmnav_scheduler_request(_agent.sched, _sn, _gn,
                                             gmnav_priority.HIGH, false,
-                                            _agent.profile, _agent.need_clear);
+                                            _agent.profile, _agent.need_clear,
+                                            _agent.max_climb, _agent.max_drop);
 }
 
 function __gmnav_agent_avoidance(_agent, _neighbours) {
@@ -256,4 +278,36 @@ function __gmnav_agent_avoidance(_agent, _neighbours) {
 
 function gmnav_agent_layer(_agent) { // 0 is the base grid
     return _agent.layer;
+}
+
+function __gmnav_agent_path_disturbed(_agent) { // did any edit since this path was built land on the part of it still to walk
+    var _p    = _agent.path;
+    var _grid = _agent.grid;
+
+    if (_p.version == _grid.version) return false;
+
+    var _nd = _p.nodes;
+    var _n  = array_length(_nd);
+
+    if (_n < 2) return true;
+
+    var _from = max(0, _agent.seek_i - 1);
+
+    for (var i = _from; i < _n - 1; i++) {
+        var _ac = gmnav_grid_col(_grid, _nd[i]);
+        var _ar = gmnav_grid_row(_grid, _nd[i]);
+        var _bc = gmnav_grid_col(_grid, _nd[i + 1]);
+        var _br = gmnav_grid_row(_grid, _nd[i + 1]);
+
+        if (_ac < 0 || _bc < 0) return true;
+
+        if (gmnav_grid_changed_since(_grid, _p.version,
+                                     min(_ac, _bc), min(_ar, _br),
+                                     max(_ac, _bc), max(_ar, _br))) {
+            return true;
+        }
+    }
+
+    _p.version = _grid.version;
+    return false;
 }

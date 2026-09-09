@@ -295,6 +295,8 @@ function gmnav_overlay_set_blocked(_ov, _node, _on) {
         _ov.flags[_i] = _f;
         _ov.ready = false;
         _ov.grid.version++;
+        __gmnav_grid_note_edit(_ov.grid, _ov.col[_i], _ov.row[_i],
+                                         _ov.col[_i], _ov.row[_i]);
     }
     return true;
 }
@@ -306,6 +308,8 @@ function gmnav_overlay_set_cost(_ov, _node, _cost) {
     if (_ov.cost[_i] != _cost) {
         _ov.cost[_i] = max(1, _cost);
         _ov.grid.version++;
+        __gmnav_grid_note_edit(_ov.grid, _ov.col[_i], _ov.row[_i],
+                                         _ov.col[_i], _ov.row[_i]);
     }
     return true;
 }
@@ -376,6 +380,8 @@ function gmnav_overlay_set_offset(_ov, _node, _offset) {
     _ov.offset[_i] = _offset;
 
     _ov.grid.version++;
+    __gmnav_grid_note_edit(_ov.grid, _ov.col[_i], _ov.row[_i],
+                                     _ov.col[_i], _ov.row[_i]);
     return true;
 }
 

@@ -128,6 +128,8 @@ function gmnav_search_step(_srch, _budget = global.gmnav.config.DEFAULT_BUDGET) 
     var _goal  = _srch.goal;
     var _check = (!_srch.corner_cut) && (_pax == 0) && (_nbc == 8);
     var _left  = _budget;
+	
+    var _profile = _srch.profile;
 
     while (_left > 0) {
         if (_heap.count == 0) {
@@ -167,7 +169,12 @@ function gmnav_search_step(_srch, _budget = global.gmnav.config.DEFAULT_BUDGET) 
                 if (_on < _obase && (_flags[_on] & GMNAV_FLAG_BLOCKED) != 0) continue; // a link may land back on the base grid, which can be blocked
                 if (_on >= _obase && gmnav_overlay_is_blocked(_ov, _on)) continue;     // or on a span collapsed since the last finish
 
-                var _ocost = (_on >= _obase)
+                if (_need > 1 && _on >= _obase) {
+                    var _oclr = _ov.clear[_on - _obase];
+                    if (_oclr < _need && (_cd + 1) > _relax) continue;
+                }
+
+                var _ocost = (_on >= _obase && _srch.profile == undefined)
                            ? _ov.cost[_on - _obase]
                            : _cost[_on];
 
@@ -265,7 +272,12 @@ function gmnav_search_step(_srch, _budget = global.gmnav.config.DEFAULT_BUDGET) 
                 if (_mark[_un] == _cgen) continue;
                 if (_un >= _obase && gmnav_overlay_is_blocked(_ov, _un)) continue;
 
-                var _ucost = (_un >= _obase)
+                if (_need > 1 && _un >= _obase) {
+                    var _uclr = _ov.clear[_un - _obase];
+                    if (_uclr < _need && (_cd + 1) > _relax) continue;
+                }
+
+                var _ucost = (_un >= _obase && _srch.profile == undefined)
                            ? _ov.cost[_un - _obase]
                            : _cost[_un];
 

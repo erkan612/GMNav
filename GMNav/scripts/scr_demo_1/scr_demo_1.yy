@@ -6,7 +6,7 @@
   "name":"scr_demo_1",
   "parent":{
     "name":"1",
-    "path":"folders/demos/1.yy",
+    "path":"folders/demos/1-9/1.yy",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",

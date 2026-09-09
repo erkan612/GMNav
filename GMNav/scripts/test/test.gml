@@ -2957,3 +2957,299 @@ function gmt_test_demo9_level() {
     gmt_check("a cell by the south crossing leaves that way",
               gmt_field_exits_via(_g, _f, gmnav_grid_node(_g, 5, DEMO9_SOUTH_R), _sd), true);
 }
+
+function gmt_test_overlay_coverage() {
+    gmt_head("X1 a scheduled request crosses a bridge");
+
+    var _g = gmt_bridge_level();
+    var _s = gmnav_scheduler_create(_g, 2000, 4);
+
+    var _from = gmnav_grid_node(_g, 5, 1);
+    var _to   = gmnav_grid_node(_g, 5, 10);
+    var _deck = gmnav_overlay_node_at(_g.overlay, 5, 5, 1);
+
+    var _t = gmnav_scheduler_request(_s, _from, _to, gmnav_priority.IMMEDIATE);
+
+    gmt_check("the ticket resolves", _t.state, gmnav_state.FOUND);
+
+    var _p = gmnav_scheduler_get_path(_t);
+    gmt_check("it returns a path", (array_length(_p) > 0), true);
+    gmt_check("over the deck", (array_get_index(_p, _deck) >= 0), true);
+    gmt_check("not stale", _t.stale, false);
+
+    // and under a budget, a slice at a time
+    var _s2 = gmnav_scheduler_create(_g, 12, 2);
+    var _t2 = gmnav_scheduler_request(_s2, _from, _to);
+
+    var _frames = 0;
+    while (_t2.state != gmnav_state.FOUND && _t2.state != gmnav_state.FAILED
+        && _frames++ < 200) {
+        gmnav_scheduler_update(_s2);
+    }
+
+    gmt_note("frames to drain", _frames);
+    gmt_check("a budgeted ticket resolves too", _t2.state, gmnav_state.FOUND);
+    gmt_check_arr("and matches the immediate one", gmnav_scheduler_get_path(_t2), _p);
+
+    gmt_head("X2 a profile reaches overlay cells");
+
+    var _pg   = gmt_bridge_level();
+    var _pov  = _pg.overlay;
+    var _pdk  = gmnav_overlay_node_at(_pov, 5, 5, 1);
+
+    var _toll = gmnav_costlayer_create(_pg, "toll");
+
+    gmt_check("a layer covers the overlay",
+              array_length(_toll.values), _pg.count + gmnav_overlay_count(_pov));
+
+    gmt_check("a deck cell is settable", gmnav_costlayer_set_node(_toll, _pdk, 8), true);
+    gmt_check("and reads back", gmnav_costlayer_get_node(_toll, _pdk), 8);
+    gmt_check("the road below is untouched",
+              gmnav_costlayer_get(_toll, 5, 5), 0);
+
+    var _prof = gmnav_costprofile_create(_pg, "hauler");
+    gmnav_costprofile_add(_prof, _toll, 1);
+    gmnav_costprofile_bake(_prof);
+
+    gmt_check("resolved covers the overlay too",
+              array_length(_prof.resolved), _pg.count + gmnav_overlay_count(_pov));
+    gmt_check_f("the deck resolves to base plus the toll",
+                _prof.resolved[_pdk], 9.0);
+
+    // and it actually changes a route: with the deck dear enough, the search should still take it because there is no other way, but the cost moves
+    var _cheap = gmt_solve_cost_p(_pg, gmnav_grid_node(_pg, 5, 1),
+                                       gmnav_grid_node(_pg, 5, 10), undefined);
+    var _dear  = gmt_solve_cost_p(_pg, gmnav_grid_node(_pg, 5, 1),
+                                       gmnav_grid_node(_pg, 5, 10), _prof);
+
+    gmt_note("crossing cost, plain / tolled",
+             string_format(_cheap, 1, 2) + " / " + string_format(_dear, 1, 2));
+    gmt_check("the toll makes the crossing dearer", (_dear > _cheap), true);
+
+    // a field reads the same profile
+    var _pf = gmnav_flowfield_create(_pg, _prof);
+    gmnav_flowfield_build(_pf, gmnav_grid_node(_pg, 5, 1));
+    gmt_check("a field over a profile still crosses",
+              (_pf.dist[gmnav_grid_node(_pg, 5, 10)] < GMNAV_INF), true);
+
+    gmt_head("X3 overlay clearance against brute force");
+
+    var _cg  = gmt_bridge_level();
+    var _cov = _cg.overlay;
+
+    // widen the deck so clearance has room to vary across it
+    for (var _c = 4; _c <= 6; _c++) {
+        for (var _r = 4; _r <= 6; _r++) {
+            gmnav_overlay_add(_cov, _c, _r, 1);
+        }
+    }
+    gmnav_overlay_finish(_cov);
+    gmnav_clearance_build(_cg);
+
+    var _wrong = 0;
+    for (var _i = 0; _i < gmnav_overlay_count(_cov); _i++) {
+        var _node = _cov.base + _i;
+        var _got  = gmnav_clearance_at(_cg, _node);
+        var _want = gmt_ov_clearance_brute(_cov, _i);
+
+        if (_got != _want) _wrong++;
+    }
+
+    gmt_note("overlay cells audited", gmnav_overlay_count(_cov));
+    gmt_check("every overlay clearance matches a brute force scan", _wrong, 0);
+
+    var _mid = gmnav_overlay_node_at(_cov, 5, 5, 1);
+    gmt_check("the middle of a three wide deck fits two", gmnav_clearance_at(_cg, _mid), 2);
+
+    var _edge = gmnav_overlay_node_at(_cov, 4, 4, 1);
+    gmt_check("its corner fits one", gmnav_clearance_at(_cg, _edge), 1);
+
+    gmt_head("X4 simplify must not drop a layer change");
+
+    var _sg = gmt_bridge_level();
+    gmnav_grid_set_layer_lift(_sg, 24);
+
+    var _sp = gmt_solve_z(_sg, gmnav_grid_node(_sg, 5, 1),
+                               gmnav_grid_node(_sg, 5, 10));
+    gmt_check("a route exists", is_array(_sp), true);
+
+    var _path = gmnav_path_create(_sg, _sp);
+    var _before = _path.count;
+
+    gmnav_path_simplify(_path);
+
+    gmt_note("waypoints before / after",
+             string(_before) + " / " + string(_path.count));
+
+    // the stair is nearly collinear on screen, so a purely geometric simplify deletes it and the path silently loses the climb
+    gmt_check("the stair survives simplify",
+              gmt_path_keeps_layers(_sg, _path, _sp), true);
+	
+    gmt_head("X5 the demo 10 level");
+
+    var _dg  = demo10_make_grid();
+    var _dov = _dg.overlay;
+
+    gmt_check("one layer", _dov.max_layer, 1);
+    gmt_note("deck cells", gmnav_overlay_count(_dov));
+
+    var _mid = demo10_deck_at(_dg, 10, DEMO10_WALL_R);
+    gmt_check("the bridge spans the wall", (_mid != GMNAV_NO_NODE), true);
+    gmt_check("the wall is solid beneath it",
+              gmnav_grid_is_blocked(_dg, gmnav_grid_node(_dg, 10, DEMO10_WALL_R)), true);
+    gmt_check("the ground under the ramp is solid",
+              gmnav_grid_is_blocked(_dg, gmnav_grid_node(_dg, 10, DEMO10_WALL_R - 3)), true);
+    gmt_check("the gap is open",
+              gmnav_grid_is_blocked(_dg, gmnav_grid_node(_dg, 26, DEMO10_WALL_R)), false);
+
+    gmt_head("X6 the bridge climbs in even steps");
+
+    var _worst = 0;
+    var _prev  = 0;
+
+    for (var _r = DEMO10_WALL_R - DEMO10_RAMP_LEN; _r <= DEMO10_WALL_R + DEMO10_RAMP_LEN; _r++) {
+        var _dn = demo10_deck_at(_dg, 10, _r);
+        var _h  = (_dn == GMNAV_NO_NODE) ? 0 : gmt_node_height(_dg, _dn);
+
+        _worst = max(_worst, abs(_h - _prev));
+        _prev  = _h;
+    }
+    _worst = max(_worst, abs(_prev));
+
+    gmt_note("largest step in lifts", string_format(_worst, 1, 3));
+    gmt_check_f("the span sits a full lift up", gmt_node_height(_dg, _mid), 1.0);
+    gmt_check("no step is more than a quarter lift",
+              (_worst <= (1 / DEMO10_RAMP_LEN) + 0.0001), true);
+
+    gmt_head("X7 size decides which way through the wall");
+
+    var _start = gmnav_grid_node(_dg, 10, 3);
+    var _goal  = gmnav_grid_node(_dg, 10, 19);
+
+    var _small = gmt_solve_clear(_dg, _start, _goal, 1);
+    gmt_check("a small unit gets through", is_array(_small), true);
+    gmt_check("over the bridge", (array_get_index(_small, _mid) >= 0), true);
+    gmt_note("small route", string(array_length(_small)) + " steps");
+
+    // a deck's outer row has no overlay neighbour on the open side, so it measures 1 however wide the bridge is. A big unit cannot enter one
+    gmt_check("the bridge entry measures one",
+              gmnav_clearance_at(_dg, demo10_deck_at(_dg, 10, DEMO10_WALL_R - DEMO10_RAMP_LEN)), 1);
+    // five wide through a wall one cell thick, so the free square reaches three
+    gmt_check("the gap centre measures three",
+              gmnav_clearance_at(_dg, gmnav_grid_node(_dg, 26, DEMO10_WALL_R)), 3);
+
+    var _big = gmt_solve_clear(_dg, _start, _goal, 2);
+    gmt_check("a big unit still gets through", is_array(_big), true);
+    gmt_check("but not over the bridge", (array_get_index(_big, _mid) < 0), true);
+    gmt_check("it uses the gap",
+              gmt_path_visits_row(_dg, _big, DEMO10_WALL_R, DEMO10_GAP_C1, DEMO10_GAP_C2), true);
+    gmt_note("big route", string(array_length(_big)) + " steps");
+
+    gmt_head("X8 a toll prices the shortcut out");
+
+    _toll = demo10_toll_layer(_dg);
+    _prof = gmnav_costprofile_create(_dg, "tolled");
+    gmnav_costprofile_add(_prof, _toll, 1);
+    gmnav_costprofile_bake(_prof);
+
+    gmt_check_f("the deck resolves dearer", _prof.resolved[_mid], 13.0);
+
+    // TEMPORARY!, diagnosis
+    gmt_note("profile dirty after bake", gmnav_costprofile_is_dirty(_prof));
+    gmt_note("resolved length", array_length(_prof.resolved));
+    gmt_note("grid count", _dg.count);
+    gmt_note("resolved on a ground cell",
+             string_format(_prof.resolved[gmnav_grid_node(_dg, 10, 3)], 1, 2));
+
+    var _paid = gmt_solve_profile(_dg, _start, _goal, _prof);
+    gmt_check("a route still exists", is_array(_paid), true);
+
+    // what did the search actually charge, and what does the profile say it should have
+    var _sum = 0;
+    var _deckhits = 0;
+    for (var _q = 0; _q < array_length(_paid); _q++) {
+        _sum += _prof.resolved[_paid[_q]];
+        if (_paid[_q] >= _dg.count) _deckhits++;
+    }
+    gmt_note("deck cells on the tolled route", _deckhits);
+    gmt_note("profile cost summed along it", string_format(_sum, 1, 2));
+    gmt_note("search's own total",
+             string_format(gmt_solve_cost_p(_dg, _start, _goal, _prof), 1, 2));
+
+    gmt_check("but it leaves the bridge alone", (array_get_index(_paid, _mid) < 0), true);
+    gmt_note("tolled route", string(array_length(_paid)) + " steps");
+}
+
+function gmt_test_edit_scope() {
+    gmt_head("XR1 the grid records what changed");
+
+    var _g = gmnav_grid_create(40, 30, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+    var _v0 = _g.version;
+
+    gmnav_grid_set_blocked(_g, 5, 5, true);
+
+    gmt_check("an edit is visible where it happened",
+              gmnav_grid_changed_since(_g, _v0, 4, 4, 6, 6), true);
+    gmt_check("and not somewhere else",
+              gmnav_grid_changed_since(_g, _v0, 30, 20, 35, 25), false);
+    gmt_check("a stamp taken after it sees nothing",
+              gmnav_grid_changed_since(_g, _g.version, 4, 4, 6, 6), false);
+
+    gmnav_grid_fill_blocked(_g, 20, 10, 24, 14, true);
+    gmt_check("a fill covers its whole rect",
+              gmnav_grid_changed_since(_g, _v0, 22, 12, 22, 12), true);
+    gmt_check("a redundant edit records nothing",
+              gmnav_grid_changed_since(_g, _g.version, 0, 0, 39, 29), false);
+
+    gmt_head("XR2 an old stamp is answered honestly");
+
+    // overflow the ring, then ask with a stamp older than anything it still holds
+    for (var i = 0; i < 40; i++) gmnav_grid_set_blocked(_g, i mod 40, 28, true);
+
+    gmt_check("a lost history reports changed rather than nothing",
+              gmnav_grid_changed_since(_g, _v0, 0, 0, 1, 1), true);
+
+    gmt_head("XR3 an agent only repaths when it is concerned");
+
+    var _ag = gmt_agent_grid();
+    var _s  = gmnav_scheduler_create(_ag, 4000, 4);
+
+    var _p0 = gmnav_grid_node_to_world(_ag, gmnav_grid_node(_ag, 1, 1));
+    var _a  = gmnav_agent_create(_s, _p0[0], _p0[1], 6, 2);
+
+    var _gp = gmnav_grid_node_to_world(_ag, gmnav_grid_node(_ag, 18, 1));
+    gmnav_agent_goto(_a, _gp[0], _gp[1]);
+
+    var _guard = 0;
+    while (!gmnav_agent_has_path(_a) && _guard++ < 60) {
+        gmnav_scheduler_update(_s);
+        gmnav_agent_update(_a);
+    }
+    gmt_check("the agent has a path", gmnav_agent_has_path(_a), true);
+
+    // an edit far from the route must not provoke a request
+    gmnav_grid_set_blocked(_ag, 2, 14, true);
+    gmnav_agent_update(_a);
+    gmt_check("a distant edit is ignored", (_a.ticket == undefined), true);
+
+    // one on the route must
+    gmt_note("path waypoints", array_length(_a.path.nodes));
+    gmt_note("path version before", _a.path.version);
+    gmt_note("grid version before", _ag.version);
+    gmt_note("seek_i", _a.seek_i);
+
+    var _pv = _a.path.version;
+    gmnav_grid_set_blocked(_ag, 10, 1, true);
+
+    gmt_note("grid version after", _ag.version);
+    gmt_note("edit_lost", _ag.edit_lost);
+    gmt_note("changed_since on the whole row",
+             gmnav_grid_changed_since(_ag, _pv, 1, 1, 18, 1));
+
+    var _c0 = gmnav_grid_col(_ag, _a.path.nodes[0]);
+    var _c1 = gmnav_grid_col(_ag, _a.path.nodes[array_length(_a.path.nodes) - 1]);
+    gmt_note("first / last waypoint col", string(_c0) + " / " + string(_c1));
+
+    gmnav_agent_update(_a);
+    gmt_check("an edit on the route is not", (_a.ticket != undefined), true);
+}

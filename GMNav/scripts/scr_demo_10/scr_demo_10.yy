@@ -1,12 +1,12 @@
 {
   "$GMScript":"v1",
-  "%Name":"scr_demo_7",
+  "%Name":"scr_demo_10",
   "isCompatibility":false,
   "isDnD":false,
-  "name":"scr_demo_7",
+  "name":"scr_demo_10",
   "parent":{
-    "name":"7",
-    "path":"folders/demos/1-9/7.yy",
+    "name":"10",
+    "path":"folders/demos/10-19/10.yy",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",
