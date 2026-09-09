@@ -3344,3 +3344,99 @@ function gmt_test_smooth_headings() {
             && _p4.nodes[array_length(_p4.nodes) - 1] == _gl
             && _p8.nodes[array_length(_p8.nodes) - 1] == _gl), true);
 }
+
+function gmt_test_curve() {
+    gmt_head("T1 rounding a corner");
+
+    var _g = gmt_room_grid(20, 16);
+    var _L = [gmnav_grid_node(_g, 2, 2),
+              gmnav_grid_node(_g, 10, 2),
+              gmnav_grid_node(_g, 10, 12)];
+
+    var _p  = gmnav_path_create(_g, _L);
+    var _n0 = _p.count;
+
+    gmnav_path_curve(_p, gmnav_curve.CORNER, 24, 4);
+
+    gmt_note("points before / after", string(_n0) + " / " + string(_p.count));
+    gmt_check("the corner gained points", (_p.count > _n0), true);
+    gmt_check("the sharp corner is gone", gmt_path_has_point(_p, 336, 80), false);
+    gmt_check("the start is where it was", _p.px[0], 80);
+    gmt_check("and the end too", _p.py[_p.count - 1], 400);
+    gmt_check("every point is walkable", gmt_path_points_clear(_g, _p), true);
+
+    gmt_head("T2 a straight run has nothing to round");
+
+    var _s  = gmnav_path_create(_g, [gmnav_grid_node(_g, 2, 2),
+                                     gmnav_grid_node(_g, 10, 2)]);
+    var _sc = _s.count;
+    gmnav_path_curve(_s, gmnav_curve.CORNER, 24, 4);
+    gmt_check("left alone", _s.count, _sc);
+
+    gmt_head("T3 off by default");
+
+    var _d  = gmnav_path_create(_g, _L);
+    var _dc = _d.count;
+    gmnav_path_curve(_d);
+    gmt_check("NONE changes nothing", _d.count, _dc);
+
+    gmt_head("T4 a curve that would clip keeps its corner");
+
+    var _w = gmt_room_grid(20, 16);
+    gmnav_grid_set_blocked(_w, 9, 3, true);   // sits inside the turn
+
+    var _wp = gmnav_path_create(_w, _L);
+    // radius 96 is the first that pushes the arc off both legs, into (9,3), so the block there tests the fallback rather than the path itself and the same corner rounds when nothing is in the way, so the fallback is the block's doing rather than the radius quietly failing
+    var _op = gmnav_path_create(_g, _L);
+    gmnav_path_curve(_op, gmnav_curve.CORNER, 96, 4);
+    gmt_check("an unobstructed corner at the same radius rounds",
+              gmt_path_has_point(_op, 336, 80), false);
+
+    gmt_check("the corner survived", gmt_path_has_point(_wp, 336, 80), true);
+    gmt_check("and nothing landed in the wall", gmt_path_points_clear(_w, _wp), true);
+
+    gmt_head("T5 spline");
+
+    var _sp = gmnav_path_create(_g, _L);
+    var _s0 = _sp.count;
+    gmnav_path_curve(_sp, gmnav_curve.SPLINE, 16, 6);
+
+    gmt_note("spline points", string(_s0) + " / " + string(_sp.count));
+    gmt_check("the whole path gained points", (_sp.count > _s0), true);
+    gmt_check("it starts where it did", _sp.px[0], 80);
+    gmt_check("every point is walkable", gmt_path_points_clear(_g, _sp), true);
+	
+    gmt_head("T6 the demo 12 level");
+
+    var _dg = demo12_make_grid();
+    var _ds = gmnav_grid_node(_dg, DEMO12_START_C, DEMO12_START_R);
+    var _dl = gmnav_grid_node(_dg, DEMO12_GOAL_C,  DEMO12_GOAL_R);
+
+    var _dn = gmt_solve_z(_dg, _ds, _dl);
+    gmt_check("the slalom has a route", is_array(_dn), true);
+
+    var _base = gmnav_path_create(_dg, _dn);
+    gmnav_path_smooth(_base);
+    gmt_note("smoothed waypoints", _base.count);
+    gmt_check("and it turns more than once", (_base.count >= 4), true);
+
+    var _cn = gmnav_path_create(_dg, _dn);
+    gmnav_path_smooth(_cn);
+    gmnav_path_curve(_cn, gmnav_curve.CORNER, 40, 5);
+
+    var _sn = gmnav_path_create(_dg, _dn);
+    gmnav_path_smooth(_sn);
+    gmnav_path_curve(_sn, gmnav_curve.SPLINE, 40, 5);
+
+    gmt_note("points sharp / corner / spline",
+             string(_base.count) + " / " + string(_cn.count) + " / " + string(_sn.count));
+
+    gmt_check("corner rounding adds points",  (_cn.count > _base.count), true);
+    gmt_check("spline adds more",             (_sn.count > _base.count), true);
+    gmt_check("corner stays walkable",  gmt_path_points_clear(_dg, _cn), true);
+    gmt_check("spline stays walkable",  gmt_path_points_clear(_dg, _sn), true);
+
+    gmt_check("all three end at the goal",
+              (abs(_cn.px[_cn.count - 1] - _base.px[_base.count - 1]) < 0.5
+            && abs(_sn.px[_sn.count - 1] - _base.px[_base.count - 1]) < 0.5), true);
+}

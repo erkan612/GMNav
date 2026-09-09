@@ -67,6 +67,12 @@ enum gmnav_bake {
     DONE
 }
 
+enum gmnav_curve {
+    NONE,								// leave the polyline as it is
+    CORNER,								// round each turn to a radius, straight legs untouched
+    SPLINE								// curve the whole path through its waypoints
+}
+
 #macro GMNAV_FLAG_BLOCKED   0x0001
 #macro GMNAV_FLAG_ONEWAY    0x0002		// [[EXPERIMENTAL]]
 #macro GMNAV_FLAG_LINK      0x0004		// [[RESERVED]] - endpoint of an off-graph link (jump, ladder, door)

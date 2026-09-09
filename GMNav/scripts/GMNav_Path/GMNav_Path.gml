@@ -407,3 +407,175 @@ function __gmnav_path_same_layer(_grid, _nodes, _i, _j) {
     }
     return true;
 }
+
+function __gmnav_curve_clear(_grid, _x1, _y1, _x2, _y2, _layer, _body) { // is this world segment walkable, body included
+    var _a = gmnav_grid_world_to_node(_grid, _x1, _y1, _layer);
+    var _b = gmnav_grid_world_to_node(_grid, _x2, _y2, _layer);
+
+    if (_a == GMNAV_NO_NODE || _b == GMNAV_NO_NODE) return false;
+    if (gmnav_grid_is_blocked(_grid, _a) || gmnav_grid_is_blocked(_grid, _b)) return false;
+
+    if (!gmnav_grid_line_clear(_grid,
+            gmnav_grid_col(_grid, _a), gmnav_grid_row(_grid, _a),
+            gmnav_grid_col(_grid, _b), gmnav_grid_row(_grid, _b))) return false;
+
+    if (_body <= 0) return true;
+
+    // the body sweeps wider than the line, so the flanks are tested too
+    var _dx = _x2 - _x1;
+    var _dy = _y2 - _y1;
+    var _d  = point_distance(0, 0, _dx, _dy);
+    if (_d <= 0) return true;
+
+    var _nx = (-_dy / _d) * _body;
+    var _ny = ( _dx / _d) * _body;
+
+    for (var _s = -1; _s <= 1; _s += 2) {
+        var _p1 = gmnav_grid_world_to_node(_grid, _x1 + _nx * _s, _y1 + _ny * _s, _layer);
+        var _p2 = gmnav_grid_world_to_node(_grid, _x2 + _nx * _s, _y2 + _ny * _s, _layer);
+
+        if (_p1 == GMNAV_NO_NODE || _p2 == GMNAV_NO_NODE) return false;
+        if (gmnav_grid_is_blocked(_grid, _p1) || gmnav_grid_is_blocked(_grid, _p2)) return false;
+    }
+    return true;
+}
+
+function gmnav_path_curve(_path, _mode = gmnav_curve.NONE, _radius = 16,
+                          _samples = 4, _body = 0, _min_turn = 5) {
+    if (_mode == gmnav_curve.NONE) return;
+    if (_path.count < 3) return;
+
+    var _grid = _path.grid;
+    var _m    = _grid.layout.mode;
+
+    // the validator walks cells, so the same layouts smoothing refuses are refused here rather than returning a confidently wrong curve
+    if (_m != gmnav_layout.ORTHO && _m != gmnav_layout.ISO_DIAMOND) return;
+
+    var _layer = 0;
+    if (array_length(_path.nodes) > 0) {
+        _layer = max(0, gmnav_grid_node_layer(_grid, _path.nodes[0]));
+    }
+
+    var _px = _path.px;
+    var _py = _path.py;
+    var _n  = _path.count;
+
+    var _ox = [_px[0]];
+    var _oy = [_py[0]];
+
+    if (_mode == gmnav_curve.CORNER) {
+        for (var i = 1; i < _n - 1; i++) {
+            var _ax = _px[i] - _px[i - 1], _ay = _py[i] - _py[i - 1];
+            var _bx = _px[i + 1] - _px[i], _by = _py[i + 1] - _py[i];
+
+            var _la = point_distance(0, 0, _ax, _ay);
+            var _lb = point_distance(0, 0, _bx, _by);
+
+            if (_la <= 0 || _lb <= 0) continue;
+
+            var _turn = abs(angle_difference(point_direction(0, 0, _bx, _by),
+                                             point_direction(0, 0, _ax, _ay)));
+
+            // a joint that is nearly straight is not a corner worth rounding
+            if (_turn < _min_turn) {
+                array_push(_ox, _px[i]);
+                array_push(_oy, _py[i]);
+                continue;
+            }
+
+            // clamped to half a leg, so two corners never eat the same segment
+            var _r = min(_radius, _la * 0.5, _lb * 0.5);
+
+            var _sx = _px[i] - (_ax / _la) * _r;
+            var _sy = _py[i] - (_ay / _la) * _r;
+            var _ex = _px[i] + (_bx / _lb) * _r;
+            var _ey = _py[i] + (_by / _lb) * _r;
+
+            var _arc = [];
+            var _ok  = true;
+
+            for (var s = 0; s <= _samples; s++) {
+                var _t = s / _samples;
+                var _u = 1 - _t;
+
+                var _qx = _u * _u * _sx + 2 * _u * _t * _px[i] + _t * _t * _ex;
+                var _qy = _u * _u * _sy + 2 * _u * _t * _py[i] + _t * _t * _ey;
+
+                array_push(_arc, [_qx, _qy]);
+            }
+
+            for (var k = 0; k < array_length(_arc) - 1 && _ok; k++) {
+                if (!__gmnav_curve_clear(_grid, _arc[k][0], _arc[k][1],
+                                                _arc[k + 1][0], _arc[k + 1][1],
+                                                _layer, _body)) _ok = false;
+            }
+
+            if (!_ok) { // a curve that clips is worse than a corner, so the corner stands
+                array_push(_ox, _px[i]);
+                array_push(_oy, _py[i]);
+                continue;
+            }
+
+            for (var q = 0; q < array_length(_arc); q++) {
+                array_push(_ox, _arc[q][0]);
+                array_push(_oy, _arc[q][1]);
+            }
+        }
+    } else {
+        for (var j = 0; j < _n - 1; j++) {
+            var _p0 = max(0, j - 1);
+            var _p3 = min(_n - 1, j + 2);
+
+            var _seg = [];
+            var _fine = true;
+
+            for (var t2 = 1; t2 <= _samples; t2++) {
+                var _tt = t2 / _samples;
+                var _t2 = _tt * _tt;
+                var _t3 = _t2 * _tt;
+
+                // Catmull-Rom
+                var _cx = 0.5 * ((2 * _px[j])
+                        + (-_px[_p0] + _px[j + 1]) * _tt
+                        + (2 * _px[_p0] - 5 * _px[j] + 4 * _px[j + 1] - _px[_p3]) * _t2
+                        + (-_px[_p0] + 3 * _px[j] - 3 * _px[j + 1] + _px[_p3]) * _t3);
+
+                var _cy = 0.5 * ((2 * _py[j])
+                        + (-_py[_p0] + _py[j + 1]) * _tt
+                        + (2 * _py[_p0] - 5 * _py[j] + 4 * _py[j + 1] - _py[_p3]) * _t2
+                        + (-_py[_p0] + 3 * _py[j] - 3 * _py[j + 1] + _py[_p3]) * _t3);
+
+                array_push(_seg, [_cx, _cy]);
+            }
+
+            var _lx = _px[j], _ly = _py[j];
+            for (var w = 0; w < array_length(_seg) && _fine; w++) {
+                if (!__gmnav_curve_clear(_grid, _lx, _ly, _seg[w][0], _seg[w][1],
+                                         _layer, _body)) _fine = false;
+                _lx = _seg[w][0];
+                _ly = _seg[w][1];
+            }
+
+            if (_fine) {
+                for (var v = 0; v < array_length(_seg); v++) {
+                    array_push(_ox, _seg[v][0]);
+                    array_push(_oy, _seg[v][1]);
+                }
+            } else {
+                array_push(_ox, _px[j + 1]);
+                array_push(_oy, _py[j + 1]);
+            }
+        }
+    }
+
+    if (_mode == gmnav_curve.CORNER) {
+        array_push(_ox, _px[_n - 1]);
+        array_push(_oy, _py[_n - 1]);
+    }
+
+    _path.px    = _ox;
+    _path.py    = _oy;
+    _path.count = array_length(_ox);
+
+    __gmnav_path_measure(_path);
+}

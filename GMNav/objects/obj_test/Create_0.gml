@@ -30,6 +30,7 @@ gmt_test_demo9_level();
 gmt_test_overlay_coverage();
 gmt_test_edit_scope();
 gmt_test_smooth_headings();
+gmt_test_curve();
 
 gmt_head("D scheduler (running)");
 

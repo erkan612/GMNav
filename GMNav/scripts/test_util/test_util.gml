@@ -853,3 +853,19 @@ function gmt_path_headings_ok(_path, _dirs, _eps = 0.001) { // does every segmen
     }
     return true;
 }
+
+function gmt_path_points_clear(_grid, _path, _layer = 0) { // is every point on this path standing somewhere walkable
+    for (var i = 0; i < _path.count; i++) {
+        var _n = gmnav_grid_world_to_node(_grid, _path.px[i], _path.py[i], _layer);
+        if (_n == GMNAV_NO_NODE) return false;
+        if (gmnav_grid_is_blocked(_grid, _n)) return false;
+    }
+    return true;
+}
+
+function gmt_path_has_point(_path, _x, _y, _eps = 0.5) {
+    for (var i = 0; i < _path.count; i++) {
+        if (abs(_path.px[i] - _x) < _eps && abs(_path.py[i] - _y) < _eps) return true;
+    }
+    return false;
+}

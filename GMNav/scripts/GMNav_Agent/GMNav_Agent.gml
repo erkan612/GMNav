@@ -36,6 +36,10 @@ function gmnav_agent_create(_sched, _x, _y, _radius = 8, _speed = 2) {
         has_goal   : false,
         repath_at  : 0,             // guard against repath spam
         repath_gap : 20,
+		
+        curve_mode   : gmnav_curve.NONE,
+        curve_radius : 16,
+        curve_steps  : 4,
 
         avoid_str  : 1.0,           // 0 disables local avoidance
         avoid_range: 3.0            // multiples of radius
@@ -172,6 +176,8 @@ function __gmnav_agent_collect_ticket(_agent) {
                           _agent.radius, _agent.headings);
         gmnav_path_anchor_start(_p, _agent.x, _agent.y);
         gmnav_path_anchor_end(_p, _agent.goal_x, _agent.goal_y);
+        gmnav_path_curve(_p, _agent.curve_mode, _agent.curve_radius,
+                         _agent.curve_steps, _agent.radius);
         _p.stale = _t.stale;
 
         _agent.path   = _p;
