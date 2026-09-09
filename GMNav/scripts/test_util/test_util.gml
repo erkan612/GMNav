@@ -825,3 +825,31 @@ function gmt_agent_grid() { // a plain open room with a clear row 1 to walk alon
     gmnav_grid_fill_blocked(_g, 19, 0, 19, 15, true);
     return _g;
 }
+
+function gmt_room_grid(_w, _h, _dirs = gmnav_neighbours.EIGHT) { // an open room with square tiles, walled at the border
+    var _g = gmnav_grid_create(_w, _h,
+                 gmnav_layout_create(gmnav_layout.ORTHO, 32, 32, _dirs));
+
+    gmnav_grid_fill_blocked(_g, 0, 0, _w - 1, 0, true);
+    gmnav_grid_fill_blocked(_g, 0, _h - 1, _w - 1, _h - 1, true);
+    gmnav_grid_fill_blocked(_g, 0, 0, 0, _h - 1, true);
+    gmnav_grid_fill_blocked(_g, _w - 1, 0, _w - 1, _h - 1, true);
+
+    return _g;
+}
+
+function gmt_path_headings_ok(_path, _dirs, _eps = 0.001) { // does every segment lie on a heading the model allows. Square tiles only, so a cell diagonal is a true 45
+    for (var i = 0; i < _path.count - 1; i++) {
+        var _dx = abs(_path.px[i + 1] - _path.px[i]);
+        var _dy = abs(_path.py[i + 1] - _path.py[i]);
+
+        if (_dx < _eps && _dy < _eps) continue;
+
+        if (_dirs == 4) {
+            if (_dx >= _eps && _dy >= _eps) return false;
+        } else {
+            if (_dx >= _eps && _dy >= _eps && abs(_dx - _dy) >= _eps) return false;
+        }
+    }
+    return true;
+}

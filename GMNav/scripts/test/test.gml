@@ -3253,3 +3253,94 @@ function gmt_test_edit_scope() {
     gmnav_agent_update(_a);
     gmt_check("an edit on the route is not", (_a.ticket != undefined), true);
 }
+
+function gmt_test_smooth_headings() {
+    gmt_head("M1 smoothing ignores the movement model");
+
+    var _g = gmt_room_grid(20, 16, gmnav_neighbours.FOUR);
+
+    var _nodes = gmt_solve_z(_g, gmnav_grid_node(_g, 1, 1),
+                                 gmnav_grid_node(_g, 18, 14));
+    gmt_check("a route exists", is_array(_nodes), true);
+
+    var _raw = gmnav_path_create(_g, _nodes);
+    gmt_note("raw waypoints", _raw.count);
+    gmt_check("the search obeys the model", gmt_path_headings_ok(_raw, 4), true);
+
+    // this is the bug, measured rather than read: the constraint the search kept is thrown away the moment the path is smoothed
+    var _p = gmnav_path_create(_g, _nodes);
+    gmnav_path_smooth(_p);
+    gmt_note("smoothed waypoints", _p.count);
+    gmt_check("smoothing does not", gmt_path_headings_ok(_p, 4), false);
+
+    gmt_head("M2 the constraint is honoured when asked for");
+
+    var _c4 = gmnav_path_create(_g, _nodes);
+    gmnav_path_smooth(_c4, undefined, undefined, 0, 4);
+
+    gmt_note("constrained waypoints", _c4.count);
+    gmt_check("every segment is cardinal", gmt_path_headings_ok(_c4, 4), true);
+    gmt_check("it still reaches the goal",
+              _c4.nodes[array_length(_c4.nodes) - 1],
+              _nodes[array_length(_nodes) - 1]);
+
+    var _c8 = gmnav_path_create(_g, _nodes);
+    gmnav_path_smooth(_c8, undefined, undefined, 0, 8);
+
+    gmt_note("eight way waypoints", _c8.count);
+    gmt_check("eight allows a diagonal", gmt_path_headings_ok(_c8, 8), true);
+
+    gmt_head("M3 off by default, so nothing already shipped moves");
+
+    var _g8 = gmt_room_grid(20, 16);
+    var _n8 = gmt_solve_z(_g8, gmnav_grid_node(_g8, 1, 1),
+                               gmnav_grid_node(_g8, 18, 14));
+
+    var _a = gmnav_path_create(_g8, _n8);
+    gmnav_path_smooth(_a);
+
+    var _b = gmnav_path_create(_g8, _n8);
+    gmnav_path_smooth(_b, undefined, undefined, 0, 0);
+
+    gmt_check("a default smooth and an explicit off agree", _b.count, _a.count);
+	
+    gmt_head("M4 the demo 11 level");
+
+    var _gf = demo11_make_grid(gmnav_neighbours.EIGHT);
+    var _g4 = demo11_make_grid(gmnav_neighbours.FOUR);
+    var _g8 = demo11_make_grid(gmnav_neighbours.EIGHT);
+
+    var _st = gmnav_grid_node(_gf, DEMO11_START_C, DEMO11_START_R);
+    var _gl = gmnav_grid_node(_gf, DEMO11_GOAL_C,  DEMO11_GOAL_R);
+
+    var _nf = gmt_solve_z(_gf, _st, _gl);
+    var _n4 = gmt_solve_z(_g4, _st, _gl);
+    var _n8 = gmt_solve_z(_g8, _st, _gl);
+
+    gmt_check("the free route exists",     is_array(_nf), true);
+    gmt_check("the cardinal route exists", is_array(_n4), true);
+    gmt_check("the diagonal route exists", is_array(_n8), true);
+
+    var _pf = gmnav_path_create(_gf, _nf);
+    gmnav_path_smooth(_pf);
+
+    var _p4 = gmnav_path_create(_g4, _n4);
+    gmnav_path_smooth(_p4, undefined, undefined, 0, 4);
+
+    var _p8 = gmnav_path_create(_g8, _n8);
+    gmnav_path_smooth(_p8, undefined, undefined, 0, 8);
+
+    gmt_note("waypoints free / four / eight",
+             string(_pf.count) + " / " + string(_p4.count) + " / " + string(_p8.count));
+
+    // if this passed, the free agent would look the same as the eight way one and the demo would show nothing
+    gmt_check("the free path takes an angle no model allows",
+              gmt_path_headings_ok(_pf, 8), false);
+    gmt_check("the cardinal path stays cardinal",  gmt_path_headings_ok(_p4, 4), true);
+    gmt_check("the diagonal path stays on eight",  gmt_path_headings_ok(_p8, 8), true);
+
+    gmt_check("all three arrive",
+              (_pf.nodes[array_length(_pf.nodes) - 1] == _gl
+            && _p4.nodes[array_length(_p4.nodes) - 1] == _gl
+            && _p8.nodes[array_length(_p8.nodes) - 1] == _gl), true);
+}

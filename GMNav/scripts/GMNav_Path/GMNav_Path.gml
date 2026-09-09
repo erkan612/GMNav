@@ -13,9 +13,9 @@ function gmnav_path_create(_grid, _nodes) {
     return _p;
 }
 
-function gmnav_path_get_count(_path) { return _path.count; }
-function gmnav_path_get_x(_path, _i) { return _path.px[_i]; }
-function gmnav_path_get_y(_path, _i) { return _path.py[_i]; }
+function gmnav_path_get_count(_path)  { return _path.count;  }
+function gmnav_path_get_x(_path, _i)  { return _path.px[_i]; }
+function gmnav_path_get_y(_path, _i)  { return _path.py[_i]; }
 function gmnav_path_get_length(_path) { return _path.length; }
 
 function gmnav_path_anchor_start(_path, _x, _y) {
@@ -83,8 +83,25 @@ function gmnav_grid_node_line_clear(_grid, _a, _b) {
                                  gmnav_grid_col(_grid, _b), gmnav_grid_row(_grid, _b));
 }
 
+function __gmnav_path_heading_ok(_grid, _a, _b, _dirs) { // may a unit travel this segment in one straight move
+    if (_dirs <= 0) return true;
+
+    var _dc = gmnav_grid_col(_grid, _b) - gmnav_grid_col(_grid, _a);
+    var _dr = gmnav_grid_row(_grid, _b) - gmnav_grid_row(_grid, _a);
+
+    if (_dc == 0 && _dr == 0) return true;
+
+    // cardinal is legal under every count
+    if (_dc == 0 || _dr == 0) return true;
+
+    // and a true diagonal once diagonals exist at all
+    if (_dirs >= 8) return (abs(_dc) == abs(_dr));
+
+    return false;
+}
+
 function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
-                           _radius = 0) {
+                           _radius = 0, _headings = 0) {
     var _grid = _path.grid;
     var _mode = _grid.layout.mode;
 
@@ -101,6 +118,8 @@ function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
         var _best = _i + 1;
 
         for (var _j = _n - 1; _j > _i + 1; _j--) {
+            if (!__gmnav_path_heading_ok(_grid, _src[_i], _src[_j], _headings)) continue;
+
             if (__gmnav_path_same_layer(_grid, _src, _i, _j)
             &&  __gmnav_path_corridor_ok(_grid, _src[_i], _src[_j],
                                          _max_climb, _max_drop, _radius)) {
