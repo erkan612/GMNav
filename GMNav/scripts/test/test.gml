@@ -3343,6 +3343,48 @@ function gmt_test_smooth_headings() {
               (_pf.nodes[array_length(_pf.nodes) - 1] == _gl
             && _p4.nodes[array_length(_p4.nodes) - 1] == _gl
             && _p8.nodes[array_length(_p8.nodes) - 1] == _gl), true);
+	
+    gmt_head("M5 a constrained smooth straightens the staircase");
+
+    // the plain room from M1, where constrained smoothing kept 27 of 31
+    var _rl = gmnav_path_create(_g, _nodes);
+    gmnav_path_smooth(_rl, undefined, undefined, 0, 4);
+
+    gmt_note("room waypoints", _rl.count);
+    gmt_check("the staircase collapses to a few legs", (_rl.count <= 6), true);
+    gmt_check("and every leg is still cardinal", gmt_path_headings_ok(_rl, 4), true);
+    gmt_check("no waypoint sits in a wall", gmt_path_points_clear(_g, _rl), true);
+    gmt_check("it still ends at the goal",
+              _rl.nodes[array_length(_rl.nodes) - 1],
+              _nodes[array_length(_nodes) - 1]);
+
+    // and on demo 11's level, which is what prompted this
+    var _d4 = gmnav_path_create(_g4, _n4);
+    gmnav_path_smooth(_d4, undefined, undefined, 0, 4);
+
+    gmt_note("demo 11 four way waypoints", _d4.count);
+    gmt_check("demo 11 straightens too", (_d4.count <= 10), true);
+    gmt_check("still cardinal there", gmt_path_headings_ok(_d4, 4), true);
+    gmt_check("still clear there", gmt_path_points_clear(_g4, _d4), true);
+	
+    gmt_head("M6 two legs must never beat one");
+
+    var _df = gmnav_path_create(_gf, _nf);
+    gmnav_path_smooth(_df);
+
+    var _e8 = gmnav_path_create(_g8, _n8);
+    gmnav_path_smooth(_e8, undefined, undefined, 0, 8);
+
+    gmt_note("length free / eight / four",
+             string_format(gmnav_path_get_length(_df), 1, 1) + " / "
+           + string_format(gmnav_path_get_length(_e8), 1, 1) + " / "
+           + string_format(gmnav_path_get_length(_d4), 1, 1));
+
+    // a square L where a diagonal was available is the failure this catches
+    gmt_check("eight stays close to the free route",
+              (gmnav_path_get_length(_e8) <= gmnav_path_get_length(_df) * 1.10), true);
+    gmt_check("and beats the cardinal one",
+              (gmnav_path_get_length(_e8) < gmnav_path_get_length(_d4)), true);
 }
 
 function gmt_test_curve() {

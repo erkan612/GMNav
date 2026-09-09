@@ -100,6 +100,49 @@ function __gmnav_path_heading_ok(_grid, _a, _b, _dirs) { // may a unit travel th
     return false;
 }
 
+function __gmnav_path_two_leg(_grid, _a, _b, _dirs, _mc, _md, _rad) { // can a to b be walked as two legal legs, and if so where is the corner
+    if (_a >= _grid.count || _b >= _grid.count) return GMNAV_NO_NODE;
+
+    var _ac = gmnav_grid_col(_grid, _a), _ar = gmnav_grid_row(_grid, _a);
+    var _bc = gmnav_grid_col(_grid, _b), _br = gmnav_grid_row(_grid, _b);
+
+    var _dc = _bc - _ac;
+    var _dr = _br - _ar;
+
+    if (_dc == 0 || _dr == 0) return GMNAV_NO_NODE;   // one leg already covers it
+
+    var _try = [];
+
+    if (_dirs >= 8) {
+        var _m  = min(abs(_dc), abs(_dr));
+        var _sc = sign(_dc);
+        var _sr = sign(_dr);
+
+        array_push(_try, gmnav_grid_node(_grid, _ac + _sc * _m, _ar + _sr * _m));
+        array_push(_try, gmnav_grid_node(_grid, _bc - _sc * _m, _br - _sr * _m));
+    }
+
+    // both orders, since a wall may leave only one of them viable
+    array_push(_try, gmnav_grid_node(_grid, _bc, _ar));
+    array_push(_try, gmnav_grid_node(_grid, _ac, _br));
+
+    for (var k = 0; k < array_length(_try); k++) {
+        var _c = _try[k];
+
+        if (_c == GMNAV_NO_NODE || _c == _a || _c == _b) continue;
+        if (gmnav_grid_is_blocked(_grid, _c)) continue;
+
+        if (!__gmnav_path_heading_ok(_grid, _a, _c, _dirs)) continue;
+        if (!__gmnav_path_heading_ok(_grid, _c, _b, _dirs)) continue;
+
+        if (!__gmnav_path_corridor_ok(_grid, _a, _c, _mc, _md, _rad)) continue;
+        if (!__gmnav_path_corridor_ok(_grid, _c, _b, _mc, _md, _rad)) continue;
+
+        return _c;
+    }
+    return GMNAV_NO_NODE;
+}
+
 function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
                            _radius = 0, _headings = 0) {
     var _grid = _path.grid;
@@ -115,18 +158,35 @@ function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
     var _i   = 0;
 
     while (_i < _n - 1) {
-        var _best = _i + 1;
+        var _best   = _i + 1;
+        var _corner = GMNAV_NO_NODE;
 
         for (var _j = _n - 1; _j > _i + 1; _j--) {
-            if (!__gmnav_path_heading_ok(_grid, _src[_i], _src[_j], _headings)) continue;
+            if (!__gmnav_path_same_layer(_grid, _src, _i, _j)) continue;
 
-            if (__gmnav_path_same_layer(_grid, _src, _i, _j)
+            if (__gmnav_path_heading_ok(_grid, _src[_i], _src[_j], _headings)
             &&  __gmnav_path_corridor_ok(_grid, _src[_i], _src[_j],
                                          _max_climb, _max_drop, _radius)) {
                 _best = _j;
                 break;
             }
         }
+
+        if (_headings > 0 && _best == _i + 1) {
+            for (var _k = _n - 1; _k > _i + 1; _k--) {
+                if (!__gmnav_path_same_layer(_grid, _src, _i, _k)) continue;
+
+                var _c = __gmnav_path_two_leg(_grid, _src[_i], _src[_k], _headings,
+                                              _max_climb, _max_drop, _radius);
+                if (_c != GMNAV_NO_NODE) {
+                    _best   = _k;
+                    _corner = _c;
+                    break;
+                }
+            }
+        }
+
+        if (_corner != GMNAV_NO_NODE) array_push(_out, _corner);
 
         array_push(_out, _src[_best]);
         _i = _best;
