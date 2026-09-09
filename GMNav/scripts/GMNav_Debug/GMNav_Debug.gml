@@ -335,7 +335,7 @@ function gmnav_debug_draw_agent(_agent, _cfg = undefined) {
 }
 
 function gmnav_debug_draw_stats(_sched, _x = 8, _y = 8) {
-    var _s = "GMNav " + GMNAV_VERSION
+    var _s = "GMNav "
            + "\ndomain    " + ((_sched.domain == gmnav_domain.PLATFORM) ? "PLATFORM" : "GRID")
            + "\nbudget    " + string(_sched.budget)
            + "\nactive    " + string(_sched.last_active) + " / " + string(_sched.concurrent)
