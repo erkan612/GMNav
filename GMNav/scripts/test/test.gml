@@ -2531,3 +2531,429 @@ function gmt_test_demo8_level() {
     }
     gmt_check("all eight lanes climb", _lanes, 8);
 }
+
+function gmt_test_flowfield_overlay() {
+    gmt_head("F2 a field covers the overlay");
+
+    var _g    = gmt_bridge_level();
+    var _ov   = _g.overlay;
+    var _goal = gmnav_grid_node(_g, 5, 1);          // north side, above the road
+
+    var _deck = gmnav_overlay_node_at(_ov, 5, 5, 1);
+    var _far  = gmnav_grid_node(_g, 5, 10);         // south side, only reachable over the bridge
+
+    var _f = gmnav_flowfield_create(_g);
+    gmt_check("built", gmnav_flowfield_build(_f, _goal), true);
+
+    gmt_check("the field sizes to the overlay",
+              array_length(_f.dist), _g.count + gmnav_overlay_count(_ov));
+    gmt_check("next sizes with it", array_length(_f.next), array_length(_f.dist));
+
+    gmt_check("the deck is reachable",     (_f.dist[_deck] < GMNAV_INF), true);
+    gmt_check("the far side is reachable", (_f.dist[_far]  < GMNAV_INF), true);
+    gmt_note("deck dist",     string_format(_f.dist[_deck], 1, 4));
+    gmt_note("far side dist", string_format(_f.dist[_far],  1, 4));
+
+    gmt_check("the road below the deck is a separate cell",
+              (_f.dist[gmnav_grid_node(_g, 5, 5)] != _f.dist[_deck]), true);
+
+    gmt_head("F2b without the bridge there is no field either");
+
+    var _p  = gmnav_grid_create(12, 12, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+    gmnav_grid_fill_blocked(_p, 0, 4, 11, 4, true);
+    gmnav_grid_fill_blocked(_p, 0, 6, 11, 6, true);
+
+    var _pf = gmnav_flowfield_create(_p);
+    gmnav_flowfield_build(_pf, gmnav_grid_node(_p, 5, 1));
+
+    gmt_check("the far side is cut off",
+              (_pf.dist[gmnav_grid_node(_p, 5, 10)] == GMNAV_INF), true);
+    gmt_check("so the bridge is what carries the field", true, true);
+
+    gmt_head("F2c the field descends across the layer change");
+
+    gmt_check("the far side walks home",
+              gmt_field_walks_to_goal(_g, _f, _far, _goal), true);
+    gmt_check("the deck walks home",
+              gmt_field_walks_to_goal(_g, _f, _deck, _goal), true);
+
+    gmt_check("the goal points nowhere", _f.next[_goal], GMNAV_NO_NODE);
+    gmt_check("the deck points somewhere", (_f.next[_deck] != GMNAV_NO_NODE), true);
+
+    var _step = _f.next[_far];
+    gmt_check("the far side steps to a real node",
+              (_step != GMNAV_NO_NODE && _step != _far), true);
+
+    gmt_head("F2d vectors exist on overlay nodes");
+
+    var _dx = _f.dirx[_deck];
+    var _dy = _f.diry[_deck];
+    gmt_check("the deck carries a direction",
+              (_dx != 0 || _dy != 0), true);
+    gmt_check_f("and it is normalised", point_distance(0, 0, _dx, _dy), 1.0, 0.001);
+
+    gmt_head("F2e sampling names a layer");
+
+    var _wd = gmnav_grid_node_to_world(_g, _deck);
+
+    gmt_check("layer 1 samples the deck",
+              gmnav_flowfield_is_reachable(_f, _wd[0], _wd[1], 1), true);
+    gmt_check_f("and reads the deck's own cost",
+                gmnav_flowfield_cost_at(_f, _wd[0], _wd[1], 1), _f.dist[_deck]);
+
+    var _sd = gmnav_flowfield_sample(_f, _wd[0], _wd[1], 1);
+    gmt_check("the deck's sample is not empty",
+              (_sd[0] != 0 || _sd[1] != 0), true);
+	
+    gmt_head("F2f a lifted deck points where it is drawn");
+
+    var _lg = gmt_bridge_level();
+    gmnav_grid_set_layer_lift(_lg, 24);
+
+    var _lov  = _lg.overlay;
+    var _lgoal = gmnav_grid_node(_lg, 5, 1);
+
+    var _foot = gmnav_grid_node(_lg, 5, 3);              // the road cell at the foot of the stair
+    var _d1   = gmnav_overlay_node_at(_lov, 5, 4, 1);    // the deck cell it climbs onto
+
+    var _lf = gmnav_flowfield_create(_lg);
+    gmnav_flowfield_build(_lf, _lgoal);
+
+    // the deck is drawn a lift above its own cell, the road is not
+    var _pf = gmnav_grid_node_to_world(_lg, _foot);
+    var _pd = gmnav_grid_node_to_world(_lg, _d1);
+
+    // one row apart is 32px, the lift raises the deck by 24, so it still draws 8 below the foot
+    gmt_check("the lift closes all but 8px of the row gap", _pf[1] - _pd[1], -8);
+
+    // the deck's own step is back down to the foot, so its vector must point down the stair
+    gmt_check("the deck steps to the foot", _lf.next[_d1], _foot);
+
+    var _dv = [_lf.dirx[_d1], _lf.diry[_d1]];
+    gmt_check("the deck's vector points up the screen to the foot", (_dv[1] < 0), true);
+    gmt_check_f("and it is normalised", point_distance(0, 0, _dv[0], _dv[1]), 1.0, 0.001);
+
+    // the cell offsets are identical, so only the lift can produce that vector
+    gmt_check("the two cells share a column",
+              gmnav_grid_col(_lg, _foot), gmnav_grid_col(_lg, _d1));
+    gmt_check("and sit one row apart",
+              gmnav_grid_row(_lg, _d1) - gmnav_grid_row(_lg, _foot), 1);
+
+    gmt_note("deck vector", string_format(_dv[0], 1, 3) + ", " + string_format(_dv[1], 1, 3));
+	
+    gmt_head("F2g a blocked deck carries no field");
+
+    var _bg   = gmt_bridge_level();
+    var _bov  = _bg.overlay;
+    var _bgoal = gmnav_grid_node(_bg, 5, 1);
+    var _bfar  = gmnav_grid_node(_bg, 5, 10);
+    var _bmid  = gmnav_overlay_node_at(_bov, 5, 5, 1);
+
+    var _bf = gmnav_flowfield_create(_bg);
+    gmnav_flowfield_build(_bf, _bgoal);
+    gmt_check("the far side starts reachable", (_bf.dist[_bfar] < GMNAV_INF), true);
+
+    // collapse the middle span, the documented flow being a re-finish afterwards
+    gmnav_overlay_set_blocked(_bov, _bmid, true);
+    gmnav_overlay_finish(_bov);
+
+    var _bf2 = gmnav_flowfield_create(_bg);
+    gmnav_flowfield_build(_bf2, _bgoal);
+
+    gmt_check("the collapsed span is unreachable", (_bf2.dist[_bmid] == GMNAV_INF), true);
+    gmt_check("and the far side is cut off",       (_bf2.dist[_bfar] == GMNAV_INF), true);
+    gmt_check("the north bank still carries the field",
+              (_bf2.dist[gmnav_grid_node(_bg, 8, 2)] < GMNAV_INF), true);
+    gmt_check("the collapsed span points nowhere", _bf2.next[_bmid], GMNAV_NO_NODE);
+
+    gmnav_overlay_set_blocked(_bov, _bmid, false);
+    gmnav_overlay_finish(_bov);
+
+    var _bf3 = gmnav_flowfield_create(_bg);
+    gmnav_flowfield_build(_bf3, _bgoal);
+    gmt_check("repairing the span restores the crossing",
+              (_bf3.dist[_bfar] < GMNAV_INF), true);
+
+    gmt_head("F2h a blocked deck is refused without a rebuild");
+
+    var _hg   = gmt_bridge_level();
+    var _hov  = _hg.overlay;
+
+    // a second, independent bridge, so there is something left to lose
+    var _e1 = gmnav_overlay_add(_hov, 9, 4, 1);
+    var _e2 = gmnav_overlay_add(_hov, 9, 5, 1);
+    var _e3 = gmnav_overlay_add(_hov, 9, 6, 1);
+    gmnav_overlay_link(_hov, gmnav_grid_node(_hg, 9, 3), _e1, gmnav_link.STAIR, true);
+    gmnav_overlay_link(_hov, _e3, gmnav_grid_node(_hg, 9, 7), gmnav_link.STAIR, true);
+    gmnav_overlay_finish(_hov);
+
+    var _hmid = gmnav_overlay_node_at(_hov, 5, 5, 1);
+    var _hgoal = gmnav_grid_node(_hg, 5, 1);
+    var _hfar  = gmnav_grid_node(_hg, 5, 10);
+
+    gmnav_overlay_set_blocked(_hov, _hmid, true);   // deliberately no finish
+
+    var _hf = gmnav_flowfield_create(_hg);
+    gmnav_flowfield_build(_hf, _hgoal);
+
+    gmt_check("the blocked span is refused", (_hf.dist[_hmid] == GMNAV_INF), true);
+    gmt_check("the second bridge still stands",
+              (_hf.dist[gmnav_overlay_node_at(_hov, 9, 5, 1)] < GMNAV_INF), true);
+    gmt_check("so the far bank is still reached", (_hf.dist[_hfar] < GMNAV_INF), true);
+    gmt_check("by the surviving crossing",
+              gmt_field_walks_to_goal(_hg, _hf, _hfar, _hgoal), true);
+
+    gmt_head("F2i capping and slicing reach the overlay");
+
+    var _cg2 = gmt_bridge_level();
+    var _cgoal = gmnav_grid_node(_cg2, 5, 1);
+    var _cdeck = gmnav_overlay_node_at(_cg2.overlay, 5, 5, 1);
+    var _cfar  = gmnav_grid_node(_cg2, 5, 10);
+
+    // the deck sits at 4 and the far side at 9, so a cap between them splits the two
+    var _capf = gmnav_flowfield_create(_cg2);
+    gmnav_flowfield_build(_capf, _cgoal, 6);
+
+    gmt_check("the deck is inside the cap",   (_capf.dist[_cdeck] < GMNAV_INF), true);
+    gmt_check("the far side is outside it",   (_capf.dist[_cfar]  == GMNAV_INF), true);
+
+    // the same field, built a slice at a time
+    var _slf = gmnav_flowfield_create(_cg2);
+    gmnav_flowfield_begin(_slf, _cgoal);
+
+    var _guard = 0;
+    while (_slf.state == gmnav_state.WORKING && _guard++ < 500) {
+        gmnav_flowfield_step(_slf, 3);
+    }
+
+    gmt_check("a sliced build finishes", _slf.state, gmnav_state.FOUND);
+    gmt_check_f("and agrees with the whole build on the deck",
+                _slf.dist[_cdeck], 4.0);
+    gmt_check_f("and on the far side", _slf.dist[_cfar], 9.0);
+    gmt_check("and its vectors reached the overlay",
+              (_slf.dirx[_cdeck] != 0 || _slf.diry[_cdeck] != 0), true);
+
+    gmt_head("F2j a goal on the deck");
+
+    var _dg = gmt_bridge_level();
+    var _ddeck = gmnav_overlay_node_at(_dg.overlay, 5, 5, 1);
+
+    var _df = gmnav_flowfield_create(_dg);
+    gmt_check("a field seeds on an overlay node",
+              gmnav_flowfield_build(_df, _ddeck), true);
+
+    gmt_check_f("the goal costs nothing", _df.dist[_ddeck], 0.0);
+    gmt_check("the goal points nowhere", _df.next[_ddeck], GMNAV_NO_NODE);
+
+    gmt_check("both banks reach a deck goal",
+              (_df.dist[gmnav_grid_node(_dg, 5, 1)]  < GMNAV_INF
+            && _df.dist[gmnav_grid_node(_dg, 5, 10)] < GMNAV_INF), true);
+
+    gmt_check("the far bank walks up onto it",
+              gmt_field_walks_to_goal(_dg, _df, gmnav_grid_node(_dg, 5, 10), _ddeck), true);
+
+    // two goals, one per bank, so the deck chooses whichever is nearer
+    var _mf = gmnav_flowfield_create(_dg);
+    gmt_check("a field seeds several goals",
+              gmnav_flowfield_build(_mf, [gmnav_grid_node(_dg, 5, 1),
+                                          gmnav_grid_node(_dg, 5, 10)]), true);
+
+    // the deck sits 4 from the north bank and 5 from the south, so seeding both leaves it on the north stair and drops the south bank from 9 to 0
+    gmt_check_f("the deck still takes the north stair", _mf.dist[_ddeck], 4.0);
+    gmt_check_f("and the south bank is now a goal itself",
+                _mf.dist[gmnav_grid_node(_dg, 5, 10)], 0.0);
+
+    gmt_head("F2k a profile does not reach overlay cells");
+
+    var _pg2 = gmt_bridge_level();
+    var _pdeck = gmnav_overlay_node_at(_pg2.overlay, 5, 5, 1);
+
+    var _lay2 = gmnav_costlayer_create(_pg2, "toll");
+    gmnav_costlayer_set(_lay2, 5, 5, 20);          // the road under the deck
+
+    var _prof = gmnav_costprofile_create(_pg2, "hauler");
+    gmnav_costprofile_add(_prof, _lay2, 1);
+    gmnav_costprofile_bake(_prof);
+
+    var _prf = gmnav_flowfield_create(_pg2, _prof);
+    gmnav_flowfield_build(_prf, gmnav_grid_node(_pg2, 5, 1));
+
+    gmt_check_f("the deck is unaffected by the layer below it",
+                _prf.dist[_pdeck], 4.0);
+    gmt_check("the road below it is dearer",
+              (_prf.dist[gmnav_grid_node(_pg2, 5, 5)] > 4.0), true);
+	
+    gmt_head("F2l the search agrees with the field about a collapsed span");
+
+    var _ag   = gmt_bridge_level();
+    var _aov  = _ag.overlay;
+
+    var _a1 = gmnav_overlay_add(_aov, 9, 4, 1);
+    var _a2 = gmnav_overlay_add(_aov, 9, 5, 1);
+    var _a3 = gmnav_overlay_add(_aov, 9, 6, 1);
+    gmnav_overlay_link(_aov, gmnav_grid_node(_ag, 9, 3), _a1, gmnav_link.STAIR, true);
+    gmnav_overlay_link(_aov, _a3, gmnav_grid_node(_ag, 9, 7), gmnav_link.STAIR, true);
+    gmnav_overlay_finish(_aov);
+
+    var _amid  = gmnav_overlay_node_at(_aov, 5, 5, 1);
+    var _anorth = gmnav_grid_node(_ag, 5, 1);
+    var _asouth = gmnav_grid_node(_ag, 5, 10);
+
+    gmt_check("both bridges carry a route first",
+              is_array(gmt_solve_z(_ag, _anorth, _asouth)), true);
+
+    gmnav_overlay_set_blocked(_aov, _amid, true);   // deliberately no finish
+
+    var _ap = gmt_solve_z(_ag, _anorth, _asouth);
+    gmt_check("a route survives on the other bridge", is_array(_ap), true);
+    gmt_check("and does not cross the collapsed span",
+              (array_get_index(_ap, _amid) < 0), true);
+
+    var _af = gmnav_flowfield_create(_ag);
+    gmnav_flowfield_build(_af, _anorth);
+    gmt_check("the field refuses the same span",
+              (_af.dist[_amid] == GMNAV_INF), true);
+    gmt_check("and reaches the same far bank",
+              (_af.dist[_asouth] < GMNAV_INF), true);
+
+    gmt_head("F2m reshaping a ramp marks dependents stale");
+
+    var _rg  = gmt_bridge_level();
+    var _rov = _rg.overlay;
+    gmnav_grid_set_layer_lift(_rg, 24);
+
+    var _rdeck = gmnav_overlay_node_at(_rov, 5, 5, 1);
+
+    var _rf = gmnav_flowfield_create(_rg);
+    gmnav_flowfield_build(_rf, gmnav_grid_node(_rg, 5, 1));
+    gmt_check("a fresh field is not stale", gmnav_flowfield_is_stale(_rf), false);
+
+    var _before = _rg.version;
+    gmt_check("setting the same offset changes nothing",
+              gmnav_overlay_set_offset(_rov, _rdeck, 0), true);
+    gmt_check("so the version holds", _rg.version, _before);
+    gmt_check("and the field is still fresh", gmnav_flowfield_is_stale(_rf), false);
+
+    gmt_check("a real offset is accepted",
+              gmnav_overlay_set_offset(_rov, _rdeck, -0.5), true);
+    gmt_check("it bumps the version", (_rg.version > _before), true);
+    gmt_check("so the field knows its vectors are out of date",
+              gmnav_flowfield_is_stale(_rf), true);
+	
+    gmt_head("F2n every per cell array tracks the count");
+
+    var _ng  = gmt_bridge_level();
+    var _nov = _ng.overlay;
+
+    gmt_check("offset is as long as the cell count",
+              array_length(_nov.offset), gmnav_overlay_count(_nov));
+    gmt_check("a new cell extends it too",
+              (gmnav_overlay_add(_nov, 2, 5, 1) != GMNAV_NO_NODE
+            && array_length(_nov.offset) == gmnav_overlay_count(_nov)), true);
+}
+
+function gmt_test_demo9_level() {
+    gmt_head("W1 the demo 9 level");
+
+    var _g  = demo9_make_grid();
+    var _ov = _g.overlay;
+
+    gmt_check("one layer", _ov.max_layer, 1);
+    gmt_note("deck cells", gmnav_overlay_count(_ov));
+
+    var _nd = demo9_deck_at(_g, DEMO9_CHASM_C1, DEMO9_NORTH_R);
+    var _sd = demo9_deck_at(_g, DEMO9_CHASM_C1, DEMO9_SOUTH_R);
+
+    gmt_check("the north crossing exists", (_nd != GMNAV_NO_NODE), true);
+    gmt_check("the south crossing exists", (_sd != GMNAV_NO_NODE), true);
+    gmt_check("the chasm is solid between them",
+              gmnav_grid_is_blocked(_g, gmnav_grid_node(_g, DEMO9_CHASM_C1, 10)), true);
+    gmt_check("the ground under the approach stays open",
+              gmnav_grid_is_blocked(_g,
+                  gmnav_grid_node(_g, DEMO9_CHASM_C1 - 2, DEMO9_NORTH_R)), false);
+
+    gmt_head("W2 the crossing climbs in even steps");
+
+    var _lo = DEMO9_CHASM_C1 - DEMO9_RAMP_LEN - 1;   // ground at the west foot
+    var _hi = DEMO9_CHASM_C2 + DEMO9_RAMP_LEN + 1;   // ground at the east foot
+
+    var _worst = 0;
+    var _prev  = 0;
+    var _prof  = [];
+
+    for (var _c = _lo + 1; _c < _hi; _c++) {
+        var _dn = demo9_deck_at(_g, _c, DEMO9_NORTH_R);
+        var _h  = demo9_height(_g, _dn);
+
+        _worst = max(_worst, abs(_h - _prev));
+        array_push(_prof, string_format(_h, 1, 2));
+        _prev = _h;
+    }
+    _worst = max(_worst, abs(_prev));   // and the step back down to ground
+
+    gmt_note("crossing profile", gmt_arr_str(_prof));
+    gmt_note("largest step in lifts", string_format(_worst, 1, 3));
+
+    gmt_check_f("the span sits a full lift up", demo9_height(_g, _nd), 1.0);
+    gmt_check("no step is more than a quarter lift",
+              (_worst <= (1 / DEMO9_RAMP_LEN) + 0.0001), true);
+
+    gmt_head("W3 the banks are joined only by the crossings");
+
+    var _west = gmnav_grid_node(_g, 3,  10);
+    var _east = gmnav_grid_node(_g, 24, 10);
+
+    var _p = gmt_solve_z(_g, _west, _east);
+    gmt_check("west reaches east", is_array(_p), true);
+    gmt_check("not straight through the chasm",
+              gmt_path_visits(_g, _p, DEMO9_CHASM_C1, 10), false);
+    gmt_note("west to east", string(array_length(_p)) + " steps");
+
+    var _below = gmt_solve_z(_g, gmnav_grid_node(_g, DEMO9_CHASM_C1 - 2, 2),
+                                 gmnav_grid_node(_g, DEMO9_CHASM_C1 - 2, 9));
+    gmt_check("the ground under the approach still runs", is_array(_below), true);
+    gmt_check("without climbing onto it",
+              (array_get_index(_below, _nd) < 0), true);
+
+    gmt_head("W4 one field serves both crossings");
+
+    var _goal = _east;
+    var _f    = gmnav_flowfield_create(_g);
+
+    gmt_check("the field builds", gmnav_flowfield_build(_f, _goal), true);
+    gmt_check("both crossings carry it",
+              (_f.dist[_nd] < GMNAV_INF && _f.dist[_sd] < GMNAV_INF), true);
+
+    var _walked = 0, _failed = 0, _unreach = 0;
+
+    for (var _c2 = 1; _c2 < DEMO9_CHASM_C1; _c2++) {
+        for (var _r2 = 1; _r2 < DEMO9_H - 1; _r2++) {
+            var _n2 = gmnav_grid_node(_g, _c2, _r2);
+            if (gmnav_grid_is_blocked(_g, _n2)) continue;
+
+            if (_f.dist[_n2] == GMNAV_INF) { _unreach++; continue; }
+
+            _walked++;
+            if (!gmt_field_walks_to_goal(_g, _f, _n2, _goal, 200)) _failed++;
+        }
+    }
+
+    gmt_note("west bank cells walked", _walked);
+    gmt_check("none of the west bank is stranded", _unreach, 0);
+    gmt_check("every west bank cell reaches the goal", _failed, 0);
+
+    var _dfail = 0;
+    for (var _i = 0; _i < gmnav_overlay_count(_ov); _i++) {
+        var _dn2 = _ov.base + _i;
+        if (_f.dist[_dn2] == GMNAV_INF) { _dfail++; continue; }
+        if (!gmt_field_walks_to_goal(_g, _f, _dn2, _goal, 200)) _dfail++;
+    }
+    gmt_check("every deck cell reaches the goal too", _dfail, 0);
+
+    gmt_head("W5 the field parts between the two crossings");
+
+    gmt_check("a cell by the north crossing leaves that way",
+              gmt_field_exits_via(_g, _f, gmnav_grid_node(_g, 5, DEMO9_NORTH_R), _nd), true);
+    gmt_check("a cell by the south crossing leaves that way",
+              gmt_field_exits_via(_g, _f, gmnav_grid_node(_g, 5, DEMO9_SOUTH_R), _sd), true);
+}

@@ -25,6 +25,8 @@ gmt_test_demo7_level();
 gmt_test_overlay_cells();
 gmt_test_overlay_offset();
 gmt_test_demo8_level();
+gmt_test_flowfield_overlay();
+gmt_test_demo9_level();
 
 gmt_head("D scheduler (running)");
 

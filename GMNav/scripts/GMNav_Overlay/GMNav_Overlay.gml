@@ -31,7 +31,7 @@ function gmnav_overlay_create(_grid) {
         up_cost  : [],
         up_type  : [],
 
-        ready   : false,
+        ready   : false,		  // authoring happened since the last finish. The searchers no longer gate on this, they check whether edges exist at all, so a collapsed span does not disable the rest of the overlay
         version : -1
     };
 
@@ -93,9 +93,10 @@ function gmnav_overlay_add(_ov, _col, _row, _layer) { // adds one walkable cell 
     array_push(_ov.tmp_cost, []);
     array_push(_ov.tmp_type, []);
 	
-    array_push(_ov.flags, 0);
-    array_push(_ov.cost,  1);
-    array_push(_ov.clear, 0);
+    array_push(_ov.flags,  0);
+    array_push(_ov.cost,   1);
+    array_push(_ov.clear,  0);
+    array_push(_ov.offset, 0); // kept in step with count, so every per-cell array is the same length
 
     _ov.key[$ _k] = _id;
     _ov.count++;
@@ -369,7 +370,12 @@ function gmnav_overlay_set_offset(_ov, _node, _offset) {
     var _i = _node - _ov.base;
     if (_i < 0 || _i >= _ov.count) return false;
 
+    var _cur = (_i < array_length(_ov.offset)) ? _ov.offset[_i] : 0;
+    if (_cur == _offset) return true; // no-op, do not bump
+
     _ov.offset[_i] = _offset;
+
+    _ov.grid.version++;
     return true;
 }
 

@@ -689,3 +689,36 @@ function gmt_node_height(_grid, _node) {
     }
     return _h;
 }
+
+function gmt_field_walks_to_goal(_grid, _field, _from, _goal, _max_hops = 64) { // follows field.next from a node to the goal, so a layer change is a real step rather than a guess at a vector
+    var _cur  = _from;
+    var _hops = 0;
+
+    while (_hops++ < _max_hops) {
+        if (_cur == _goal) return true;
+        if (_cur < 0 || _cur >= array_length(_field.next)) return false;
+
+        var _nx = _field.next[_cur];
+        if (_nx == GMNAV_NO_NODE || _nx == _cur) return false;
+        if (_field.dist[_nx] >= _field.dist[_cur]) return false; // must descend
+
+        _cur = _nx;
+    }
+    return false;
+}
+
+function gmt_field_exits_via(_grid, _field, _from, _deck, _max_hops = 128) { // walks the field and reports whether it passes through a given node
+    var _cur  = _from;
+    var _hops = 0;
+
+    while (_hops++ < _max_hops) {
+        if (_cur == _deck) return true;
+        if (_cur < 0 || _cur >= array_length(_field.next)) return false;
+
+        var _nx = _field.next[_cur];
+        if (_nx == GMNAV_NO_NODE || _nx == _cur) return false;
+
+        _cur = _nx;
+    }
+    return false;
+}
