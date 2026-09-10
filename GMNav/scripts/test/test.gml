@@ -3686,4 +3686,81 @@ function gmt_test_stamp_path() {
 
     // the old rule refused any shortcut touching a cell dearer than the run's dearest, which on a map with any terrain variation is most of them
     gmt_check("mild terrain does not block smoothing", (_mm.count <= 4), true);
+	
+    gmt_head("U10 smoothing a deck must price the deck, not the ground");
+
+    var _bg = gmt_bridge_level();
+    gmnav_grid_set_layer_lift(_bg, 24);
+
+    var _bl = gmnav_costlayer_create(_bg, "under");
+    // dear ground beneath the bridge, which the deck should not be charged for
+    gmnav_costlayer_set(_bl, 5, 5, 20);
+
+    var _bp = gmnav_costprofile_create(_bg, "crosser");
+    gmnav_costprofile_add(_bp, _bl, 1);
+    gmnav_costprofile_bake(_bp);
+
+    var _bn = gmt_solve_profile(_bg, gmnav_grid_node(_bg, 5, 1),
+                                     gmnav_grid_node(_bg, 5, 10), _bp);
+    gmt_check("a route exists", is_array(_bn), true);
+
+    var _bpath = gmnav_path_create(_bg, _bn);
+    var _braw  = _bpath.count;
+    gmnav_path_smooth(_bpath, undefined, undefined, 0, 0, _bp);
+
+    gmt_note("deck waypoints raw / smoothed",
+             string(_braw) + " / " + string(_bpath.count));
+    gmt_check("the deck run still collapses", (_bpath.count < _braw), true);
+	
+    gmt_head("U11 headings over a deck");
+
+    var _hg = gmt_bridge_level();
+    gmnav_grid_set_layer_lift(_hg, 24);
+
+    var _hn = gmt_solve_z(_hg, gmnav_grid_node(_hg, 5, 1),
+                               gmnav_grid_node(_hg, 5, 10));
+    gmt_check("a route exists", is_array(_hn), true);
+
+    var _hp = gmnav_path_create(_hg, _hn);
+    gmnav_path_smooth(_hp, undefined, undefined, 0, 4);
+
+    gmt_note("constrained deck waypoints", _hp.count);
+
+    // the two leg rewrite invents a corner, and a corner over a bridge has to
+    // be a cell that exists on that layer rather than the ground beneath it
+    gmt_check("every waypoint is a real cell",
+              gmt_path_nodes_real(_hg, _hp), true);
+    gmt_check("and none of them is blocked",
+              gmt_path_nodes_open(_hg, _hp), true);
+    gmt_check("the layers it visits are unchanged",
+              gmt_path_keeps_layers(_hg, _hp, _hn), true);
+
+    gmt_head("U12 clearance and a profile over a deck");
+
+    var _cg2 = gmt_bridge_level();
+    gmnav_clearance_build(_cg2);
+
+    var _cl2 = gmnav_costlayer_create(_cg2, "toll");
+    gmnav_costlayer_set_node(_cl2, gmnav_overlay_node_at(_cg2.overlay, 5, 5, 1), 6);
+
+    var _cp2 = gmnav_costprofile_create(_cg2, "wide");
+    gmnav_costprofile_add(_cp2, _cl2, 1);
+    gmnav_costprofile_bake(_cp2);
+
+    var _s2 = gmnav_search_create(_cg2);
+    var _ok = gmnav_search_begin(_s2, gmnav_grid_node(_cg2, 5, 1),
+                                      gmnav_grid_node(_cg2, 5, 10),
+                                      false, _cp2, 1);
+    gmt_check("a clearance one request begins", _ok, true);
+
+    var _guard3 = 0;
+    while (_s2.state == gmnav_state.WORKING && _guard3++ < 4096) {
+        gmnav_search_step(_s2, 4096);
+    }
+    gmt_check("and resolves", _s2.state, gmnav_state.FOUND);
+
+    var _cr2 = gmnav_search_get_path(_s2);
+    gmt_check("over the deck", 
+              (array_get_index(_cr2, gmnav_overlay_node_at(_cg2.overlay, 5, 5, 1)) >= 0), true);
+    gmt_check_f("and the toll was charged", _cp2.resolved[gmnav_overlay_node_at(_cg2.overlay, 5, 5, 1)], 7.0);
 }

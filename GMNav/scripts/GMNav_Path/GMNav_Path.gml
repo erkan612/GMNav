@@ -158,6 +158,30 @@ function __gmnav_path_run_cost(_grid, _src, _i, _j, _res, _inv) { // what the st
     return _sum;
 }
 
+//function __gmnav_path_line_cost(_grid, _a, _b, _res, _inv) { // what the straight line would cost instead
+//    var _pa = gmnav_grid_node_to_world(_grid, _a);
+//    var _pb = gmnav_grid_node_to_world(_grid, _b);
+
+//    var _c1 = gmnav_grid_col(_grid, _a), _r1 = gmnav_grid_row(_grid, _a);
+//    var _c2 = gmnav_grid_col(_grid, _b), _r2 = gmnav_grid_row(_grid, _b);
+
+//    var _steps = max(abs(_c2 - _c1), abs(_r2 - _r1));
+//    if (_steps <= 0) return 0;
+
+//    var _len = point_distance(_pa[0], _pa[1], _pb[0], _pb[1]) * _inv;
+//    var _sum = 0;
+
+//    for (var _s = 1; _s <= _steps; _s++) {
+//        var _t  = _s / _steps;
+//        var _nn = gmnav_grid_node(_grid, round(lerp(_c1, _c2, _t)),
+//                                         round(lerp(_r1, _r2, _t)));
+
+//        _sum += (_nn != GMNAV_NO_NODE && _nn < array_length(_res)) ? _res[_nn] : 1;
+//    }
+
+//    return (_len / _steps) * _sum;
+//}
+
 function __gmnav_path_line_cost(_grid, _a, _b, _res, _inv) { // what the straight line would cost instead
     var _pa = gmnav_grid_node_to_world(_grid, _a);
     var _pb = gmnav_grid_node_to_world(_grid, _b);
@@ -165,16 +189,28 @@ function __gmnav_path_line_cost(_grid, _a, _b, _res, _inv) { // what the straigh
     var _c1 = gmnav_grid_col(_grid, _a), _r1 = gmnav_grid_row(_grid, _a);
     var _c2 = gmnav_grid_col(_grid, _b), _r2 = gmnav_grid_row(_grid, _b);
 
+    if (_c1 < 0 || _c2 < 0) return 0;
+
     var _steps = max(abs(_c2 - _c1), abs(_r2 - _r1));
     if (_steps <= 0) return 0;
+
+    var _layer = gmnav_grid_node_layer(_grid, _a);
+    var _ov    = gmnav_grid_has_overlay(_grid) ? _grid.overlay : undefined;
 
     var _len = point_distance(_pa[0], _pa[1], _pb[0], _pb[1]) * _inv;
     var _sum = 0;
 
     for (var _s = 1; _s <= _steps; _s++) {
         var _t  = _s / _steps;
-        var _nn = gmnav_grid_node(_grid, round(lerp(_c1, _c2, _t)),
-                                         round(lerp(_r1, _r2, _t)));
+        var _cc = round(lerp(_c1, _c2, _t));
+        var _rr = round(lerp(_r1, _r2, _t));
+
+        var _nn = GMNAV_NO_NODE;
+
+        if (_layer > 0 && _ov != undefined) {
+            _nn = gmnav_overlay_node_at(_ov, _cc, _rr, _layer);
+        }
+        if (_nn == GMNAV_NO_NODE) _nn = gmnav_grid_node(_grid, _cc, _rr);
 
         _sum += (_nn != GMNAV_NO_NODE && _nn < array_length(_res)) ? _res[_nn] : 1;
     }
@@ -193,6 +229,8 @@ function __gmnav_path_cost_ok(_grid, _src, _i, _j, _profile) { // is the straigh
     return (__gmnav_path_line_cost(_grid, _src[_i], _src[_j], _res, _inv)
             <= _run * 1.001 + 0.001);
 }
+
+//#macro GMNAV_TRACE_SMOOTH true
 
 function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
                            _radius = 0, _headings = 0, _profile = undefined) {
@@ -213,6 +251,15 @@ function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
         var _corner = GMNAV_NO_NODE;
 
         for (var _j = _n - 1; _j > _i + 1; _j--) {
+            //if (GMNAV_TRACE_SMOOTH) {
+            //    show_debug_message("i=" + string(_i) + " j=" + string(_j)
+            //        + "  layer=" + string(__gmnav_path_same_layer(_grid, _src, _i, _j))
+            //        + "  head="  + string(__gmnav_path_heading_ok(_grid, _src[_i], _src[_j], _headings))
+            //        + "  cost="  + string(__gmnav_path_cost_ok(_grid, _src, _i, _j, _profile))
+            //        + "  corr="  + string(__gmnav_path_corridor_ok(_grid, _src[_i], _src[_j],
+            //                              _max_climb, _max_drop, _radius)));
+            //}
+			
             if (!__gmnav_path_same_layer(_grid, _src, _i, _j)) continue;
 
             if (!__gmnav_path_cost_ok(_grid, _src, _i, _j, _profile)) continue;

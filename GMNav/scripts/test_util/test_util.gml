@@ -923,3 +923,19 @@ function gmt_path_line_cost(_grid, _layer, _path, _step = 8) { // what a path pi
     }
     return _sum;
 }
+
+function gmt_path_nodes_real(_grid, _path) { // does every waypoint resolve to a node that exists
+    for (var i = 0; i < array_length(_path.nodes); i++) {
+        var _n = _path.nodes[i];
+        if (_n == GMNAV_NO_NODE) return false;
+        if (gmnav_grid_col(_grid, _n) < 0) return false;
+    }
+    return true;
+}
+
+function gmt_path_nodes_open(_grid, _path) {
+    for (var i = 0; i < array_length(_path.nodes); i++) {
+        if (gmnav_grid_is_blocked(_grid, _path.nodes[i])) return false;
+    }
+    return true;
+}
