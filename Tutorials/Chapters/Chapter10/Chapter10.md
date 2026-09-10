@@ -257,7 +257,7 @@ cfg.cull = false;
 - **Flat ground produces exact ties** between walking and jumping, at 42.67 frames either way. `jump_bias` breaks them toward walking, or your AI hops everywhere.
 - **`jump_levels` is the bake cost dial**: 3 is a good default, 1 suits fixed-jump characters, 5 rarely earns its 55 percent extra work.
 
-## The end of the series
+## End of the beginner series
 
 Ten chapters ago we started with a guard walking into a wall.
 
@@ -268,3 +268,5 @@ The thread running through all of it: **almost nothing about intelligent-looking
 Where to go from here. The [Full Documentation](https://github.com/erkan612/GMNav/blob/main/Documentation.md) has every function without the narrative around it. The demo project has a room that draws every debug overlay at once, which is the fastest way to see a subsystem you're unsure about. And the test suite is worth reading if you want to know precisely what the framework guarantees, because every assertion in it is a promise being kept.
 
 Thank you for reading. Go build something that moves well.
+
+With the new update of v1.1; you can now proceed to the advanced section starting from Chapter 11!

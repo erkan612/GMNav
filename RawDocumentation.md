@@ -6,6 +6,7 @@ Complete function reference with parameters, return values, and usage examples.
 
 ## Layout Functions
 
+
 ### gmnav_layout_create(mode, tile_w, tile_h, neighbours, cost_mode, origin_x, origin_y)
 
 Creates a layout descriptor. This decides where a cell lands on screen and which cells count as its neighbours. The search itself never reads it directly.
@@ -148,26 +149,43 @@ var _p = gmnav_parity(-3);   // 1, not -1
 
 ---
 
+---
+
 ## Grid Functions
+
 
 ### gmnav_grid_create(width, height, layout, slots)
 
-Creates a navigation grid. Every cell starts walkable at cost 1.
+Creates a navigation grid. Cells start unblocked with a cost of 1.
 
 **Parameters:**
 
-- `width` (int) - Cells across
-- `height` (int) - Cells down
-- `layout` (struct) - From `gmnav_layout_create`
-- `slots` (int, default: 4) - Maximum concurrent searches. Each holds three arrays sized to the cell count
+- `width` (int) - Grid width in cells
+- `height` (int) - Grid height in cells
+- `layout` (struct) - Layout descriptor from `gmnav_layout_create`
+- `slots` (int, default: 4) - Search workspaces the grid will lend out, which caps how many searches can run at once over this grid
 
 **Returns:** Grid struct
 
 **Example:**
 
 ```
-grid = gmnav_grid_create(60, 40, layout, 4);
+grid = gmnav_grid_create(60, 40, layout);
 ```
+
+---
+
+### gmnav_grid_in_bounds(grid, col, row)
+
+Whether a column and row fall inside the grid.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+- `col` (int) - Column
+- `row` (int) - Row
+
+**Returns:** Boolean
 
 ---
 
@@ -177,335 +195,472 @@ Converts a column and row to a node id.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
+- `grid` (struct) - Grid
 - `col` (int) - Column
 - `row` (int) - Row
 
-**Returns:** int - Node id, or `GMNAV_NO_NODE` if out of bounds
+**Returns:** Node id, or `GMNAV_NO_NODE` if out of bounds
 
 **Example:**
 
 ```
-var _n = gmnav_grid_node(grid, 5, 3);
+var _n = gmnav_grid_node(grid, 12, 8);
 ```
 
 ---
 
 ### gmnav_grid_col(grid, node)
 
-Column of a node id.
+The column a node sits in. Resolves overlay nodes as well as base cells.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `node` (int) - Node id
+- `grid` (struct) - Grid
+- `node` (int) - Node id, base or overlay
 
-**Returns:** int
-
-**Example:**
-
-```
-var _c = gmnav_grid_col(grid, _node);
-```
+**Returns:** Column, or -1 if the node is invalid
 
 ---
 
 ### gmnav_grid_row(grid, node)
 
-Row of a node id.
+The row a node sits in. Resolves overlay nodes as well as base cells.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
+- `grid` (struct) - Grid
+- `node` (int) - Node id, base or overlay
+
+**Returns:** Row, or -1 if the node is invalid
+
+---
+
+### gmnav_grid_node_layer(grid, node)
+
+Which layer a node belongs to. Base cells are layer 0.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
 - `node` (int) - Node id
 
-**Returns:** int
+**Returns:** Layer index, 0 for base cells, or -1 if the node is invalid
 
 **Example:**
 
 ```
-var _r = gmnav_grid_row(grid, _node);
+if (gmnav_grid_node_layer(grid, _n) > 0) {
+    // standing on something raised
+}
 ```
 
 ---
 
-### gmnav_grid_in_bounds(grid, col, row)
+### gmnav_grid_world_to_node(grid, x, y, layer)
 
-Whether a column and row lie inside the grid.
+Converts a world position to a node on a named layer.
+
+A point over a bridge has more than one answer, so the caller says which surface it meant. Layer 0 is the base grid and always resolves geometrically. A layer above 0 searches the overlay cells drawn at that position, accounting for the layer lift and each cell's own offset.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `col` (int) - Column
-- `row` (int) - Row
+- `grid` (struct) - Grid
+- `x` (real) - World x
+- `y` (real) - World y
+- `layer` (int, default: 0) - Which surface to ask about
 
-**Returns:** bool
+**Returns:** Node id, or `GMNAV_NO_NODE` if that layer has no cell at that position
 
 **Example:**
 
 ```
-if (gmnav_grid_in_bounds(grid, _c, _r)) { }
+var _road = gmnav_grid_world_to_node(grid, mouse_x, mouse_y, 0);
+var _deck = gmnav_grid_world_to_node(grid, mouse_x, mouse_y, 1);
 ```
 
 ---
 
-### gmnav_grid_world_to_node(grid, x, y)
+### gmnav_grid_world_to_node_top(grid, x, y)
 
-Node containing a world position.
+The topmost surface at a world position. Walks down from the highest layer and returns the first cell found, falling back to the base grid.
+
+This is what "click on the thing you can see" usually means.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
+- `grid` (struct) - Grid
 - `x` (real) - World x
 - `y` (real) - World y
 
-**Returns:** int - Node id, or `GMNAV_NO_NODE`
+**Returns:** Node id, or `GMNAV_NO_NODE`
 
 **Example:**
 
 ```
-var _here = gmnav_grid_world_to_node(grid, x, y);
+var _n = gmnav_grid_world_to_node_top(grid, mouse_x, mouse_y);
 ```
 
 ---
 
 ### gmnav_grid_node_to_world(grid, node)
 
-World centre of a node.
+The world position a node is drawn at. Applies the layer lift and any per-cell offset, so an overlay cell reports where it actually sits rather than where its column and row would put it.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `node` (int) - Node id
+- `grid` (struct) - Grid
+- `node` (int) - Node id, base or overlay
 
-**Returns:** Array `[x, y]`
-
-**Example:**
-
-```
-var _pos = gmnav_grid_node_to_world(grid, _node);
-```
+**Returns:** Array `[x, y]`, or `[0, 0]` if the node is invalid
 
 ---
 
 ### gmnav_grid_is_blocked(grid, node)
 
-Whether a node is blocked.
+Whether a node is impassable. Handles overlay nodes, and returns `true` for anything invalid.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `node` (int) - Node id
+- `grid` (struct) - Grid
+- `node` (int) - Node id, base or overlay
 
-**Returns:** bool
-
-**Example:**
-
-```
-if (gmnav_grid_is_blocked(grid, _node)) { }
-```
+**Returns:** Boolean
 
 ---
 
-### gmnav_grid_has_flag(grid, node, flag)
+### gmnav_grid_cost(grid, node)
 
-Whether a node carries a flag bit.
+The base cost of entering a node. Overlay cells carry their own cost, independent of the ground beneath them.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `node` (int) - Node id
-- `flag` (int) - One of the `GMNAV_FLAG_*` macros
+- `grid` (struct) - Grid
+- `node` (int) - Node id, base or overlay
 
-**Returns:** bool
-
-**Example:**
-
-```
-if (gmnav_grid_has_flag(grid, _node, GMNAV_FLAG_WATER)) { }
-```
+**Returns:** Real, 1 or greater
 
 ---
 
 ### gmnav_grid_get_cost(grid, node)
 
-Base terrain cost of a node. This is the grid's own cost, not a profile's resolved cost.
+The base cost of a base grid cell, without the overlay handling of `gmnav_grid_cost`. Slightly cheaper when you know the node is a base cell.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `node` (int) - Node id
+- `grid` (struct) - Grid
+- `node` (int) - Base node id
 
-**Returns:** real
+**Returns:** Real
 
-**Example:**
+---
 
-```
-var _c = gmnav_grid_get_cost(grid, _node);
-```
+### gmnav_grid_has_flag(grid, node, flag)
+
+Whether a base cell carries a flag.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+- `node` (int) - Base node id
+- `flag` (int) - Flag constant
+
+**Returns:** Boolean
 
 ---
 
 ### gmnav_grid_set_blocked(grid, col, row, blocked)
 
-Blocks or unblocks one cell. Bumps the grid version only if the state actually changed.
+Blocks or unblocks a cell. Bumps the grid version and records the cell as a recent edit, but only if the state actually changed, so a door re-asserting itself every step costs nothing.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
+- `grid` (struct) - Grid
 - `col` (int) - Column
 - `row` (int) - Row
 - `blocked` (bool) - New state
 
-**Returns:** bool - False if out of bounds
+**Returns:** Boolean, `false` if the cell is out of bounds
 
 **Example:**
 
 ```
-gmnav_grid_set_blocked(grid, 5, 3, true);
+gmnav_grid_set_blocked(grid, 6, 6, true);
 ```
 
 ---
 
 ### gmnav_grid_set_cost(grid, col, row, cost)
 
-Sets a cell's terrain cost multiplier. Clamped at a minimum of 1, because a step cheaper than the heuristic assumes would break optimality. To make roads fast, make everything else slow.
+Sets the terrain cost of a cell. Clamped to a minimum of 1, because a step cheaper than the heuristic assumes would break A\*'s optimality.
+
+Express fast ground by making everything else slower rather than by going below 1.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
+- `grid` (struct) - Grid
 - `col` (int) - Column
 - `row` (int) - Row
-- `cost` (real) - Multiplier, clamped to at least 1
+- `cost` (real) - Multiplier for entering this cell, clamped to 1 or more
 
-**Returns:** bool - False if out of bounds
+**Returns:** Boolean, `false` if the cell is out of bounds
 
 **Example:**
 
 ```
-gmnav_grid_set_cost(grid, 7, 6, 8);
+gmnav_grid_set_cost(grid, 7, 6, 8);   // swamp
 ```
 
 ---
 
 ### gmnav_grid_set_flag(grid, col, row, flag, on)
 
-Sets or clears a flag bit on a cell.
+Sets or clears a flag on a cell.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
+- `grid` (struct) - Grid
 - `col` (int) - Column
 - `row` (int) - Row
-- `flag` (int) - One of the `GMNAV_FLAG_*` macros
-- `on` (bool) - Set or clear
+- `flag` (int) - Flag constant
+- `on` (bool) - Whether to set or clear it
 
-**Returns:** bool - False if out of bounds
-
-**Example:**
-
-```
-gmnav_grid_set_flag(grid, 7, 6, GMNAV_FLAG_ONEWAY, true);
-```
+**Returns:** Boolean, `false` if the cell is out of bounds
 
 ---
 
 ### gmnav_grid_fill_blocked(grid, c1, r1, c2, r2, blocked)
 
-Blocks or unblocks a rectangle. Clamped to the grid, and bumps the version once for the whole operation.
+Blocks or unblocks a rectangle. Bumps the version once for the whole rectangle rather than once per cell, and records the rectangle as a single recent edit.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `c1`, `r1`, `c2`, `r2` (int) - Rectangle corners, in either order
+- `grid` (struct) - Grid
+- `c1`, `r1` (int) - One corner
+- `c2`, `r2` (int) - The other corner
 - `blocked` (bool) - New state
 
-**Returns:** Nothing
+**Returns:** Boolean, whether anything actually changed
 
 **Example:**
 
 ```
-gmnav_grid_fill_blocked(grid, 8, 1, 8, 7, true);
+gmnav_grid_fill_blocked(grid, 10, 4, 10, 14, true);
 ```
 
 ---
 
 ### gmnav_grid_import_tilemap(grid, tilemap, is_blocked)
 
-Imports walkability from a tilemap layer. Assumes tilemap cell coordinates map one to one onto nav cells.
+Reads blocked state from a tilemap layer.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
+- `grid` (struct) - Grid
 - `tilemap` (id) - Tilemap element id
-- `is_blocked` (function, optional) - Receives the raw tile index, returns bool. Defaults to "any non-empty tile blocks"
-
-**Returns:** Nothing
+- `is_blocked` (function, default: undefined) - Given a tile index, returns whether it blocks. Defaults to treating any non-zero tile as solid
 
 **Example:**
 
 ```
-gmnav_grid_import_tilemap(grid, layer_tilemap_get_id("Tiles_Collision"));
+gmnav_grid_import_tilemap(grid, layer_tilemap_get_id("Collision"));
 ```
 
 ---
 
 ### gmnav_grid_import_dsgrid(grid, ds_grid, is_blocked)
 
-Imports walkability from a ds_grid.
+Reads blocked state from a ds_grid.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `ds_grid` (id) - Source ds_grid
-- `is_blocked` (function, optional) - Receives the cell value, returns bool. Defaults to "non-zero blocks"
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_grid_import_dsgrid(grid, my_collision_grid);
-```
+- `grid` (struct) - Grid
+- `ds_grid` (id) - Source grid
+- `is_blocked` (function, default: undefined) - Given a value, returns whether it blocks. Defaults to non-zero
 
 ---
 
 ### gmnav_grid_import_callback(grid, fn)
 
-Imports from any source. The callback receives `(col, row)` and returns either a bool, or a struct for full control.
+Fills the grid from a callback, one cell at a time.
+
+Return a boolean for blocked state alone, or a struct with `blocked`, `flags` and `cost` to set all three.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `fn` (function) - Returns bool, or a struct with fields `blocked` (bool), `cost` (real), `flags` (int)
-
-**Returns:** Nothing
+- `grid` (struct) - Grid
+- `fn` (function) - Called with `(col, row)`
 
 **Example:**
 
 ```
 gmnav_grid_import_callback(grid, function(_c, _r) {
-    return { blocked: false, cost: 4, flags: GMNAV_FLAG_WATER };
+    return { blocked : place_meeting(_c * 32 + 16, _r * 32 + 16, obj_wall),
+             cost    : 1 };
 });
 ```
 
 ---
 
-### gmnav_grid_scratch_acquire(grid)
+### gmnav_grid_changed_since(grid, version, c1, r1, c2, r2)
 
-Takes a free search workspace. Called by searches, not usually by you.
+Whether any edit since a given version touched a cell rectangle.
+
+The grid keeps a ring of recent edit rectangles, so a caller holding a path can ask whether a change is any of its business rather than repathing on every edit anywhere on the map. If the version predates the oldest rectangle still held, the history needed has been overwritten and this returns `true`, degrading to conservative repathing rather than to silence.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
+- `grid` (struct) - Grid
+- `version` (int) - The version the caller last checked at
+- `c1`, `r1` (int) - One corner of the rectangle to test
+- `c2`, `r2` (int) - The other corner
 
-**Returns:** Slot struct, or `undefined` if all slots are busy
+**Returns:** Boolean
 
 **Example:**
 
 ```
-var _slot = gmnav_grid_scratch_acquire(grid);
+if (gmnav_grid_changed_since(grid, my_version, c1, r1, c2, r2)) {
+    // something relevant moved
+}
 ```
+
+---
+
+### gmnav_grid_has_heights(grid)
+
+Whether elevation has been set on this grid. The height array is not allocated until the first height is written.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+
+**Returns:** Boolean
+
+---
+
+### gmnav_grid_height(grid, node)
+
+The elevation of a base cell.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+- `node` (int) - Base node id
+
+**Returns:** Real, 0 if the grid has no heights
+
+---
+
+### gmnav_grid_set_height(grid, col, row, z)
+
+Sets the elevation of a cell, in whatever unit suits you. The value is never converted to pixels and never drawn; it exists so two cells can be compared.
+
+Allocates the height array on first use. Does nothing if the value is unchanged.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+- `col` (int) - Column
+- `row` (int) - Row
+- `z` (real) - Elevation
+
+**Returns:** Boolean, `false` if the cell is out of bounds
+
+**Example:**
+
+```
+gmnav_grid_set_height(grid, 12, 8, 3);
+```
+
+---
+
+### gmnav_grid_fill_height(grid, c1, r1, c2, r2, z)
+
+Sets the elevation of a rectangle. Bumps the version once if anything changed.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+- `c1`, `r1` (int) - One corner
+- `c2`, `r2` (int) - The other corner
+- `z` (real) - Elevation
+
+**Returns:** Boolean, whether anything changed
+
+---
+
+### gmnav_grid_step_blocked(grid, a, b, max_climb, max_drop)
+
+Whether a step between two cells is refused by elevation limits.
+
+Returns `false` when `max_climb` is undefined or the grid has no heights, so a grid carrying elevation behaves exactly as a flat one for any caller that has not opted in.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+- `a` (int) - From node
+- `b` (int) - To node
+- `max_climb` (real) - Largest rise the unit can take, undefined to ignore heights
+- `max_drop` (real) - Largest fall the unit can take
+
+**Returns:** Boolean, `true` if the step is refused
+
+---
+
+### gmnav_grid_set_layer_lift(grid, lift)
+
+How far apart layers are drawn, in pixels. Read by `gmnav_grid_node_to_world` and by every debug view, so an overlay cell reports and draws at the height it occupies.
+
+Purely presentational. The search never reads it.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+- `lift` (real) - Pixels per layer
+
+**Example:**
+
+```
+gmnav_grid_set_layer_lift(grid, 24);
+```
+
+---
+
+### gmnav_grid_layer_lift(grid)
+
+The current layer lift, or 0 if none was set.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+
+**Returns:** Real
+
+---
+
+### gmnav_grid_has_overlay(grid)
+
+Whether an overlay has been attached to this grid.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+
+**Returns:** Boolean
+
+---
+
+### gmnav_grid_scratch_acquire(grid)
+
+Borrows a search workspace from the grid's pool. Workspaces are sized to cover base cells and overlay cells together, and grow if an overlay is attached after the workspace was first allocated.
+
+You rarely call this directly; `gmnav_search_begin` does it for you.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+
+**Returns:** Workspace struct, or `undefined` if all slots are busy
 
 ---
 
@@ -515,38 +670,304 @@ Returns a workspace to the pool.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `slot` (struct) - Slot from `gmnav_grid_scratch_acquire`
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_grid_scratch_release(grid, _slot);
-```
+- `grid` (struct) - Grid
+- `slot` (struct) - Workspace to release
 
 ---
 
 ### gmnav_grid_scratch_flush(grid)
 
-Frees every idle workspace. The grid stays usable, slots reallocate on next acquire.
+Frees every idle workspace. Busy ones are left alone. Useful on a level change, when the memory matters more than the next search's allocation cost.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
+- `grid` (struct) - Grid
 
-**Returns:** Nothing
+---
+
+---
+
+## Overlay Functions
+
+
+An overlay is a sparse set of extra walkable cells stacked over a grid, for what one height per cell cannot express: a bridge over a road, a walkway behind a cliff, a tower you can walk around.
+
+Two rules keep an overlay from becoming a second map you maintain by hand.
+
+**A link is only needed where the layer actually changes.** Cells on one layer are neighbours by the ordinary neighbour table, so a six cell walkway needs one link at each end and nothing in between.
+
+**One layer per standable surface, not per unit of height.** A cliff three lifts tall is one layer drawn tall, not three layers stacked, because you cannot stand on the middle of a cliff face.
+
+Overlay nodes are ordinary node ids, numbered past `grid.count`. Anywhere a node is accepted, an overlay node is accepted.
+
+---
+
+### gmnav_overlay_create(grid)
+
+Creates an overlay and attaches it to a grid. A grid holds at most one.
+
+**Parameters:**
+
+- `grid` (struct) - Grid to attach to
+
+**Returns:** Overlay struct
 
 **Example:**
 
 ```
-gmnav_grid_scratch_flush(grid);
+var _ov = gmnav_overlay_create(grid);
 ```
 
 ---
 
+### gmnav_overlay_add(ov, col, row, layer)
+
+Adds one walkable cell on a layer above the base grid.
+
+Adding the same column, row and layer twice returns the existing node rather than creating a duplicate.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+- `col` (int) - Column
+- `row` (int) - Row
+- `layer` (int) - Layer index, 1 or greater
+
+**Returns:** Node id, or `GMNAV_NO_NODE` if the layer is 0 or below
+
+**Example:**
+
+```
+var _deck = gmnav_overlay_add(_ov, 5, 4, 1);
+```
+
+---
+
+### gmnav_overlay_link(ov, a, b, type, both)
+
+Authors an edge between two nodes, regardless of whether they are adjacent.
+
+This is how a surface joins another surface. Either end may be a base node or an overlay node. Cost is derived from the world distance between them, so a stair is priced like the walk it represents.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+- `a` (int) - One node
+- `b` (int) - The other node
+- `type` (enum, default: `gmnav_link.STAIR`) - Link type, stored on the edge
+- `both` (bool, default: `true`) - Whether the link works in both directions
+
+**Example:**
+
+```
+gmnav_overlay_link(_ov, gmnav_grid_node(grid, 5, 3), _deck,
+                   gmnav_link.STAIR, true);
+```
+
+---
+
+### gmnav_overlay_finish(ov)
+
+Bakes the overlay's edges and computes clearance for its cells.
+
+Until this is called the overlay has cells but no connectivity. Call it once when you have finished authoring, and again after any change of shape: adding cells, adding links, or blocking a cell.
+
+Changes of state alone do not require it. See `gmnav_overlay_set_cost`.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+
+**Example:**
+
+```
+gmnav_overlay_finish(_ov);
+```
+
+---
+
+### gmnav_overlay_ramp(ov, nodes)
+
+Spaces the offsets of a run of cells evenly, so the surface climbs in equal fractions of a layer rather than in one step.
+
+Hand it the cells in order from the foot to the top. Steepness is a function of length: more cells give smaller steps. The order is not checked, and a ramp handed its cells backwards descends into the ground and connects to nothing at its far end.
+
+The lowest cell sits one step above the ground it meets, by arithmetic, and that step is one over the number of cells.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+- `nodes` (array) - Overlay node ids, foot first
+
+**Example:**
+
+```
+var _cells = [];
+for (var _c = 4; _c <= 9; _c++) {
+    array_push(_cells, gmnav_overlay_add(_ov, _c, 10, 1));
+}
+gmnav_overlay_ramp(_ov, _cells);
+```
+
+---
+
+### gmnav_overlay_count(ov)
+
+How many cells the overlay holds.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+
+**Returns:** Int
+
+---
+
+### gmnav_overlay_node_at(ov, col, row, layer)
+
+The overlay node at a column, row and layer.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+- `col` (int) - Column
+- `row` (int) - Row
+- `layer` (int) - Layer index
+
+**Returns:** Node id, or `GMNAV_NO_NODE`
+
+---
+
+### gmnav_overlay_col(ov, node)
+
+The column of an overlay node.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+- `node` (int) - Overlay node id
+
+**Returns:** Column, or -1
+
+---
+
+### gmnav_overlay_row(ov, node)
+
+The row of an overlay node.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+- `node` (int) - Overlay node id
+
+**Returns:** Row, or -1
+
+---
+
+### gmnav_overlay_layer(ov, node)
+
+The layer of an overlay node.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+- `node` (int) - Overlay node id
+
+**Returns:** Layer index, or -1
+
+---
+
+### gmnav_overlay_offset(ov, node)
+
+How far below its layer a cell sits, as a fraction of one layer.
+
+Zero means the cell is at its layer's nominal height, which is where a flat deck lives. Negative values sit below it, which is what a ramp uses.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+- `node` (int) - Overlay node id
+
+**Returns:** Real
+
+---
+
+### gmnav_overlay_set_offset(ov, node, offset)
+
+Sets a cell's offset from its layer.
+
+This is drawn height, not navigation. It is read by `gmnav_grid_node_to_world` and by the debug renderer, and it is **not** consulted by `max_climb` or `max_drop`. For a slope only some units can take, use `gmnav_grid_set_height` on the base grid instead.
+
+Bumps the grid version, since world positions and flow field vectors derive from it. Does nothing if the value is unchanged.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+- `node` (int) - Overlay node id
+- `offset` (real) - Fraction of a layer, negative for below
+
+**Returns:** Boolean, `false` if the node is not in this overlay
+
+---
+
+### gmnav_overlay_is_blocked(ov, node)
+
+Whether an overlay cell is impassable. Returns `true` for anything outside the overlay.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+- `node` (int) - Overlay node id
+
+**Returns:** Boolean
+
+---
+
+### gmnav_overlay_set_blocked(ov, node, on)
+
+Blocks or unblocks an overlay cell, which is how a collapsing span works.
+
+Blocking one span refuses that cell and leaves every other crossing on the map working. Bumps the grid version and records the cell as a recent edit, but only if the state changed.
+
+Call `gmnav_overlay_finish` afterwards to prune the edges. Correctness does not depend on it, since a blocked cell is refused at expansion time either way, but leaving dead edges in place costs a little at every expansion.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+- `node` (int) - Overlay node id
+- `on` (bool) - New state
+
+**Returns:** Boolean, `false` if the node is not in this overlay
+
+**Example:**
+
+```
+gmnav_overlay_set_blocked(_ov, _span, true);
+gmnav_overlay_finish(_ov);
+```
+
+---
+
+### gmnav_overlay_set_cost(ov, node, cost)
+
+Sets the base cost of an overlay cell, independent of the ground beneath it. Clamped to a minimum of 1, as base grid cost is.
+
+A span that is usually passable is better modelled as expensive than as blocked, because an expensive deck can never strand anybody.
+
+**Parameters:**
+
+- `ov` (struct) - Overlay
+- `node` (int) - Overlay node id
+- `cost` (real) - Multiplier for entering this cell
+
+**Returns:** Boolean, `false` if the node is not in this overlay
+
+---
+
+---
+
 ## Clearance Functions
+
 
 ### gmnav_clearance_supported(grid)
 
@@ -679,16 +1100,19 @@ var _to = gmnav_clearance_nearest(grid, _wanted, _need);
 
 ---
 
+---
+
 ## Search Functions
+
 
 ### gmnav_search_create(grid, heuristic)
 
-Creates a reusable search object. Create once and reuse, rather than one per request.
+Creates a reusable search object. A search borrows a workspace from the grid when it begins and returns it when it finishes, so creating one is cheap and holding one costs nothing while idle.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `heuristic` (enum, default: `gmnav_heuristic.AUTO`) - `AUTO` picks the strongest admissible heuristic for the layout
+- `grid` (struct) - Grid to search over
+- `heuristic` (enum, default: `gmnav_heuristic.AUTO`) - `AUTO` picks from the layout. `ZERO` turns the search into Dijkstra, which is useful for checking that a suspicious path really is optimal
 
 **Returns:** Search struct
 
@@ -700,131 +1124,128 @@ search = gmnav_search_create(grid);
 
 ---
 
-### gmnav_search_begin(search, start_node, goal_node, corner_cut, profile, need_clear)
+### gmnav_search_begin(search, start_node, goal_node, corner_cut, profile, need_clear, max_climb, max_drop)
 
-Starts a search. Does no work beyond setup.
+Sets a search up. Does not do any work; call `gmnav_search_step` to advance it.
+
+Fails immediately if either end is out of bounds or blocked, or if no workspace is available.
 
 **Parameters:**
 
-- `search` (struct) - Search object
-- `start_node` (int) - Start node id
-- `goal_node` (int) - Goal node id
-- `corner_cut` (bool, default: false) - Allow diagonal steps between two diagonally opposed walls
-- `profile` (struct, optional) - Cost profile from `gmnav_costprofile_create`
-- `need_clear` (int, default: 0) - Minimum clearance required, 0 to ignore
+- `search` (struct) - Search
+- `start_node` (int) - Starting node, base or overlay
+- `goal_node` (int) - Target node, base or overlay
+- `corner_cut` (bool, default: `false`) - Whether a diagonal may pass between two wall corners. Leaving this off keeps paths walkable
+- `profile` (struct, default: undefined) - Cost profile. Without one, base terrain cost is used
+- `need_clear` (int, default: 0) - Clearance the unit needs, in cells. Values above 1 build clearance if it is missing or out of date
+- `max_climb` (real, default: undefined) - Largest rise the unit can take. Undefined ignores elevation entirely
+- `max_drop` (real, default: undefined) - Largest fall the unit can take
 
-**Returns:** bool - False on failure. Check `search.state`: `FAILED` means impossible, `IDLE` means no workspace was free and you should retry
+**Returns:** Boolean, whether the search started
 
 **Example:**
 
 ```
-gmnav_search_begin(search, _from, _to, false, soldier, 2);
+if (gmnav_search_begin(search, _from, _to, false, profile, 2, 1, 3)) {
+    // stepping from here
+}
 ```
 
 ---
 
 ### gmnav_search_step(search, budget)
 
-Advances a search by a limited amount of work and returns. The budget counts heap pops, not expansions, so stale pops are still charged.
+Advances a search by a limited amount of work and returns what happened.
+
+The budget is counted in node expansions. Pass a small one and the search does a little and stops, keeping its frontier, costs and parent links alive in its workspace so the next call carries on from exactly where it left off.
 
 **Parameters:**
 
-- `search` (struct) - Search object
-- `budget` (int, default: `GMNAV_DEFAULT_BUDGET`) - Maximum heap pops this call
+- `search` (struct) - Search
+- `budget` (int, default: the configured default) - Node expansions allowed this call
 
-**Returns:** enum - `gmnav_state.WORKING`, `FOUND`, or `FAILED`
+**Returns:** `gmnav_state.WORKING`, `FOUND` or `FAILED`
 
 **Example:**
 
 ```
-if (gmnav_search_step(search, 500) == gmnav_state.FOUND) { }
+var _state = gmnav_search_step(search, 200);
+
+if (_state == gmnav_state.FOUND) {
+    var _path = gmnav_search_get_path(search);
+}
 ```
 
 ---
 
 ### gmnav_search_get_path(search)
 
-The result path. Empty unless the state is `FOUND`.
+The path a finished search produced, from start to goal.
 
 **Parameters:**
 
-- `search` (struct) - Search object
+- `search` (struct) - Search
 
-**Returns:** Array of node ids, start to goal inclusive
-
-**Example:**
-
-```
-var _path = gmnav_search_get_path(search);
-```
+**Returns:** Array of node ids, empty if the search did not succeed
 
 ---
 
 ### gmnav_search_is_stale(search)
 
-Whether the grid changed after this search began. A stale result is not guaranteed to be walkable, see Known Behaviours.
+Whether the grid changed since this search began.
+
+Stale means the result may no longer reflect the world. For a search that **completed** before the change, the path was correct when produced and nothing is corrupted. For one that was **suspended** mid-flight, settled cells are never revisited, so a wall landing on ground the search already crossed off goes unnoticed.
+
+The contract is termination plus this flag, not path validity.
 
 **Parameters:**
 
-- `search` (struct) - Search object
+- `search` (struct) - Search
 
-**Returns:** bool
-
-**Example:**
-
-```
-if (gmnav_search_is_stale(search)) { }
-```
+**Returns:** Boolean
 
 ---
 
 ### gmnav_search_release(search)
 
-Gives back the workspace but keeps the result. Called automatically when a search resolves.
+Returns the workspace and clears the result. Call this when you are done with a finished search and want the slot back for someone else.
 
 **Parameters:**
 
-- `search` (struct) - Search object
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_search_release(search);
-```
+- `search` (struct) - Search
 
 ---
 
 ### gmnav_search_abort(search)
 
-Cancels and resets to `IDLE`. Safe at any time.
+Stops a search in progress and returns its workspace. Safe on a search that is idle or already finished.
 
 **Parameters:**
 
-- `search` (struct) - Search object
+- `search` (struct) - Search
 
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_search_abort(search);
-```
+---
 
 ---
 
 ## Scheduler Functions
 
+
+The scheduler owns one budget shared across every search in flight, so frame cost is fixed regardless of how many agents are asking. What agent count changes is how long the queue takes to drain, not what a frame costs.
+
+It dispatches on domain, so the same scheduler API drives a grid or a platformer graph.
+
+---
+
 ### gmnav_scheduler_create(target, budget, concurrent)
 
-Creates a scheduler that shares one frame budget across every search it runs. Works over a grid or a platformer graph, detected from the target.
+Creates a scheduler over a grid or a platformer graph.
 
 **Parameters:**
 
-- `target` (struct) - A grid, or a platformer graph
-- `budget` (int, default: `GMNAV_DEFAULT_BUDGET`) - Heap pops per frame, shared by all active searches
-- `concurrent` (int, default: 4) - Maximum simultaneous searches, capped by the target's workspace count
+- `target` (struct) - A grid or a platformer graph. The domain is read from it
+- `budget` (int, default: the configured default) - Node expansions per frame, across all searches combined
+- `concurrent` (int, default: 4) - How many searches may be in flight at once, capped by how many workspaces the target can supply
 
 **Returns:** Scheduler struct
 
@@ -836,506 +1257,503 @@ sched = gmnav_scheduler_create(grid, 2000, 4);
 
 ---
 
-### gmnav_scheduler_request(sched, start_node, goal_node, priority, corner_cut, profile, need_clear)
+### gmnav_scheduler_request(sched, start_node, goal_node, priority, corner_cut, profile, need_clear, max_climb, max_drop)
 
-Requests a path. Returns immediately with a ticket, before any work has happened.
+Queues a path request and returns a ticket immediately, before any work has happened.
+
+A ticket is a receipt, not a path. Check it later.
+
+`gmnav_priority.IMMEDIATE` bypasses the budget and runs to completion inside this call, but it does **not** bypass the workspace pool. If every workspace is busy there is nowhere to run, and the request quietly falls back into the queue to resolve later like any other. Check the ticket state rather than assuming a path arrived.
 
 **Parameters:**
 
 - `sched` (struct) - Scheduler
-- `start_node` (int) - Start node id, domain appropriate
-- `goal_node` (int) - Goal node id
-- `priority` (enum, default: `gmnav_priority.NORMAL`) - `LOW`, `NORMAL`, `HIGH`, or `IMMEDIATE`
-- `corner_cut` (bool, default: false) - Grid domain only
-- `profile` (struct, optional) - Grid domain only
-- `need_clear` (int, default: 0) - Grid domain only
+- `start_node` (int) - Starting node
+- `goal_node` (int) - Target node
+- `priority` (enum, default: `gmnav_priority.NORMAL`) - `LOW`, `NORMAL`, `HIGH` or `IMMEDIATE`
+- `corner_cut` (bool, default: `false`) - Whether diagonals may squeeze between wall corners
+- `profile` (struct, default: undefined) - Cost profile
+- `need_clear` (int, default: 0) - Clearance the unit needs, in cells
+- `max_climb` (real, default: undefined) - Largest rise the unit can take
+- `max_drop` (real, default: undefined) - Largest fall the unit can take
 
 **Returns:** Ticket struct
 
 **Example:**
 
 ```
-ticket = gmnav_scheduler_request(sched, _from, _to, gmnav_priority.HIGH);
+ticket = gmnav_scheduler_request(sched, _from, _to,
+                                 gmnav_priority.NORMAL, false,
+                                 profile, _need, 1, 3);
 ```
 
 ---
 
 ### gmnav_scheduler_update(sched)
 
-Advances every active search under the shared budget. Call once per step, before anything reads a ticket.
+Advances every search in flight, spending the budget across them. Unused budget from a search that finishes early cascades to the next one in the same frame, so the whole allowance keeps working.
+
+Call once per frame, before your agents update.
 
 **Parameters:**
 
 - `sched` (struct) - Scheduler
 
-**Returns:** Nothing
+---
+
+### gmnav_scheduler_is_ready(ticket)
+
+Whether a ticket has a path waiting.
+
+This is `true` only for `FOUND`. A failed request is finished but not ready, so check `ticket.state` if you need to tell the difference.
+
+**Parameters:**
+
+- `ticket` (struct) - Ticket
+
+**Returns:** Boolean
+
+---
+
+### gmnav_scheduler_get_path(ticket)
+
+The path a resolved ticket produced.
+
+**Parameters:**
+
+- `ticket` (struct) - Ticket
+
+**Returns:** Array of node ids, empty if the request did not succeed
+
+---
+
+### gmnav_scheduler_get_links(ticket)
+
+How each node on a platformer path is reached. `links[i]` is the link type used to arrive at `path[i]`.
+
+Empty on the grid domain.
+
+**Parameters:**
+
+- `ticket` (struct) - Ticket
+
+**Returns:** Array of `gmnav_link` values
 
 **Example:**
 
 ```
-gmnav_scheduler_update(sched);
+var _path  = gmnav_scheduler_get_path(ticket);
+var _links = gmnav_scheduler_get_links(ticket);
 ```
 
 ---
 
 ### gmnav_scheduler_cancel(sched, ticket)
 
-Abandons a request. Safe whether queued, running, or already finished. Frees the workspace on the next update.
+Abandons a request. Safe at any point, whether the ticket is queued, running or already finished.
+
+A running search frees its workspace on the next update, letting a waiting request take it. In a game where targets move often, cancelling stale requests is a real performance win rather than tidiness.
 
 **Parameters:**
 
 - `sched` (struct) - Scheduler
 - `ticket` (struct) - Ticket to cancel
 
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_scheduler_cancel(sched, ticket);
-```
-
----
-
-### gmnav_scheduler_is_ready(ticket)
-
-Whether a ticket resolved successfully.
-
-**Parameters:**
-
-- `ticket` (struct) - Ticket
-
-**Returns:** bool
-
-**Example:**
-
-```
-if (gmnav_scheduler_is_ready(ticket)) { }
-```
-
----
-
-### gmnav_scheduler_get_path(ticket)
-
-The resolved path.
-
-**Parameters:**
-
-- `ticket` (struct) - Ticket
-
-**Returns:** Array of node ids, empty unless found
-
-**Example:**
-
-```
-var _path = gmnav_scheduler_get_path(ticket);
-```
-
----
-
-### gmnav_scheduler_get_links(ticket)
-
-Link types used to enter each node of the path. Platformer domain only, empty on a grid scheduler.
-
-**Parameters:**
-
-- `ticket` (struct) - Ticket
-
-**Returns:** Array of `gmnav_link` values, same length as the path
-
-**Example:**
-
-```
-var _links = gmnav_scheduler_get_links(ticket);
-```
-
 ---
 
 ### gmnav_scheduler_pending(sched)
 
-How many requests are waiting for a workspace. If this stays high across frames, raise the budget or the workspace count.
+How many requests are waiting for a workspace.
+
+This is the number to watch. A brief spike is a crowd asking at once and the queue doing its job. Pending that stays high frame after frame means requests are arriving faster than they are served, and on a map with frequent edits that is more often unnecessary repathing than an undersized budget.
 
 **Parameters:**
 
 - `sched` (struct) - Scheduler
 
-**Returns:** int
+**Returns:** Int
 
-**Example:**
-
-```
-if (gmnav_scheduler_pending(sched) > 20) { }
-```
+---
 
 ---
 
 ## Path Functions
 
+
+A path object converts node ids into world waypoints and holds the result. Every waypoint sits at the centre of its cell, at the height that cell is drawn at, so an overlay cell reports where it actually sits.
+
+---
+
 ### gmnav_path_create(grid, nodes)
 
-Converts an array of node ids into world space waypoints.
+Builds a path object from a list of nodes.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `nodes` (array) - Node ids, from a search or a ticket
+- `grid` (struct) - Grid the nodes belong to
+- `nodes` (array) - Node ids, in order
 
 **Returns:** Path struct
 
 **Example:**
 
 ```
-path = gmnav_path_create(grid, gmnav_scheduler_get_path(ticket));
+path = gmnav_path_create(grid, gmnav_search_get_path(search));
 ```
 
 ---
 
 ### gmnav_path_get_count(path)
 
-Number of waypoints.
+How many waypoints the path holds.
 
 **Parameters:**
 
-- `path` (struct) - Path object
+- `path` (struct) - Path
 
-**Returns:** int
-
-**Example:**
-
-```
-var _n = gmnav_path_get_count(path);
-```
+**Returns:** Int
 
 ---
 
-### gmnav_path_get_x(path, index)
+### gmnav_path_get_x(path, i)
 
-World x of a waypoint.
+The world x of a waypoint.
 
 **Parameters:**
 
-- `path` (struct) - Path object
-- `index` (int) - Waypoint index
+- `path` (struct) - Path
+- `i` (int) - Waypoint index
 
-**Returns:** real
-
-**Example:**
-
-```
-var _x = gmnav_path_get_x(path, 0);
-```
+**Returns:** Real
 
 ---
 
-### gmnav_path_get_y(path, index)
+### gmnav_path_get_y(path, i)
 
-World y of a waypoint.
+The world y of a waypoint.
 
 **Parameters:**
 
-- `path` (struct) - Path object
-- `index` (int) - Waypoint index
+- `path` (struct) - Path
+- `i` (int) - Waypoint index
 
-**Returns:** real
-
-**Example:**
-
-```
-var _y = gmnav_path_get_y(path, 0);
-```
+**Returns:** Real
 
 ---
 
 ### gmnav_path_get_length(path)
 
-Total world length of the path.
+Total world length of the path, in pixels.
 
 **Parameters:**
 
-- `path` (struct) - Path object
+- `path` (struct) - Path
 
-**Returns:** real
+**Returns:** Real
 
-**Example:**
+---
 
-```
-var _len = gmnav_path_get_length(path);
-```
+### gmnav_path_sample(path, dist)
+
+The position a given distance along the path.
+
+**Parameters:**
+
+- `path` (struct) - Path
+- `dist` (real) - Distance from the start, in pixels
+
+**Returns:** Array `[x, y]`
 
 ---
 
 ### gmnav_path_anchor_start(path, x, y)
 
-Replaces the first waypoint with a real position. Grid paths start at a cell centre, so without this an agent standing off-centre snaps backwards on its first step.
+Replaces the first waypoint with a real position and recomputes the length.
+
+A character is almost never standing exactly on a cell centre, so without this the opening move is a visible step backwards.
 
 **Parameters:**
 
-- `path` (struct) - Path object
-- `x` (real) - True start x
-- `y` (real) - True start y
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_path_anchor_start(path, x, y);
-```
+- `path` (struct) - Path
+- `x` (real) - Where the character really is
+- `y` (real) - Where the character really is
 
 ---
 
 ### gmnav_path_anchor_end(path, x, y)
 
-Replaces the last waypoint with the true goal position.
+Replaces the last waypoint with a real position and recomputes the length.
 
 **Parameters:**
 
-- `path` (struct) - Path object
-- `x` (real) - True goal x
-- `y` (real) - True goal y
+- `path` (struct) - Path
+- `x` (real) - Where the target really is
+- `y` (real) - Where the target really is
 
-**Returns:** Nothing
+---
+
+### gmnav_path_smooth(path, max_climb, max_drop, radius, headings, profile)
+
+String pulling. Replaces runs of waypoints with straight lines wherever the line is walkable, which removes the staircase shape a grid search produces.
+
+Refused on `ISO_STAGGERED`, `HEX_POINTY` and `HEX_FLAT`. On those layouts a straight line in cell coordinates says nothing reliable about whether a character could walk it, so the function returns without doing anything rather than returning a confidently wrong answer. `gmnav_path_simplify` works everywhere.
+
+The line of sight test underneath visits every cell a line touches, and requires both flanking cells to be open at an exact corner crossing. A test that commits to one cell per step slips through the gap between two diagonal walls and reports clear, which produces smoothed paths that clip geometry.
+
+Each optional argument closes a way the shortcut could be wrong:
+
+**Parameters:**
+
+- `path` (struct) - Path, modified in place
+- `max_climb` (real, default: undefined) - Elevation limits. Without these a shortcut will cut straight up a cliff the search walked around, because a cliff is not blocked
+- `max_drop` (real, default: undefined) - As above
+- `radius` (real, default: 0) - Agent body radius. Without it, a line that fits the centre may not fit the shoulders
+- `headings` (int, default: 0) - How many headings the result may use. 0 is unconstrained, 4 is cardinals, 8 adds diagonals. Constrains the shaping only, so the layout's neighbour set has to agree
+- `profile` (struct, default: undefined) - Cost profile. Without it a shortcut will walk back through expensive ground the search deliberately avoided
 
 **Example:**
 
 ```
-gmnav_path_anchor_end(path, target_x, target_y);
+gmnav_path_smooth(path, agent.max_climb, agent.max_drop,
+                  agent.radius, agent.headings, agent.profile);
+```
+
+**Note on headings:** with a constraint set, this also rewrites a staircase into the fewest legal straight legs, proposing a corner the search never visited and checking each leg the same way a single leg is checked. Both corner orders are tried, and the staircase stands if neither passes. A single straight leg is always preferred over a pair.
+
+---
+
+### gmnav_path_simplify(path, tolerance, max_climb, max_drop)
+
+Removes waypoints that lie on a straight line between their neighbours. Changes the path's shape not at all, so it is safe on every layout including the ones smoothing refuses.
+
+Keeps any waypoint where the layer changes, because a lifted stair is nearly collinear on screen and a purely geometric test would delete it, losing the climb.
+
+After simplifying, waypoints no longer correspond one to one with cells, so `path.nodes` is cleared. Run `gmnav_path_smooth` first if you want both.
+
+**Parameters:**
+
+- `path` (struct) - Path, modified in place
+- `tolerance` (real, default: 0.01) - How close to collinear counts as collinear
+- `max_climb` (real, default: undefined) - Elevation limits, for the same reason smoothing needs them
+- `max_drop` (real, default: undefined) - As above
+
+**Example:**
+
+```
+gmnav_path_simplify(path, 0.01, agent.max_climb, agent.max_drop);
 ```
 
 ---
 
-### gmnav_path_smooth(path)
+### gmnav_path_curve(path, mode, radius, samples, body, min_turn)
 
-String pulling. Walks forward from each kept waypoint to the furthest node still in line of sight and drops everything between, turning staircases into straight runs.
+Rounds the corners of a path, for anything with momentum that cannot turn instantly.
 
-Does nothing on `ISO_STAGGERED` and hex layouts, where a straight line in cell coordinates does not correspond to a straight line on screen.
+Every generated segment is validated against the same geometry the search used, body radius included. A corner whose arc would clip keeps its sharp corner, and under `SPLINE` a segment that would clip reverts to the straight line. In tight terrain a curved path is therefore only partly curved, which is the check working rather than the mode failing.
+
+Refused on the same layouts as `gmnav_path_smooth`.
+
+Unlike `simplify`, this leaves `path.nodes` intact, so scoped repathing still has a cell route to test against.
 
 **Parameters:**
 
-- `path` (struct) - Path object
-
-**Returns:** Nothing
+- `path` (struct) - Path, modified in place
+- `mode` (enum, default: `gmnav_curve.NONE`) - `NONE` leaves the path alone. `CORNER` rounds each turn and leaves straight legs untouched. `SPLINE` runs a curve through every waypoint
+- `radius` (real, default: 16) - How far back from each corner the rounding begins. Clamped to half of each adjacent leg, so two corners never consume the same segment
+- `samples` (int, default: 4) - Points per arc. Four or five is plenty for movement
+- `body` (real, default: 0) - Agent body radius
+- `min_turn` (real, default: 5) - Angle in degrees below which a joint is left alone
 
 **Example:**
 
 ```
-gmnav_path_smooth(path);
+gmnav_path_curve(path, gmnav_curve.CORNER, 40, 5, agent.radius);
 ```
+
+**Note:** a spline passes through its waypoints but is not bounded by them, so it overshoots at the ends. `CORNER` is the safer default. Do not curve a path whose headings you constrained, since a curve contains every heading.
 
 ---
-
-### gmnav_path_simplify(path, tolerance)
-
-Drops waypoints that lie on a straight line between their neighbours. Safe on every layout, and it does not change the path's shape.
-
-Clears `path.nodes`, because the waypoints no longer correspond one to one with cells. Run `gmnav_path_smooth` first if you want both.
-
-**Parameters:**
-
-- `path` (struct) - Path object
-- `tolerance` (real, default: 0.01) - Collinearity threshold
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_path_simplify(path);
-```
-
----
-
-### gmnav_path_sample(path, distance)
-
-Position at a given distance along the path, clamped at both ends.
-
-**Parameters:**
-
-- `path` (struct) - Path object
-- `distance` (real) - Distance along the path in world units
-
-**Returns:** Array `[x, y]`
-
-**Example:**
-
-```
-var _pos = gmnav_path_sample(path, 128);
-```
-
----
-
-### gmnav_grid_line_clear(grid, c0, r0, c1, r1)
-
-Supercover line test between two cells. True when every cell the segment touches is walkable.
-
-Unlike Bresenham this visits every touched cell and refuses exact corner crossings unless both flanking cells are open, so it never approves a diagonal squeeze through a wall join.
-
-**Parameters:**
-
-- `grid` (struct) - Navigation grid
-- `c0`, `r0` (int) - Start cell
-- `c1`, `r1` (int) - End cell
-
-**Returns:** bool
-
-**Example:**
-
-```
-if (gmnav_grid_line_clear(grid, 5, 3, 12, 9)) { }
-```
-
----
-
-### gmnav_grid_node_line_clear(grid, a, b)
-
-The same test between two node ids.
-
-**Parameters:**
-
-- `grid` (struct) - Navigation grid
-- `a` (int) - Start node id
-- `b` (int) - End node id
-
-**Returns:** bool
-
-**Example:**
-
-```
-if (gmnav_grid_node_line_clear(grid, _a, _b)) { }
-```
 
 ---
 
 ## Cost Field Functions
 
+
+A layer holds one number per cell and knows nothing about who reads it. A profile blends several layers with weights and flattens the result into a single array, so the search does one lookup per neighbour regardless of how many layers went into it.
+
+Weights belong to the profile rather than the layer, which is what lets three unit types share one danger map and disagree completely about how much they care.
+
+---
+
 ### gmnav_costlayer_create(grid, name)
 
-Creates an empty influence layer sized to the grid. Values are additive penalties in step units, 0 means no opinion.
+Creates an empty cost layer over a grid. Every cell starts at 0. The array covers overlay cells as well as base cells.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `name` (string, default: "") - Label, for debugging
+- `grid` (struct) - Grid
+- `name` (string, default: "") - For your own bookkeeping
 
 **Returns:** Layer struct
 
 **Example:**
 
 ```
-danger = gmnav_costlayer_create(grid, "danger");
+danger = gmnav_costlayer_create(grid, "turret");
 ```
 
 ---
 
 ### gmnav_costlayer_set(layer, col, row, value)
 
-Sets one cell's value.
+Sets the value of one base cell.
 
 **Parameters:**
 
-- `layer` (struct) - Cost layer
+- `layer` (struct) - Layer
 - `col` (int) - Column
 - `row` (int) - Row
-- `value` (real) - Penalty
+- `value` (real) - New value
 
-**Returns:** bool - False if out of bounds
-
-**Example:**
-
-```
-gmnav_costlayer_set(danger, 7, 6, 12);
-```
+**Returns:** Boolean, `false` if the cell is out of bounds
 
 ---
 
 ### gmnav_costlayer_get(layer, col, row)
 
-Reads one cell's value.
+The value of one base cell.
 
 **Parameters:**
 
-- `layer` (struct) - Cost layer
+- `layer` (struct) - Layer
 - `col` (int) - Column
 - `row` (int) - Row
 
-**Returns:** real - 0 if out of bounds
+**Returns:** Real, 0 if out of bounds
+
+---
+
+### gmnav_costlayer_set_node(layer, node, value)
+
+Sets the value of any node, base or overlay.
+
+An overlay cell has no unique column and row, since it shares them with the ground beneath it, so this is how you price a deck.
+
+**Parameters:**
+
+- `layer` (struct) - Layer
+- `node` (int) - Node id, base or overlay
+- `value` (real) - New value
+
+**Returns:** Boolean, `false` if the node is out of range
 
 **Example:**
 
 ```
-var _v = gmnav_costlayer_get(danger, 7, 6);
+gmnav_costlayer_set_node(toll, _deck_node, 8);
 ```
+
+---
+
+### gmnav_costlayer_get_node(layer, node)
+
+The value of any node, base or overlay.
+
+**Parameters:**
+
+- `layer` (struct) - Layer
+- `node` (int) - Node id
+
+**Returns:** Real, 0 if out of range
 
 ---
 
 ### gmnav_costlayer_clear(layer)
 
-Zeroes the entire layer.
+Resets every cell to 0.
 
 **Parameters:**
 
-- `layer` (struct) - Cost layer
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_costlayer_clear(danger);
-```
-
----
-
-### gmnav_costlayer_stamp_radial(layer, wx, wy, radius, peak, falloff)
-
-Stamps a radial falloff in world space. Overlapping stamps combine with max, not addition, so two turrets covering a cell make it dangerous rather than twice as dangerous, and re-stamping the same spot is idempotent.
-
-**Parameters:**
-
-- `layer` (struct) - Cost layer
-- `wx` (real) - World x of the centre
-- `wy` (real) - World y of the centre
-- `radius` (real) - Reach in world units
-- `peak` (real) - Value at the centre
-- `falloff` (real, default: 1) - 1 linear, 2 quadratic, higher is a tighter core
-
-**Returns:** Array `[c1, r1, c2, r2]` - The cell rect touched, for feeding into `gmnav_costprofile_bake_region`
-
-**Example:**
-
-```
-var _rect = gmnav_costlayer_stamp_radial(danger, player_x, player_y, 200, 20, 2);
-```
+- `layer` (struct) - Layer
 
 ---
 
 ### gmnav_costlayer_clear_region(layer, c1, r1, c2, r2)
 
-Zeroes a cell rect. Use before re-stamping a stamp that moved, passing the rect the previous stamp returned.
+Resets a rectangle to 0. Used with `gmnav_costprofile_bake_region` to move a threat without touching the rest of the map.
 
 **Parameters:**
 
-- `layer` (struct) - Cost layer
-- `c1`, `r1`, `c2`, `r2` (int) - Rectangle corners
+- `layer` (struct) - Layer
+- `c1`, `r1` (int) - One corner
+- `c2`, `r2` (int) - The other corner
 
-**Returns:** Nothing
+---
+
+### gmnav_costlayer_stamp_radial(layer, wx, wy, radius, peak, falloff)
+
+Paints a circular blob of cost, with the peak at the centre falling off outward.
+
+Stamps combine with **max** rather than adding, so two turrets covering the same cell make it dangerous rather than twice as dangerous, and restamping the same source at the same place changes nothing.
+
+**Parameters:**
+
+- `layer` (struct) - Layer
+- `wx` (real) - World x of the centre
+- `wy` (real) - World y of the centre
+- `radius` (real) - Reach in pixels
+- `peak` (real) - Value at the centre
+- `falloff` (real, default: 1) - Exponent. 1 is linear, 2 falls off faster near the edge
+
+**Returns:** Array `[c1, r1, c2, r2]`, the cells actually written
 
 **Example:**
 
 ```
-gmnav_costlayer_clear_region(danger, _old[0], _old[1], _old[2], _old[3]);
+var _rect = gmnav_costlayer_stamp_radial(danger, px, py, 200, 20, 2);
+```
+
+**Note:** keep peaks within about an order of magnitude of the base cost of 1. A peak of 40 puts every reasonable profile weight far past the point where a unit's decision flips, so turning the weight up and down appears to do nothing.
+
+---
+
+### gmnav_costlayer_stamp_path(layer, points, width, peak, falloff)
+
+Paints a band of cost along a polyline, with the peak on the centreline falling off to either side.
+
+For anything linear: a road, a patrol route, a spreading fire, a player's recent trail. Approximating this with a chain of radial stamps produces a lumpy field and a bounding rectangle far larger than the band, which makes region rebaking far more expensive than it needs to be.
+
+Work follows the route rather than the bounding box of the whole thing, so a long path across a map costs what its own length costs.
+
+Combines with max, exactly as `stamp_radial` does.
+
+**Parameters:**
+
+- `layer` (struct) - Layer
+- `points` (array) - World space `[x, y]` pairs, in order
+- `width` (real) - Half width of the band, in pixels
+- `peak` (real) - Value on the centreline
+- `falloff` (real, default: 1) - Exponent
+
+**Returns:** Array `[c1, r1, c2, r2]`, the cells actually written rather than the area scanned
+
+**Example:**
+
+```
+var _rect = gmnav_costlayer_stamp_path(danger,
+                [[x1, y1], [x2, y2], [x3, y3]], 56, 8, 1);
 ```
 
 ---
 
 ### gmnav_costprofile_create(grid, name)
 
-Creates a resolved cost profile. Pass this to a search, a scheduler request, an agent, or a flow field.
+Creates an empty cost profile. Its resolved array covers overlay cells as well as base cells.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `name` (string, default: "") - Label, for debugging
+- `grid` (struct) - Grid
+- `name` (string, default: "") - For your own bookkeeping
 
 **Returns:** Profile struct
 
@@ -1349,41 +1767,37 @@ soldier = gmnav_costprofile_create(grid, "soldier");
 
 ### gmnav_costprofile_add(profile, layer, weight)
 
-Adds a layer to a profile with a weight. Weights live on the profile, not the layer, so several agent types can read one layer and disagree about it.
+Adds a layer to a profile with a weight.
+
+A negative weight is legal, and resolved cost still clamps at 1, so it makes dangerous ground ordinary rather than attractive. Cost fields push; to pull a unit toward something, seed it as a goal in a flow field.
 
 **Parameters:**
 
-- `profile` (struct) - Cost profile
-- `layer` (struct) - Cost layer
-- `weight` (real, default: 1) - Multiplier. 0 ignores the layer entirely
-
-**Returns:** Nothing
+- `profile` (struct) - Profile
+- `layer` (struct) - Layer to add
+- `weight` (real, default: 1) - How much this profile cares
 
 **Example:**
 
 ```
-gmnav_costprofile_add(soldier, danger, 1);
+gmnav_costprofile_add(scout, danger, 4);
 ```
+
+**Note:** this appends rather than replacing, so calling it twice with the same layer counts that layer twice. Use `gmnav_costprofile_set_weight` to change an existing weight.
 
 ---
 
 ### gmnav_costprofile_set_weight(profile, layer, weight)
 
-Changes an existing layer's weight and marks the profile dirty.
+Changes the weight of a layer already in the profile. Marks the profile dirty.
 
 **Parameters:**
 
-- `profile` (struct) - Cost profile
-- `layer` (struct) - Cost layer already added
-- `weight` (real) - New multiplier
+- `profile` (struct) - Profile
+- `layer` (struct) - Layer already added
+- `weight` (real) - New weight
 
-**Returns:** bool - False if the layer is not in this profile
-
-**Example:**
-
-```
-gmnav_costprofile_set_weight(soldier, danger, 4);
-```
+**Returns:** Boolean, `false` if the layer is not in this profile
 
 ---
 
@@ -1393,48 +1807,24 @@ Removes a layer from a profile.
 
 **Parameters:**
 
-- `profile` (struct) - Cost profile
-- `layer` (struct) - Cost layer
+- `profile` (struct) - Profile
+- `layer` (struct) - Layer to remove
 
-**Returns:** bool - False if the layer is not in this profile
-
-**Example:**
-
-```
-gmnav_costprofile_remove(soldier, danger);
-```
-
----
-
-### gmnav_costprofile_is_dirty(profile)
-
-Whether the profile needs rebaking. Goes dirty when a layer changes, a weight changes, or the grid's terrain changes.
-
-**Parameters:**
-
-- `profile` (struct) - Cost profile
-
-**Returns:** bool
-
-**Example:**
-
-```
-if (gmnav_costprofile_is_dirty(soldier)) { }
-```
+**Returns:** Boolean, `false` if the layer is not in this profile
 
 ---
 
 ### gmnav_costprofile_bake(profile)
 
-Flattens the base terrain cost and every weighted layer into one array the search reads directly. This is what keeps a twelve layer profile as cheap at search time as no profile at all.
+Flattens every layer and weight into one array, so the search does a single lookup per neighbour.
 
-Resolved cost is clamped to a minimum of 1, so negative weights make dangerous ground ordinary rather than attractive.
+Overlay cells are seeded from their own base cost, then weighted layers are applied, so a deck is priced independently of the ground beneath it. Resolved cost clamps at 1.
+
+A twelve layer profile costs the search precisely what no profile costs. The work moved here, where you control when it happens.
 
 **Parameters:**
 
-- `profile` (struct) - Cost profile
-
-**Returns:** Nothing
+- `profile` (struct) - Profile
 
 **Example:**
 
@@ -1444,304 +1834,358 @@ gmnav_costprofile_bake(soldier);
 
 ---
 
-### gmnav_costprofile_bake_if_dirty(profile)
+### gmnav_costprofile_is_dirty(profile)
 
-Rebakes only when needed.
+Whether the profile is out of date.
+
+A profile goes dirty when any of its layers changes, when a weight changes, or when the grid's terrain changes. That last one catches a case people miss: block a wall or change a terrain cost, and every profile over that grid needs rebaking too.
 
 **Parameters:**
 
-- `profile` (struct) - Cost profile
+- `profile` (struct) - Profile
 
-**Returns:** Nothing
+**Returns:** Boolean
 
-**Example:**
+---
 
-```
-gmnav_costprofile_bake_if_dirty(soldier);
-```
+### gmnav_costprofile_bake_if_dirty(profile)
+
+Bakes only if something changed. Safe to call every frame.
+
+**Parameters:**
+
+- `profile` (struct) - Profile
+
+**Returns:** Boolean, whether a bake happened
 
 ---
 
 ### gmnav_costprofile_bake_region(profile, c1, r1, c2, r2)
 
-Rebakes one cell rect. For a stamp that follows a moving target, this is a few hundred writes instead of the whole map.
+Rebakes one rectangle, which is what makes a moving threat affordable. A full bake walks every cell; this walks the cells you name.
 
-Cover the old footprint as well as the new one, or the previous stamp stays burned into the resolved array. Does not clear the dirty flag, since it only guarantees the rectangle you named.
+Does **not** clear the dirty flag, deliberately, because it only guarantees the rectangle you named. The rest of the map may still be out of date and pretending otherwise would hide bugs.
 
 **Parameters:**
 
-- `profile` (struct) - Cost profile
-- `c1`, `r1`, `c2`, `r2` (int) - Rectangle corners
-
-**Returns:** Nothing
+- `profile` (struct) - Profile
+- `c1`, `r1` (int) - One corner
+- `c2`, `r2` (int) - The other corner
 
 **Example:**
 
 ```
+gmnav_costlayer_clear_region(danger, _old[0], _old[1], _old[2], _old[3]);
+var _new = gmnav_costlayer_stamp_path(danger, _route, 56, 8, 1);
+
+gmnav_costprofile_bake_region(soldier, _old[0], _old[1], _old[2], _old[3]);
 gmnav_costprofile_bake_region(soldier, _new[0], _new[1], _new[2], _new[3]);
 ```
+
+**Note:** rebake **both** rectangles, the area vacated and the area newly covered. Skip the old one and the threat stays burned into the resolved array permanently. And do it once per profile that reads the layer; a profile that misses the update simply holds an older world.
+
+---
 
 ---
 
 ## Flow Field Functions
 
-### gmnav_flowfield_create(grid, profile)
 
-Creates a flow field. Allocates four arrays sized to the cell count, so keep one per goal, not one per agent.
+A flow field inverts the problem. Instead of searching from each agent toward the goal, it spreads outward from the goal once and records how far every cell is from it, so an agent reads a direction instead of running a search.
+
+Many agents, few destinations, stable goals is where a field belongs. Below roughly thirty agents, individual searches are cheaper.
+
+---
+
+### gmnav_flowfield_create(grid, profile, max_climb, max_drop)
+
+Creates a flow field over a grid. Its arrays cover overlay cells as well as base cells, and grow if an overlay is attached later.
+
+Elevation limits are applied in reverse while building, because a field is built outward from the goal but walked inward toward it. A field built to a goal on top of a cliff is not the same field as one built to a goal at its foot.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `profile` (struct, optional) - Cost profile to build against
+- `grid` (struct) - Grid
+- `profile` (struct, default: undefined) - Cost profile the field is built under
+- `max_climb` (real, default: undefined) - Largest rise a unit reading this field can take
+- `max_drop` (real, default: undefined) - Largest fall
 
 **Returns:** Field struct
 
 **Example:**
 
 ```
-field = gmnav_flowfield_create(grid);
+field = gmnav_flowfield_create(grid, soldier);
 ```
 
 ---
 
 ### gmnav_flowfield_build(field, goal_nodes, max_dist)
 
-Builds the field to completion. Suitable at level load, not during gameplay on a large map.
+Builds the whole field at once, both passes. The right choice at level load and the wrong one mid-combat.
+
+Seed several goals and each cell records the distance to the nearest one, so every agent flows to whichever is cheapest for it and the map partitions itself along the natural watersheds. Several goals cost very little over one.
 
 **Parameters:**
 
-- `field` (struct) - Flow field
-- `goal_nodes` (int or array) - One node id, or several. Multiple goals cost almost nothing extra and every cell points at its own nearest one
-- `max_dist` (real, default: infinity) - Stop expanding past this cost, in step units
+- `field` (struct) - Field
+- `goal_nodes` (int or array) - One node id, or an array of them
+- `max_dist` (real, default: infinity) - Stop expanding past this distance. Cells beyond it report unreachable
 
-**Returns:** bool - Success status
+**Returns:** Boolean, whether any goal was usable
 
 **Example:**
 
 ```
-gmnav_flowfield_build(field, [_exit_a, _exit_b, _exit_c], 40);
+gmnav_flowfield_build(field, [exit_a, exit_b, exit_c]);
 ```
 
 ---
 
 ### gmnav_flowfield_begin(field, goal_nodes, max_dist)
 
-Starts a sliced build. Advance it with `gmnav_flowfield_step`.
+Starts a sliced build. Follow with `gmnav_flowfield_step` once per frame.
 
 **Parameters:**
 
-- `field` (struct) - Flow field
-- `goal_nodes` (int or array) - One or several goal node ids
+- `field` (struct) - Field
+- `goal_nodes` (int or array) - One node id, or an array of them
 - `max_dist` (real, default: infinity) - Distance cap
 
-**Returns:** bool - False if no goal was valid
-
-**Example:**
-
-```
-gmnav_flowfield_begin(field, _goal, 25);
-```
+**Returns:** Boolean, whether any goal was usable
 
 ---
 
 ### gmnav_flowfield_step(field, budget)
 
-Advances the build. Runs the distance pass first, then the direction pass, both under the same budget.
+Advances a sliced build. Both passes slice: the distance sweep over reachable cells, and the direction pass over every cell.
+
+The second pass is the expensive half, because it touches every cell in the grid rather than only the reachable ones.
 
 **Parameters:**
 
-- `field` (struct) - Flow field
-- `budget` (int, default: `GMNAV_DEFAULT_BUDGET`) - Work units this call
+- `field` (struct) - Field
+- `budget` (int, default: the configured default) - Work allowed this call
 
-**Returns:** enum - `gmnav_state.WORKING`, `FOUND`, or `FAILED`
+**Returns:** `gmnav_state.WORKING`, `FOUND` or `FAILED`
 
 **Example:**
 
 ```
-if (gmnav_flowfield_step(field, 2000) == gmnav_state.FOUND) { }
-```
-
----
-
-### gmnav_flowfield_sample(field, x, y)
-
-Direction an agent at this world position should move. Computed in world space, so it is correct on isometric and hex layouts where a cell offset is not a screen direction.
-
-**Parameters:**
-
-- `field` (struct) - Flow field
-- `x` (real) - World x
-- `y` (real) - World y
-
-**Returns:** Array `[x, y]` - Normalised, or `[0, 0]` on an unreachable or goal cell
-
-**Example:**
-
-```
-var _d = gmnav_flowfield_sample(field, x, y);
-x += _d[0] * spd;
-y += _d[1] * spd;
-```
-
----
-
-### gmnav_flowfield_cost_at(field, x, y)
-
-Cost from this cell to the nearest goal, in step units.
-
-**Parameters:**
-
-- `field` (struct) - Flow field
-- `x` (real) - World x
-- `y` (real) - World y
-
-**Returns:** real - `infinity` if unreachable or beyond `max_dist`
-
-**Example:**
-
-```
-var _far = gmnav_flowfield_cost_at(field, x, y);
-```
-
----
-
-### gmnav_flowfield_is_reachable(field, x, y)
-
-Whether a cell can reach any goal.
-
-**Parameters:**
-
-- `field` (struct) - Flow field
-- `x` (real) - World x
-- `y` (real) - World y
-
-**Returns:** bool
-
-**Example:**
-
-```
-if (!gmnav_flowfield_is_reachable(field, x, y)) { }
+if (gmnav_flowfield_step(field, 2000) == gmnav_state.FOUND) {
+    // ready to sample
+}
 ```
 
 ---
 
 ### gmnav_flowfield_is_ready(field)
 
-Whether the build has completed.
+Whether the field has finished building.
 
 **Parameters:**
 
-- `field` (struct) - Flow field
+- `field` (struct) - Field
 
-**Returns:** bool
-
-**Example:**
-
-```
-if (gmnav_flowfield_is_ready(field)) { }
-```
+**Returns:** Boolean
 
 ---
 
 ### gmnav_flowfield_is_stale(field)
 
-Whether the grid changed since the field was built. Fields do not self-repair, rebuild explicitly.
+Whether the grid changed since the field was built.
+
+Flow fields do not repair themselves. A field built before an edit still describes the old world, arrows and all, and rebuilding one is far more expensive than repathing a single agent.
 
 **Parameters:**
 
-- `field` (struct) - Flow field
+- `field` (struct) - Field
 
-**Returns:** bool
+**Returns:** Boolean
+
+---
+
+### gmnav_flowfield_sample(field, x, y, layer)
+
+The direction to travel from a world position, as a normalised vector.
+
+Directions are computed in world space rather than from raw cell offsets. On a square grid those agree; on isometric or hex they do not, and deriving the vector from the offset would send every agent in the wrong direction while the debug overlay looked entirely correct.
+
+**Parameters:**
+
+- `field` (struct) - Field
+- `x` (real) - World x
+- `y` (real) - World y
+- `layer` (int, default: 0) - Which surface to ask about
+
+**Returns:** Array `[dx, dy]`, or `[0, 0]` if the cell is unreachable or has no direction
 
 **Example:**
 
 ```
-if (gmnav_flowfield_is_stale(field)) gmnav_flowfield_begin(field, _goal);
+var _d = gmnav_flowfield_sample(field, x, y, agent_layer);
+
+x += _d[0] * spd;
+y += _d[1] * spd;
 ```
+
+---
+
+### gmnav_flowfield_next(field, node)
+
+The node a cell steps to, rather than the direction it points.
+
+A direction vector cannot express a change of surface. Where a step crosses from one layer to another, this is what tells you so, and it is what a caller should read when a route may involve stairs or a bridge.
+
+**Parameters:**
+
+- `field` (struct) - Field
+- `node` (int) - Node id, base or overlay
+
+**Returns:** Node id, or `GMNAV_NO_NODE` at a goal or an unreached cell
+
+**Example:**
+
+```
+var _nx = gmnav_flowfield_next(field, _here);
+
+if (_nx != GMNAV_NO_NODE
+&&  gmnav_grid_node_layer(grid, _nx) != my_layer) {
+    // this step changes surface
+}
+```
+
+---
+
+### gmnav_flowfield_cost_at(field, x, y, layer)
+
+The distance from a world position to the nearest seeded goal, in path cost.
+
+More useful than it looks. This is a true travel cost with walls, terrain and danger all accounted for, which makes it a far better input to a decision than straight line distance, at one array lookup for every unit on the map.
+
+**Parameters:**
+
+- `field` (struct) - Field
+- `x` (real) - World x
+- `y` (real) - World y
+- `layer` (int, default: 0) - Which surface to ask about
+
+**Returns:** Real, or infinity if unreachable
+
+---
+
+### gmnav_flowfield_is_reachable(field, x, y, layer)
+
+Whether a world position can reach any seeded goal.
+
+Cells beyond a distance cap report `false`, the same as genuinely unreachable ones, so your code needs no special case.
+
+**Parameters:**
+
+- `field` (struct) - Field
+- `x` (real) - World x
+- `y` (real) - World y
+- `layer` (int, default: 0) - Which surface to ask about
+
+**Returns:** Boolean
+
+---
 
 ---
 
 ## Agent Functions
 
+
+An agent wraps a path with steering, arrival and optional local avoidance.
+
+It writes a desired velocity and does not move your instances. Your game already has movement and collision, and a navigation library that moved things directly would be a second movement system racing the first.
+
+Everything an agent does is available to a project using its own agent class. It stores preferences and forwards them to the framework calls that do the work; it invents nothing.
+
+---
+
 ### gmnav_agent_create(sched, x, y, radius, speed)
 
-Creates an agent bound to a scheduler. The agent proposes a velocity and never moves your instance.
+Creates an agent.
 
 **Parameters:**
 
-- `sched` (struct) - Scheduler
+- `sched` (struct) - Scheduler it requests paths from
 - `x` (real) - Starting world x
 - `y` (real) - Starting world y
-- `radius` (real, default: 8) - Used for avoidance and arrival
-- `speed` (real, default: 2) - Maximum speed in pixels per frame
+- `radius` (real, default: 8) - Body radius, used for avoidance and passed to smoothing
+- `speed` (real, default: 2) - Units per frame
 
 **Returns:** Agent struct
 
 **Example:**
 
 ```
-agent = gmnav_agent_create(sched, x, y, 12, 3);
+agent = gmnav_agent_create(sched, x, y, 8, 2.5);
 ```
 
 ---
 
-### gmnav_agent_goto(agent, gx, gy, priority)
+### gmnav_agent_goto(agent, gx, gy, priority, goal_layer)
 
-Asks the agent to walk to a world position. Requests a path from the scheduler and clears the arrival flag.
+Requests a path to a world position. When it arrives the agent smooths it, anchors both ends, curves it if asked, and starts steering.
+
+The goal layer is remembered, so a repath asks for the same surface rather than whatever is at ground level.
+
+Clears the arrived and failed latches.
 
 **Parameters:**
 
 - `agent` (struct) - Agent
-- `gx` (real) - Goal world x
-- `gy` (real) - Goal world y
+- `gx` (real) - World x of the goal
+- `gy` (real) - World y of the goal
 - `priority` (enum, default: `gmnav_priority.NORMAL`) - Request priority
+- `goal_layer` (int, default: 0) - Which surface the goal is on
 
-**Returns:** bool - False if either endpoint is off the grid
+**Returns:** Boolean, `false` if either end could not be resolved to a node
 
 **Example:**
 
 ```
-gmnav_agent_goto(agent, mouse_x, mouse_y);
+gmnav_agent_goto(agent, mouse_x, mouse_y, gmnav_priority.NORMAL, 1);
 ```
 
 ---
 
 ### gmnav_agent_update(agent, neighbours)
 
-Steps the agent. Call once per frame, after `gmnav_scheduler_update`. Writes `vx` and `vy`, and never touches `x` or `y`.
+Advances the agent by one frame. Collects a resolved ticket, repaths if a change landed on the route still to walk, advances waypoints, and writes `vx` and `vy`.
+
+Does not write `x` or `y`. Ever.
+
+Local avoidance needs a neighbour list, which you supply, because your game almost certainly already has a spatial index and GMNav does not keep one. A neighbour needs only `x`, `y` and `radius`.
 
 **Parameters:**
 
 - `agent` (struct) - Agent
-- `neighbours` (array, optional) - Other agent structs, for separation steering
-
-**Returns:** Nothing
+- `neighbours` (array, default: undefined) - Nearby agents to push away from
 
 **Example:**
 
 ```
-gmnav_agent_update(agent, _nearby);
+gmnav_scheduler_update(sched);
+gmnav_agent_update(agent, _near);
+
 x += agent.vx;
 y += agent.vy;
+agent.x = x;
+agent.y = y;
 ```
 
 ---
 
 ### gmnav_agent_stop(agent)
 
-Drops the current goal and path. Velocity decays to zero rather than stopping dead.
+Drops the goal, cancels any request in flight, and clears the path. Velocity decays rather than cutting to zero.
 
 **Parameters:**
 
 - `agent` (struct) - Agent
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_agent_stop(agent);
-```
 
 ---
 
@@ -1749,98 +2193,135 @@ gmnav_agent_stop(agent);
 
 Whether the agent currently holds a path.
 
+Not a substitute for `gmnav_agent_arrived`. The path is cleared on the same frame a journey completes, so anything reading this would miss the moment entirely.
+
 **Parameters:**
 
 - `agent` (struct) - Agent
 
-**Returns:** bool
-
-**Example:**
-
-```
-if (!gmnav_agent_has_path(agent)) { }
-```
+**Returns:** Boolean
 
 ---
 
 ### gmnav_agent_arrived(agent)
 
-Whether the agent finished following its path. Latched, so it stays true until the next `goto` or `stop`. False after a failed request, since the agent never received a path.
+Whether the agent finished its last journey.
 
-This cannot be derived from `has_path`, because the path is cleared in the same update that completes the journey.
+Latched, so you can ask whenever suits you. Stays true until the next `goto` or `stop`, which is what makes patrol routes a single `if`.
 
 **Parameters:**
 
 - `agent` (struct) - Agent
 
-**Returns:** bool
+**Returns:** Boolean
 
 **Example:**
 
 ```
-if (gmnav_agent_arrived(agent)) gmnav_agent_goto(agent, _next.x, _next.y);
+if (gmnav_agent_arrived(agent)) {
+    gmnav_agent_goto(agent, next_x, next_y);
+}
 ```
+
+---
+
+### gmnav_agent_failed(agent)
+
+Whether the last goal could not be routed to.
+
+Latched like `arrived`, and cleared by the next `goto` or `stop`. Without it, a failed request and a completed journey both end with no goal and no ticket, and a caller cannot tell them apart.
+
+**Parameters:**
+
+- `agent` (struct) - Agent
+
+**Returns:** Boolean
+
+**Example:**
+
+```
+if (gmnav_agent_failed(agent)) {
+    // no route. Wait, attack the obstacle, or pick another objective
+}
+```
+
+---
+
+### gmnav_agent_layer(agent)
+
+Which surface the agent is currently standing on.
+
+**Parameters:**
+
+- `agent` (struct) - Agent
+
+**Returns:** Layer index, 0 for the base grid
+
+---
 
 ---
 
 ## Platformer Functions
 
+
+Side view connectivity is not grid adjacency. Two ledges can touch on screen and be unreachable from each other, and two ledges far apart can be connected perfectly well. Connectivity is a property of how your character moves, so the graph is established by simulating your character's actual jump arcs against your actual collision data.
+
+Platformer graphs require an `ORTHO` layout.
+
+---
+
 ### gmnav_movement_create(gravity, jump_vel, run_speed, max_fall, width, height, air_speed, jump_levels, jump_bias)
 
-Describes how your character moves. Use your player controller's real numbers, not approximations. If `jump_vel` is even slightly generous the graph will contain links your character cannot traverse.
+Describes how your character moves. Everything the bake produces depends on this.
 
-The arc simulation integrates in this order: gravity, clamp to terminal velocity, move X, then move Y. If your controller differs, long jumps land in the wrong place.
+These must be your player controller's real numbers. If `jump_vel` is even slightly generous the graph contains links your character physically cannot traverse, and an agent will walk to a ledge, jump, miss, land, walk back, and try again forever.
 
 **Parameters:**
 
-- `gravity` (real) - Downward acceleration per frame
-- `jump_vel` (real) - Upward velocity at full jump, positive
+- `gravity` (real) - Added to vertical velocity each frame
+- `jump_vel` (real) - Jump velocity at full strength, positive
 - `run_speed` (real) - Horizontal speed on the ground
-- `max_fall` (real) - Terminal downward velocity
-- `width` (real) - Character width in world units
-- `height` (real) - Character height in world units
-- `air_speed` (real, optional) - Horizontal speed while airborne, defaults to `run_speed`
-- `jump_levels` (int, default: 3) - How many jump strengths to sample between minimum and full. 1 for a fixed height jump
-- `jump_bias` (real, default: 1.15) - Multiplier on jump link cost. On flat ground, walking and hopping cost exactly the same, so without a bias above 1 the AI bunny hops
+- `max_fall` (real) - Terminal fall speed
+- `width` (real) - Character width
+- `height` (real) - Character height
+- `air_speed` (real, default: `run_speed`) - Horizontal speed in the air. At the default the character has no air momentum, which makes long diagonal jumps impossible and can quietly turn a platform into a one way trap. Most platformers want this at or above `run_speed`
+- `jump_levels` (int, default: 3) - How many jump strengths are sampled between half power and full. Controls arc quality, not just how many jumps are tried. Set to 1 for a fixed jump character and cut the bake cost by two thirds
+- `jump_bias` (real, default: 1.15) - Multiplier on jump link costs. On level ground, hopping costs exactly what walking costs, so without a bias the search chooses arbitrarily between them and you get an AI that bunny hops everywhere
 
 **Returns:** Movement struct
 
 **Example:**
 
 ```
-move = gmnav_movement_create(0.5, 8, 3, 9, 12, 24);
+move = gmnav_movement_create(0.5, 8, 3, 9, 12, 24, undefined, 3);
 ```
 
 ---
 
 ### gmnav_platgraph_create(grid, movement)
 
-Creates a platformer graph over a grid. Requires an `ORTHO` layout.
+Creates an empty platformer graph. Nothing is computed until you bake.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `movement` (struct) - From `gmnav_movement_create`
+- `grid` (struct) - Grid holding the level's collision, `ORTHO` only
+- `movement` (struct) - Movement model
 
 **Returns:** Platformer graph struct
 
-**Example:**
-
-```
-pgraph = gmnav_platgraph_create(grid, move);
-```
-
 ---
 
-### gmnav_platgraph_bake(pgraph)
+### gmnav_platgraph_bake(pg)
 
-Bakes the graph to completion. Extracts standing positions, then simulates `2 + 3 x jump_levels` arcs from each. Level load only.
+Finds every standing position and generates every link, to completion. A level load operation.
+
+A cell is a standing position when it is open, the cell below it is solid or one way, and the character's whole box fits there without clipping. That last condition makes headroom a level design question: a platform needs enough room beneath it for anything that walks under it.
 
 **Parameters:**
 
-- `pgraph` (struct) - Platformer graph
+- `pg` (struct) - Platformer graph
 
-**Returns:** bool - Success status
+**Returns:** Boolean, whether the bake completed
 
 **Example:**
 
@@ -1850,120 +2331,288 @@ gmnav_platgraph_bake(pgraph);
 
 ---
 
-### gmnav_platgraph_bake_begin(pgraph)
+### gmnav_platgraph_bake_begin(pg)
 
-Starts a sliced bake.
+Starts a sliced bake. Follow with `gmnav_platgraph_bake_step` once per frame, during a loading screen.
 
 **Parameters:**
 
-- `pgraph` (struct) - Platformer graph
+- `pg` (struct) - Platformer graph
 
-**Returns:** Nothing
+---
+
+### gmnav_platgraph_bake_step(pg, budget)
+
+Advances a sliced bake.
+
+**Parameters:**
+
+- `pg` (struct) - Platformer graph
+- `budget` (int, default: 256) - Work allowed this call
+
+**Returns:** `gmnav_bake.SURFACES`, `LINKS` or `DONE`
 
 **Example:**
 
 ```
-gmnav_platgraph_bake_begin(pgraph);
+if (gmnav_platgraph_bake_step(pgraph, 256) == gmnav_bake.DONE) {
+    // ready
+}
 ```
 
 ---
 
-### gmnav_platgraph_bake_step(pgraph, budget)
+### gmnav_platgraph_is_ready(pg)
 
-Advances the bake. The budget counts cells during the surface phase and nodes during the link phase, so the same number costs very different amounts in each.
+Whether the graph has finished baking.
 
 **Parameters:**
 
-- `pgraph` (struct) - Platformer graph
-- `budget` (int, default: 256) - Work units this call
+- `pg` (struct) - Platformer graph
 
-**Returns:** enum - Current `gmnav_bake` phase
-
-**Example:**
-
-```
-if (gmnav_platgraph_bake_step(pgraph, 256) == gmnav_bake.DONE) { }
-```
+**Returns:** Boolean
 
 ---
 
-### gmnav_platgraph_is_ready(pgraph)
+### gmnav_platgraph_is_stale(pg)
 
-Whether the bake has completed.
+Whether the grid changed since the bake. A graph describes the level as it was baked; break a platform and the arcs that used it describe something that no longer exists.
 
 **Parameters:**
 
-- `pgraph` (struct) - Platformer graph
+- `pg` (struct) - Platformer graph
 
-**Returns:** bool
-
-**Example:**
-
-```
-if (gmnav_platgraph_is_ready(pgraph)) { }
-```
+**Returns:** Boolean
 
 ---
 
-### gmnav_platgraph_is_stale(pgraph)
+### gmnav_platgraph_node_at(pg, x, y, max_drop_cells)
 
-Whether the underlying grid changed since the bake.
+The platform node at or below a world position.
 
-**Parameters:**
-
-- `pgraph` (struct) - Platformer graph
-
-**Returns:** bool
-
-**Example:**
-
-```
-if (gmnav_platgraph_is_stale(pgraph)) gmnav_platgraph_bake_begin(pgraph);
-```
-
----
-
-### gmnav_platgraph_node_at(pgraph, x, y, max_drop_cells)
-
-Platform node the character is standing on. Searches downward, so it also works while airborne, finding the ledge below.
+Searches downward, so it works while the character is airborne, finding the ledge beneath it.
 
 **Parameters:**
 
-- `pgraph` (struct) - Platformer graph
+- `pg` (struct) - Platformer graph
 - `x` (real) - World x
-- `y` (real) - World y, at the character's feet
+- `y` (real) - World y of the feet
 - `max_drop_cells` (int, default: 4) - How far down to look
 
-**Returns:** int - Platform node id, or `GMNAV_NO_NODE`
-
-**Example:**
-
-```
-var _from = gmnav_platgraph_node_at(pgraph, x, y);
-```
+**Returns:** Platform node index, or `GMNAV_NO_NODE`
 
 ---
 
-### gmnav_platgraph_node_world(pgraph, pnode)
+### gmnav_platgraph_node_world(pg, pnode)
 
-World position of a platform node, at the character's feet and horizontally centred in the cell.
+The world position of a platform node, at the surface the character stands on.
 
 **Parameters:**
 
-- `pgraph` (struct) - Platformer graph
-- `pnode` (int) - Platform node id
+- `pg` (struct) - Platformer graph
+- `pnode` (int) - Platform node index
 
 **Returns:** Array `[x, y]`
 
+---
+
+### gmnav_platgraph_link_get(pg, from, to)
+
+The link between two platform nodes, so you can perform it yourself.
+
+**Parameters:**
+
+- `pg` (struct) - Platformer graph
+- `from` (int) - Platform node index
+- `to` (int) - Platform node index
+
+**Returns:** Struct `{ type, cost, vx, vy, x, y }`, or `undefined` if no such link exists
+
+`type` is `gmnav_link.WALK`, `FALL` or `JUMP`. `cost` is in frames. `vx` and `vy` are the launch velocity that produced the link. `x` and `y` are where it lands.
+
 **Example:**
 
 ```
-var _pos = gmnav_platgraph_node_world(pgraph, _node);
+var _lk = gmnav_platgraph_link_get(pgraph, _from, _to);
+
+if (_lk.type == gmnav_link.JUMP) {
+    hsp = _lk.vx;
+    vsp = _lk.vy;
+}
 ```
+
+---
+
+### gmnav_platgraph_solid(pg, x, y, vy)
+
+The same collision test the bake used, exposed so your character controller can stay in sync with it.
+
+Using this rather than your own test is what keeps a replayed arc landing where the graph promised.
+
+**Parameters:**
+
+- `pg` (struct) - Platformer graph
+- `x` (real) - World x of the character centre
+- `y` (real) - World y of the feet
+- `vy` (real, default: 0) - Vertical velocity, used to decide whether a one way platform blocks
+
+**Returns:** Boolean
+
+**Example:**
+
+```
+vy = min(vy + move.gravity, move.max_fall);
+
+var _nx = x + vx;
+if (gmnav_platgraph_solid(pgraph, _nx, y, 0)) vx = 0; else x = _nx;
+
+var _ny = y + vy;
+if (gmnav_platgraph_solid(pgraph, x, _ny, vy)) {
+    // landed, or hit a ceiling if vy < 0
+} else {
+    y = _ny;
+}
+```
+
+**Note:** integrate in the same order the bake did, gravity then horizontal then vertical, testing each separately. A different order drifts by a fraction of a pixel per frame, which is invisible on short hops and lands long jumps in the wrong place.
+
+---
+
+---
+
+## Platform Agent Functions
+
+
+Chapter 10's division of labour leaves the jumping to you, which is right for a character with an animation state machine you care about and a lot of work for a bat.
+
+The platform agent follows a baked graph itself, replaying each link's stored launch velocity. It is the one place in GMNav that moves something, because arc replay is only correct if the stepping order matches the bake exactly, so the replay has to own the stepping.
+
+Use it for characters whose movement is entirely the navigation's business. Use `gmnav_platgraph_link_get` for anything your game wants to interrupt.
+
+---
+
+### gmnav_platagent_create(sched, x, y)
+
+Creates a platform agent and snaps it to the nearest standing position at or below the given position.
+
+**Parameters:**
+
+- `sched` (struct) - A scheduler created over a platformer graph
+- `x` (real) - World x
+- `y` (real) - World y of the feet
+
+**Returns:** Platform agent struct
+
+**Example:**
+
+```
+psched = gmnav_scheduler_create(pgraph, 1500);
+hero   = gmnav_platagent_create(psched, x, y);
+```
+
+---
+
+### gmnav_platagent_goto(pa, x, y, priority)
+
+Requests a route to a world position.
+
+Called mid-arc, the agent finishes the arc it committed to and routes from the node it is about to land on. Interrupting a ballistic trajectory halfway is not something the graph can price, and a character that changes direction in mid-air reads as weightless.
+
+**Parameters:**
+
+- `pa` (struct) - Platform agent
+- `x` (real) - World x of the goal
+- `y` (real) - World y of the goal
+- `priority` (enum, default: `gmnav_priority.NORMAL`) - Request priority
+
+**Returns:** Boolean, `false` if either end has no standing position
+
+---
+
+### gmnav_platagent_update(pa)
+
+Advances the agent by one frame, integrating its own position.
+
+Unlike every other part of GMNav, this writes `pa.x` and `pa.y`. Read them out afterwards.
+
+**Parameters:**
+
+- `pa` (struct) - Platform agent
+
+**Example:**
+
+```
+gmnav_scheduler_update(psched);
+gmnav_platagent_update(hero);
+
+x = hero.x;
+y = hero.y;
+```
+
+---
+
+### gmnav_platagent_stop(pa)
+
+Drops the route, cancels any request in flight, and snaps the agent back to its current node. Safe to call mid-arc.
+
+**Parameters:**
+
+- `pa` (struct) - Platform agent
+
+---
+
+### gmnav_platagent_arrived(pa)
+
+Whether the agent finished its last route. Latched, cleared by the next `goto` or `stop`.
+
+**Parameters:**
+
+- `pa` (struct) - Platform agent
+
+**Returns:** Boolean
+
+---
+
+### gmnav_platagent_airborne(pa)
+
+Whether the agent is mid-arc right now, on a `FALL` or `JUMP` link.
+
+This is how you pick a jump animation without inspecting the link yourself.
+
+**Parameters:**
+
+- `pa` (struct) - Platform agent
+
+**Returns:** Boolean
+
+---
+
+### gmnav_platagent_has_route(pa)
+
+Whether the agent still has links left to perform.
+
+**Parameters:**
+
+- `pa` (struct) - Platform agent
+
+**Returns:** Boolean
+
+---
+
+### pa.desync
+
+Not a function, but the field worth watching.
+
+The agent counts frames where its own position disagreed with what the replay expected. In normal operation it stays at zero. A non-zero value means the movement model does not match the level, something else moved the character, or the collision data changed after the bake.
+
+It is the cheapest signal you have that the model and the level have drifted apart.
+
+---
 
 ---
 
 ## Graph Search Functions
+
 
 These mirror the grid search functions, over a platformer graph rather than a grid. Use the scheduler instead unless you need direct control.
 
@@ -2152,367 +2801,322 @@ gmnav_graphsearch_abort(gs);
 
 ---
 
+---
+
 ## Debug Functions
 
-All drawing functions belong in a Draw event and work in world space, except `gmnav_debug_draw_stats`, which belongs in Draw GUI.
+
+Every view understands overlays, drawing raised cells at the height they occupy with a thin line dropping to the ground cell beneath.
+
+Each view answers one question. The fastest route to a diagnosis is picking the view whose question matches your symptom rather than turning everything on.
+
+---
 
 ### gmnav_debug_config()
 
-Creates a settings struct for the debug renderer.
+Creates a config struct for the debug views.
 
-**Parameters:** None
-
-**Returns:** Struct with fields:
-
-- `alpha` (real, default: 0.35) - Fill opacity
-- `line_alpha` (real, default: 0.9) - Line opacity
-- `line_width` (real, default: 2) - Path line thickness
-- `show_labels` (bool, default: false) - Per cell numeric text, very slow
-- `cull` (bool, default: true) - Skip cells outside the camera. Set false in rooms with no view enabled, or nothing will draw
-- `cull_pad` (real, default: 64) - Margin around the view
-- `max_cells` (int, default: `GMNAV_DBG_MAX_CELLS`) - Per call ceiling before bailing out with a console warning
+**Returns:** Config struct with `cull`, `cull_pad`, `alpha`, `line_alpha`, `line_width` and `max_cells`
 
 **Example:**
 
 ```
 cfg = gmnav_debug_config();
-cfg.cull = false;
+cfg.cull  = false;
+cfg.alpha = 0.3;
 ```
+
+**Note:** culling reads the current camera. In a room with no view enabled there is nothing to cull against, so everything is drawn rather than nothing.
 
 ---
 
 ### gmnav_debug_draw_grid(grid, cfg)
 
-Fills blocked cells, in the layout's real shape. The cheapest useful overlay, and the fastest way to confirm GMNav's idea of your world matches your own.
+Blocked cells, base and overlay.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `cfg` (struct, optional) - Debug config
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_debug_draw_grid(grid);
-```
+- `grid` (struct) - Grid
+- `cfg` (struct, default: undefined) - Debug config
 
 ---
 
 ### gmnav_debug_draw_clearance(grid, cfg)
 
-Clearance map as a green ramp. Darker is tighter.
+How much room there is around each cell. Brighter is more room.
+
+The view to reach for when a large unit refuses a route that looks passable, because the answer is almost always a doorway one cell narrower than you remembered.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `cfg` (struct, optional) - Debug config
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_debug_draw_clearance(grid);
-```
+- `grid` (struct) - Grid
+- `cfg` (struct, default: undefined) - Debug config
 
 ---
 
 ### gmnav_debug_draw_costs(grid, profile, cfg)
 
-Resolved cost as a red ramp. Pass a profile to see what a specific agent type actually pays, rather than base terrain.
+What one agent type pays for each cell.
+
+Pass the profile rather than the grid alone, or you see only base terrain, which is rarely the thing you are debugging.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
-- `profile` (struct, optional) - Cost profile
-- `cfg` (struct, optional) - Debug config
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_debug_draw_costs(grid, soldier);
-```
+- `grid` (struct) - Grid
+- `profile` (struct, default: undefined) - Cost profile
+- `cfg` (struct, default: undefined) - Debug config
 
 ---
 
 ### gmnav_debug_draw_flowfield(field, cfg, show_dist)
 
-Direction arrows and a distance ramp. Any arrow pointing into a wall means the field is wrong, not the steering.
+An arrow and a distance shade per cell, with a circle marking each goal.
+
+**Any arrow pointing into a wall means the field is wrong, not the steering.**
 
 **Parameters:**
 
 - `field` (struct) - Flow field
-- `cfg` (struct, optional) - Debug config
-- `show_dist` (bool, default: true) - Also shade cells by distance
+- `cfg` (struct, default: undefined) - Debug config
+- `show_dist` (bool, default: `true`) - Whether to shade cells by distance
 
-**Returns:** Nothing
+---
+
+### gmnav_debug_draw_reach(grid, cfg, need_clear)
+
+Colours each connected component differently.
+
+One colour means everything is reachable from everything else. Two means your map is in two pieces, and you can see where the seam is. Walks authored links as well as ordinary adjacency, so a deck joined by stairs reads as part of the floor it connects to.
+
+The clearance argument is the point of it. A map that is one component for a rat can be five islands for an ogre.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+- `cfg` (struct, default: undefined) - Debug config
+- `need_clear` (int, default: 0) - Only consider cells with at least this clearance
 
 **Example:**
 
 ```
-gmnav_debug_draw_flowfield(field);
+gmnav_debug_draw_reach(grid, cfg, 2);
 ```
 
 ---
 
 ### gmnav_debug_draw_path(grid, path, cfg, colour)
 
-Draws a node id path.
+A node path. Dots are sized largest at the ends, medium at direction changes, small elsewhere.
 
 **Parameters:**
 
-- `grid` (struct) - Navigation grid
+- `grid` (struct) - Grid
 - `path` (array) - Node ids
-- `cfg` (struct, optional) - Debug config
+- `cfg` (struct, default: undefined) - Debug config
 - `colour` (int, default: `GMNAV_DBG_PATH`) - Line colour
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_debug_draw_path(grid, gmnav_search_get_path(search));
-```
 
 ---
 
 ### gmnav_debug_draw_path_object(path, cfg, colour)
 
-Draws a path object, which after smoothing is not the same shape as the raw node path.
+A path object, after smoothing or curving.
 
 **Parameters:**
 
 - `path` (struct) - Path object
-- `cfg` (struct, optional) - Debug config
+- `cfg` (struct, default: undefined) - Debug config
 - `colour` (int, default: `GMNAV_DBG_PATH`) - Line colour
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_debug_draw_path_object(agent.path);
-```
 
 ---
 
 ### gmnav_debug_draw_search(search, cfg)
 
-Open and closed sets of a search in flight. Draws nothing once a search resolves, because the workspace has been released. Its purpose is watching a frontier expand across frames under a small budget.
+An in-flight frontier: open cells and closed cells drawn differently.
+
+Renders only while a search holds a workspace. Once it finishes it releases the slot and this draws nothing, which is the point. It exists to watch a frontier expand across frames under a small budget.
 
 **Parameters:**
 
-- `search` (struct) - Search object
-- `cfg` (struct, optional) - Debug config
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_debug_draw_search(search);
-```
-
----
-
-### gmnav_debug_draw_platgraph(pgraph, cfg, types, focus)
-
-Platform nodes and links, coloured by type. White is walk, blue is fall, orange is jump, with arrowheads showing direction.
-
-On a dense graph, draw everything at once and the arcs overlap into noise. Pass a focus node to isolate one ledge, which is how you actually read it.
-
-**Parameters:**
-
-- `pgraph` (struct) - Platformer graph
-- `cfg` (struct, optional) - Debug config
-- `types` (int, default: 7) - Bitmask, 1 walk, 2 fall, 4 jump
-- `focus` (int, default: -1) - Platform node id to isolate, or -1 for all
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_debug_draw_platgraph(pgraph, cfg, 4);          // jumps only
-gmnav_debug_draw_platgraph(pgraph, cfg, 7, _node);   // one ledge
-```
+- `search` (struct) - Search
+- `cfg` (struct, default: undefined) - Debug config
 
 ---
 
 ### gmnav_debug_draw_agent(agent, cfg)
 
-Agent body, radius, velocity, current target waypoint and goal. A stale path draws in red rather than yellow.
+Body, velocity, path, current target and goal.
+
+The solid ring is the waypoint being steered at right now, and a fainter ring marks the next real corner. A ring that never advances is an agent making no progress toward it. A red path rather than the usual colour means it has gone stale and not yet been replaced.
 
 **Parameters:**
 
 - `agent` (struct) - Agent
-- `cfg` (struct, optional) - Debug config
+- `cfg` (struct, default: undefined) - Debug config
 
-**Returns:** Nothing
+---
+
+### gmnav_debug_draw_platgraph(pg, cfg, types, focus)
+
+Ledges and links, colour coded by type.
+
+561 links drawn at once is a scribble. Isolating a single node is how you actually read it.
+
+**Parameters:**
+
+- `pg` (struct) - Platformer graph
+- `cfg` (struct, default: undefined) - Debug config
+- `types` (int, default: 7) - Bitmask, 1 for walk, 2 for fall, 4 for jump
+- `focus` (int, default: -1) - Draw only links touching this node
 
 **Example:**
 
 ```
-gmnav_debug_draw_agent(agent);
+gmnav_debug_draw_platgraph(pgraph, cfg, 4);            // jumps only
+gmnav_debug_draw_platgraph(pgraph, cfg, 7, node_id);   // one ledge
 ```
+
+---
+
+### gmnav_debug_draw_heights(grid, cfg, max_z)
+
+Per-cell elevation, shaded.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+- `cfg` (struct, default: undefined) - Debug config
+- `max_z` (real, default: undefined) - Top of the shading range. Derived from the grid if omitted
+
+---
+
+### gmnav_debug_draw_steps(grid, max_climb, max_drop, cfg)
+
+Which steps a unit with given limits is refused, drawn per edge. The view for working out why a route takes a long way round on sloped terrain.
+
+**Parameters:**
+
+- `grid` (struct) - Grid
+- `max_climb` (real) - Largest rise
+- `max_drop` (real) - Largest fall
+- `cfg` (struct, default: undefined) - Debug config
 
 ---
 
 ### gmnav_debug_draw_stats(sched, x, y)
 
-Scheduler load panel. Draw in a Draw GUI event. If `pending` stays above zero across frames, requests are arriving faster than they are served.
+Budget, queue length, active searches and workspace use. Draw in a Draw GUI event.
+
+The one to leave on longest. Watch **pending**.
 
 **Parameters:**
 
 - `sched` (struct) - Scheduler
-- `x` (real, default: 8) - GUI x
-- `y` (real, default: 8) - GUI y
-
-**Returns:** Nothing
-
-**Example:**
-
-```
-gmnav_debug_draw_stats(sched);
-```
+- `x` (real, default: 8) - Screen x
+- `y` (real, default: 8) - Screen y
 
 ---
 
 ### gmnav_debug_search_text(search)
 
-One line summary of a search, for overlaying near an agent.
+A one line summary of a search's state, for your own overlays.
 
 **Parameters:**
 
-- `search` (struct) - Search object
+- `search` (struct) - Search
 
-**Returns:** string
+**Returns:** String
 
-**Example:**
-
-```
-draw_text(x, y - 40, gmnav_debug_search_text(search));
-```
+---
 
 ---
 
 ## Enum Reference
 
-### gmnav_layout
 
-| Member | Description |
-| --- | --- |
-| `ORTHO` | Square or rectangular grid |
-| `ISO_DIAMOND` | 2:1 diamond isometric. Same graph as `ORTHO`, drawn rotated |
-| `ISO_STAGGERED` | Offset rows, neighbours depend on row parity |
-| `HEX_POINTY` | Pointy top hexagons |
-| `HEX_FLAT` | Flat top hexagons |
+```
+gmnav_layout      ORTHO, ISO_DIAMOND, ISO_STAGGERED, HEX_POINTY, HEX_FLAT
+gmnav_neighbours  FOUR, EIGHT, SIX
+gmnav_costmode    LOGICAL, VISUAL
+gmnav_heuristic   AUTO, ZERO
+gmnav_state       IDLE, WORKING, FOUND, FAILED
+gmnav_priority    LOW, NORMAL, HIGH, IMMEDIATE
+gmnav_domain      GRID, PLATFORM
+gmnav_link        WALK, FALL, JUMP, STAIR
+gmnav_bake        IDLE, SURFACES, LINKS, DONE
+gmnav_curve       NONE, CORNER, SPLINE
+gmnav_pmode       GROUND, LINK, SETTLE
+```
 
-### gmnav_neighbours
+`gmnav_link.STAIR` is used by authored overlay links. `gmnav_curve` selects a path curving mode. `gmnav_pmode` is the platform agent's internal state and is not something you set.
 
-| Member | Description |
-| --- | --- |
-| `FOUR` | Cardinal only |
-| `EIGHT` | Cardinal and diagonal |
-| `SIX` | Hex. Forced on hex layouts |
+---
 
-### gmnav_costmode
+---
 
-| Member | Description |
-| --- | --- |
-| `LOGICAL` | One grid step costs one unit, tile shape ignored |
-| `VISUAL` | Step cost scales with on-screen distance |
+## Config Reference
 
-### gmnav_heuristic
 
-| Member | Description |
-| --- | --- |
-| `AUTO` | Picks the strongest admissible heuristic for the layout |
-| `ZERO` | No heuristic, degrades A\* to Dijkstra. Optimal by construction, so it is the reference for optimality checks |
-| `MANHATTAN` | 4-way grids |
-| `OCTILE` | 8-way grids |
-| `CHEBYSHEV` | Diagonal cost equal to cardinal |
-| `EUCLIDEAN` | World distance divided by the shortest step. Universal fallback |
-| `HEX` | True hex distance via cube coordinates |
+### gmnav_init(overrides)
 
-### gmnav_state
+Initialises GMNav's settings, replacing the tuning macros earlier versions used. Call once, before creating anything.
 
-| Member | Description |
-| --- | --- |
-| `IDLE` | Not started, or starved of a workspace. Retry later |
-| `WORKING` | Suspended mid search |
-| `FOUND` | A path is available |
-| `FAILED` | Genuinely impossible. Do not retry |
+Every setting has a default, so calling it with no arguments is normal. Unknown keys are ignored with a debug message rather than silently accepted.
 
-### gmnav_priority
+**Parameters:**
 
-| Member | Description |
-| --- | --- |
-| `LOW` | Background traffic |
-| `NORMAL` | Default |
-| `HIGH` | Jumps the queue, still subject to the budget |
-| `IMMEDIATE` | Bypasses the budget, resolves within the call. Does **not** bypass the workspace pool, so it can still fail |
+- `overrides` (struct, default: undefined) - Settings to change from their defaults
 
-### gmnav_link
+**Example:**
 
-| Member | Description |
-| --- | --- |
-| `WALK` | Along a contiguous ledge |
-| `FALL` | Stepped off an edge, no jump input |
-| `JUMP` | Ballistic arc from a jump input |
+```
+gmnav_init();
 
-### gmnav_bake
+gmnav_init({
+    DEFAULT_BUDGET : 3000,
+    EDIT_RING      : 64
+});
+```
 
-| Member | Description |
-| --- | --- |
-| `IDLE` | Not started |
-| `SURFACES` | Extracting standing positions |
-| `LINKS` | Generating links |
-| `DONE` | Ready to search |
+---
 
-### gmnav_domain
+The settings it accepts:
 
-| Member | Description |
-| --- | --- |
-| `GRID` | Cell graph, grid A\* |
-| `PLATFORM` | CSR link graph, side view A\* |
+| Setting | Default | What it does |
+|---|---|---|
+| `PLAT_MAX_SIM` | 300 | Hard cap on simulated frames per arc |
+| `PLAT_MAX_LINKS` | 24 | Most outgoing links kept per platform node |
+| `PLAT_FALL_WALK_CELLS` | 4 | How far a fall may walk to reach a ledge edge |
+| `DEFAULT_BUDGET` | 2000 | Node expansions per frame when none is given |
+| `HEAP_INIT` | 256 | Initial open set capacity |
+| `MAX_STEPS` | 1000000 | Hard abort guard per search |
+| `CLEARANCE_MAX` | 16 | Largest clearance value stored per cell |
+| `EDIT_RING` | 32 | Recent grid edits kept for scoped repathing |
+
+`EDIT_RING` is read when a grid is created, so changing it affects grids made afterwards. A larger ring holds more history and costs a slightly longer scan; a smaller one overflows sooner and falls back to conservative repathing more often.
+
+---
 
 ---
 
 ## Macro Reference
 
-| Macro | Value | Description |
-| --- | --- | --- |
-| `GMNAV_VERSION` | "1.0.0" | Framework version string |
-| `GMNAV_NO_NODE` | -1 | Returned wherever a node id is invalid |
-| `GMNAV_INF` | `infinity` | Unreachable cost |
-| `GMNAV_SQRT2` | 1.4142135623730951 | Diagonal step cost |
-| `GMNAV_DEFAULT_BUDGET` | 2000 | Node expansions per frame, all searches combined |
-| `GMNAV_HEAP_INIT` | 256 | Initial open set capacity |
-| `GMNAV_MAX_STEPS` | 1000000 | Hard abort guard per search |
-| `GMNAV_CLEARANCE_MAX` | 16 | Clearance flood ceiling |
-| `GMNAV_PLAT_MAX_SIM` | 300 | Maximum simulated frames per arc |
-| `GMNAV_PLAT_MAX_LINKS` | 24 | Maximum outgoing links kept per platform node |
-| `GMNAV_DBG_MAX_CELLS` | 8000 | Cells per debug draw call before bailing out |
 
-### Cell flags
+```
+GMNAV_NO_NODE         -1
+GMNAV_INF             infinity
+GMNAV_FLAG_BLOCKED    1
+GMNAV_FLAG_ONEWAY     2
+```
 
-| Macro | Bit | Description |
-| --- | --- | --- |
-| `GMNAV_FLAG_BLOCKED` | 0x0001 | Impassable |
-| `GMNAV_FLAG_ONEWAY` | 0x0002 | One way platform, solid only from above |
-| `GMNAV_FLAG_LINK` | 0x0004 | Endpoint of an off graph link |
-| `GMNAV_FLAG_WATER` | 0x0008 | Free for your own use |
-| `GMNAV_FLAG_DANGER` | 0x0010 | Free for your own use |
-| `GMNAV_FLAG_USER0` to `USER3` | 0x1000 to 0x8000 | Reserved for the host game |
+Debug colours are `GMNAV_DBG_BLOCKED`, `GMNAV_DBG_PATH`, `GMNAV_DBG_GOAL`, `GMNAV_DBG_AGENT`, `GMNAV_DBG_OPEN`, `GMNAV_DBG_CLOSED` and `GMNAV_DBG_DECK`.
+
+---
 
 ---
 
 ## Struct Reference
+
+Fields you are expected to read or write are listed. Internal scratch used during a build is not.
 
 ### Grid
 
@@ -2520,13 +3124,18 @@ draw_text(x, y - 40, gmnav_debug_search_text(search));
 | --- | --- | --- |
 | `domain` | enum | Always `gmnav_domain.GRID` |
 | `width`, `height` | int | Dimensions in cells |
-| `count` | int | `width * height` |
+| `count` | int | `width * height`. Overlay node ids begin here |
 | `layout` | struct | Layout descriptor |
 | `flags` | array | One packed integer per cell |
 | `cost` | array | Base terrain cost per cell |
 | `clear` | array | Clearance values, `undefined` until built |
 | `clear_v` | int | Grid version the clearance was built at |
+| `height_z` | array | Elevation per cell, `undefined` until the first height is set |
+| `layer_lift` | real | Pixels between layers, absent until set |
+| `overlay` | struct | Attached overlay, absent until one is created |
 | `version` | int | Bumped on every genuine mutation |
+| `edit_cap` | int | Recent edit rectangles kept. Set from config at creation, do not write to it |
+| `edit_lost` | int | Newest version whose rectangle has been overwritten |
 | `slots` | array | Search workspaces |
 | `slot_max` | int | Workspace count |
 
@@ -2545,6 +3154,24 @@ draw_text(x, y - 40, gmnav_debug_search_text(search));
 | `nb_cost` | array | Per step cost, normalised so the cheapest is 1 |
 | `step_min_world` | real | Shortest possible step in pixels |
 
+### Overlay
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `grid` | struct | Grid it is attached to |
+| `base` | int | Id offset. Overlay cell 0 is this node id |
+| `count` | int | Cells held |
+| `max_layer` | int | Highest layer index in use |
+| `col`, `row`, `layer` | array | Position per cell |
+| `flags` | array | One packed integer per cell |
+| `cost` | array | Base cost per cell, independent of the ground below |
+| `clear` | array | Clearance per cell, computed by `finish` |
+| `offset` | array | Fraction of a layer each cell sits below its own |
+| `links` | array | Authored crossings, kept so `finish` can re-run |
+| `edge_start`, `edge_to`, `edge_cost`, `edge_type` | array | Adjacency out of overlay cells, CSR |
+| `up_start`, `up_to`, `up_cost`, `up_type` | array | Authored links out of base cells, CSR over the base grid |
+| `ready` | bool | Whether authoring has happened since the last `finish` |
+
 ### Search
 
 | Field | Type | Description |
@@ -2555,6 +3182,7 @@ draw_text(x, y - 40, gmnav_debug_search_text(search));
 | `corner_cut` | bool | Whether diagonal squeezes are allowed |
 | `profile` | struct | Cost profile, or `undefined` |
 | `need_clear` | int | Minimum clearance required |
+| `max_climb`, `max_drop` | real | Elevation limits, `undefined` to ignore heights |
 | `relax` | int | Steps from the start where clearance is relaxed, default 2 |
 | `stale` | bool | Grid changed after this search began |
 | `expansions` | int | Cells settled |
@@ -2570,6 +3198,10 @@ draw_text(x, y - 40, gmnav_debug_search_text(search));
 | `priority` | enum | `gmnav_priority` member |
 | `seq` | int | Arrival order, used for FIFO within a priority band |
 | `start`, `goal` | int | Node ids |
+| `corner_cut` | bool | Passed to the search |
+| `profile` | struct | Passed to the search |
+| `need_clear` | int | Passed to the search |
+| `max_climb`, `max_drop` | real | Passed to the search |
 | `path` | array | Node ids, empty unless found |
 | `links` | array | `gmnav_link` values, platformer domain only |
 | `stale` | bool | Grid changed while this request was in flight |
@@ -2579,11 +3211,33 @@ draw_text(x, y - 40, gmnav_debug_search_text(search));
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `nodes` | array | Node ids. Cleared by `gmnav_path_simplify` |
+| `grid` | struct | Grid the nodes belong to |
+| `nodes` | array | Node ids. Cleared by `gmnav_path_simplify`, kept by `gmnav_path_curve` |
 | `px`, `py` | array | World coordinates per waypoint |
 | `count` | int | Waypoint count |
 | `length` | real | Total world length |
 | `stale` | bool | Copied from the search that produced it |
+| `version` | int | Grid version when the path was built, used for scoped repathing |
+
+### Cost layer
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string | For your own bookkeeping |
+| `grid` | struct | Grid it covers |
+| `values` | array | One value per node, base cells and overlay cells |
+| `version` | int | Bumped on every change, watched by profiles |
+
+### Cost profile
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string | For your own bookkeeping |
+| `grid` | struct | Grid it covers |
+| `layers` | array | Layers in this profile |
+| `weights` | array | Weight per layer, same order |
+| `resolved` | array | Flattened cost per node, what the search reads |
+| `baked` | bool | Whether a bake has happened at all |
 
 ### Agent
 
@@ -2591,18 +3245,42 @@ draw_text(x, y - 40, gmnav_debug_search_text(search));
 | --- | --- | --- | --- |
 | `x`, `y` | real | - | Position. Yours to write, the agent never touches it |
 | `vx`, `vy` | real | 0 | Proposed velocity. Written every update |
-| `radius` | real | 8 | Used for avoidance and arrival |
+| `radius` | real | 8 | Used for avoidance, arrival, and passed to smoothing |
 | `speed` | real | 2 | Maximum speed |
 | `accel` | real | 0.35 | How fast desired velocity is approached, 0 to 1 |
 | `arrive_dist` | real | 24 | Start easing off inside this range |
 | `reach_dist` | real | 4 | Close enough, journey complete |
 | `arrived` | bool | false | Latched until the next `goto` or `stop` |
-| `profile` | struct | `undefined` | Cost profile, passed on every request |
+| `failed` | bool | false | Last goal could not be routed to. Latched the same way |
+| `layer` | int | 0 | Surface the agent is standing on |
+| `goal_layer` | int | 0 | Surface the goal is on, remembered so a repath asks for the same one |
+| `profile` | struct | `undefined` | Cost profile, passed on every request and to smoothing |
 | `need_clear` | int | 0 | Minimum clearance, passed on every request |
+| `max_climb`, `max_drop` | real | `undefined` | Elevation limits, passed on every request and to smoothing |
+| `headings` | int | 0 | Headings smoothing may use. 0 unconstrained, 4 cardinals, 8 with diagonals |
+| `curve_mode` | enum | `gmnav_curve.NONE` | Curve applied after smoothing and anchoring |
+| `curve_radius` | real | 16 | Corner radius when curving |
+| `curve_steps` | int | 4 | Samples per arc when curving |
 | `repath_gap` | int | 20 | Frames between repath attempts |
 | `avoid_str` | real | 1.0 | Separation strength, 0 disables |
 | `avoid_range` | real | 3.0 | Separation reach, in multiples of radius |
+| `path` | struct | `undefined` | Current path object |
+| `ticket` | struct | `undefined` | Request in flight |
 | `seek_i` | int | 1 | Index of the waypoint being steered toward |
+
+### Movement
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `gravity` | real | Added to vertical velocity each frame |
+| `jump_vel` | real | Jump velocity at full strength, positive |
+| `run_speed` | real | Horizontal speed on the ground |
+| `air_speed` | real | Horizontal speed in the air, defaults to `run_speed` |
+| `max_fall` | real | Terminal fall speed |
+| `width`, `height` | real | Character box |
+| `jump_levels` | int | Jump strengths sampled between `jump_min` and full |
+| `jump_min` | real | Weakest sampled jump, as a fraction of full |
+| `jump_bias` | real | Multiplier on jump link costs, breaking ties toward walking |
 
 ### Platformer graph
 
@@ -2618,16 +3296,38 @@ draw_text(x, y - 40, gmnav_debug_search_text(search));
 | `edge_to` | array | Destination platform node per edge |
 | `edge_cost` | array | Traversal cost in frames per edge |
 | `edge_type` | array | `gmnav_link` value per edge |
+| `edge_vx`, `edge_vy` | array | Launch velocity that produced each edge |
 | `node_x`, `node_y` | array | World position per platform node |
 | `max_step` | real | Longest possible single frame displacement |
 | `phase` | enum | `gmnav_bake` member |
+
+### Platform agent
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `x`, `y` | real | Position. Written by `gmnav_platagent_update`, unlike every other agent |
+| `vx`, `vy` | real | Current velocity during an arc |
+| `node` | int | Platform node the agent is on or heading to |
+| `mode` | enum | `gmnav_pmode` member, internal state |
+| `face` | int | Last horizontal direction, 1 or -1 |
+| `path` | array | Platform node ids |
+| `links` | array | `gmnav_link` value per step |
+| `seek` | int | Index of the link being performed |
+| `link` | struct | The link currently being performed |
+| `arrived` | bool | Latched until the next `goto` or `stop` |
+| `failed` | bool | Last goal could not be routed to |
+| `desync` | int | Frames where the replay and the world disagreed. Should stay 0 |
 
 ### Flow field
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `dist` | array | Cost to the nearest goal per cell |
-| `dirx`, `diry` | array | Normalised direction per cell |
+| `grid` | struct | Grid it covers |
+| `profile` | struct | Cost profile it was built under, or `undefined` |
+| `max_climb`, `max_drop` | real | Elevation limits applied while building |
+| `dist` | array | Cost to the nearest goal per node, base cells and overlay cells |
+| `dirx`, `diry` | array | Normalised world space direction per node |
+| `next` | array | Node each cell steps to, `GMNAV_NO_NODE` at a goal. Read this when a step may change layer |
 | `mark` | array | Generation stamp, `+gen` open, `-gen` closed |
 | `gen` | int | Current build generation |
 | `goals` | array | Seeded goal node ids |
@@ -2653,82 +3353,54 @@ draw_text(x, y - 40, gmnav_debug_search_text(search));
 
 ## Known Behaviours
 
-These are all deliberate, all verified by the test suite, and all likely to surprise you at least once.
 
-### A single blocked row does not seal an ISO_STAGGERED map
+**A free cell is not a free position.** `gmnav_grid_is_blocked` asks about a cell. An agent with a radius needs a position its whole body fits in, and a point two pixels from a wall sits in a perfectly open cell. This is what clearance is for.
 
-In staggered isometric, rows two apart are exactly one tile apart vertically, so they are screen-cardinal neighbours and the table carries steps of `(0, +2)` and `(0, -2)`. A wall one row deep leaves every vertical connection intact and agents hop straight over it.
+**Agents that never register arrival.** `reach_dist` defaults to 4 pixels. If an agent cannot physically reach within 4 pixels of its goal, because its body is stopped by a wall first, it never latches `arrived` and keeps pushing. Raise `reach_dist` past the agent radius, or validate goals against the body.
 
-Wall two consecutive rows. On `ORTHO` the same single row seals normally.
+**Avoidance is separation, not reciprocal avoidance.** It stops crowds stacking into one pixel, which is what most games need. It will not resolve two agents walking into each other in a one tile corridor: both push symmetrically, both stall, and neither yields. Plan for that at the design level with wider passages or one way routes.
 
-### A suspended search can return a path through a wall
+**Avoidance does not know about walls.** It repels agents from other agents only. When a crowd compresses against geometry it will push bodies into walls, and your movement code absorbs that.
 
-Cells a search has already settled carry costs and parent links committed under the old world, and settled cells are never revisited. If terrain changes on ground the search already crossed, that change is never noticed.
+**Editing the grid does not rebuild anything.** Flow fields, clearance and platformer graphs go out of date and say so. Rebuilding is your call, because only you know whether it is worth the frame.
 
-The contract is **termination plus the stale flag**, not path validity. Check `ticket.stale` before acting on a result. The agent layer already does.
+**A suspended search does not re-validate.** Settled cells are never revisited, so a wall landing on ground a search has already crossed off goes unnoticed. The contract is termination plus the stale flag, not path validity.
 
-GMNav deliberately does not restart searches that notice the version moved, because in a game where terrain changes every second such a search would never complete.
+**Smoothing needs telling about everything.** Elevation limits, body radius, headings and cost profile each close a way a shortcut could be wrong. Without them a shortcut will climb a cliff, clip a corner, take an illegal heading, or walk back through ground the search paid to avoid.
 
-### Clearance is relaxed near the start
+**Smoothing and curving are refused on staggered and hex.** On those layouts a straight line in cell coordinates says nothing reliable about whether a character could walk it. `gmnav_path_simplify` works everywhere.
 
-An agent standing somewhere too tight for it would otherwise be stuck forever, since every neighbouring cell is equally tight. GMNav ignores the clearance requirement for the first `search.relax` steps, default 2.
+**A deck narrower than a body will not smooth.** The corridor test asks whether the whole body fits along the line, and a one cell wide bridge cannot contain a wider body, so every shortcut across it is refused and every deck cell survives as a waypoint. That is correct rather than wasteful.
 
-The cost is that a wide agent visibly clips geometry for those first steps. Set `relax = 0` to fail instead.
+**Overlay offsets are drawn height, not climb cost.** They are read by world positions and the debug renderer, and are not consulted by `max_climb` or `max_drop`. For a slope only some units can take, use `gmnav_grid_set_height`.
 
-### Fall links are duplicated along ledge edges
+**The surface between two cells belongs to your renderer.** A path across a ramp is a straight interpolation between two cell centres, so it looks right only if your ramp is drawn interpolated too.
 
-A fall's internal walk phase moves at `run_speed`, the same as a walk edge, so "walk one tile then fall" and "fall from one tile earlier" tie exactly. Every node within two tiles of a ledge generates a tied fall link. Harmless, but it explains fall counts looking higher than expected.
+**Cost cannot attract.** A negative profile weight is legal and resolved cost still clamps at 1, which is the same guarantee as the cost floor. Cost fields push; to pull a unit toward something, seed it as a goal in a flow field.
 
-### Flat ground ties exactly between walking and jumping
+**Stamp peaks want to be modest.** Within about an order of magnitude of the base cost of 1. A peak far above that puts every reasonable weight past the point where a unit's decision flips, so tuning the weight appears to do nothing.
 
-Horizontal speed is the same on the ground and in the air, so hopping across level terrain costs precisely what walking costs. `jump_bias`, default 1.15, breaks the tie toward walking. At 1.0 the AI bunny hops, which is arithmetically correct and looks absurd.
+**Region baking is per profile.** A moving threat read by three unit types needs all three profiles rebaked, over both the old and the new rectangle.
 
-### Terrain cost cannot go below 1
+**`gmnav_costprofile_add` appends.** Calling it twice with the same layer counts that layer twice. Use `gmnav_costprofile_set_weight` to change an existing weight.
 
-`gmnav_grid_set_cost` clamps, and so does profile baking. A step cheaper than the heuristic assumes would silently break A\*'s optimality guarantee. To make roads fast, raise the cost of everything else.
+**`gmnav_scheduler_is_ready` means found, not finished.** A failed request is finished but not ready. Check `ticket.state` if you need to tell the difference.
 
-### Smoothing refuses to run on some layouts
+**`IMMEDIATE` bypasses the budget, not the workspace pool.** If every workspace is busy the request falls back into the queue and resolves later like any other.
 
-On `ISO_STAGGERED` and hex, cell adjacency and screen geometry have come apart, so a line of sight test in cell space says nothing reliable about the world. `gmnav_path_smooth` returns without doing anything rather than returning a confidently wrong answer. `gmnav_path_simplify` works everywhere.
+**`GMNAV_FLAG_ONEWAY` is partial.** Standing on and jumping up through a one way platform work. Dropping down through one is not implemented, so a one way deck stacked over a solid ledge routes the long way round.
 
-### IMMEDIATE is not a guarantee
+**Clearance is available on `ORTHO` and `ISO_DIAMOND` only.** On staggered and hex a Chebyshev radius in cell indices does not correspond to a disc in world space, so `gmnav_clearance_build` returns `false` and clearance requirements are ignored rather than failing every request.
 
-It bypasses the frame budget, not the workspace pool. With every workspace busy it falls back into the queue and resolves later. Check `ticket.state` rather than assuming a path arrived.
-
-### Air speed defaults to run speed, which means no air momentum
-
-`gmnav_movement_create` resolves an omitted `air_speed` to `run_speed`, so the character drifts sideways in flight exactly as fast as it walks. Almost no platformer works that way.
-
-The effect is not cosmetic. A jump that gains height while covering distance has to still be travelling when it falls back through the target's height, and below a sharp threshold the link is never baked at all. A graph missing links still looks like a valid graph, so the symptom is a level with quietly one directional regions: a platform you can leave but cannot return to.
-
-On a 32px grid with `gravity` 0.5 and `jump_vel` 12, a jump covering 128px sideways while netting 96px of rise passes back through its launch height at frame 36.5. At `air_speed` 3 that is 109.5px travelled and the link does not exist. At 3.5 it is 127.8px and it does. Set it explicitly, at or above `run_speed`. The default is conservative rather than correct.
-
-### jump_levels controls arc quality, not just how many jumps are tried
-
-`jump_levels` samples that many strengths between `jump_min` and full power. The default of 3 gives you 0.5, 0.75 and 1.0 of `jump_vel` and nothing in between.
-
-When a gap's requirement falls between two samples the baker uses the next one up and the arc overshoots. On a 32px grid with `jump_vel` 12, a 3 cell gap at 3 levels is crossed by a full power jump with a 138px apex, landing a cell past the near edge. At 9 levels the same gap goes at a 90px apex. Bake time is linear at `2 + 3 * levels` simulations per surface node, and 7 to 9 buys most of the improvement.
-
-Check the geometry before reaching for it. A 4 cell gap under the same model needs 48 airborne frames to cover 128px, and 48 frames of ballistic flight has a 138px apex whatever you sample.
-
-### Local avoidance does not know walls exist
-
-`gmnav_agent_update` computes avoidance from the neighbour list you pass and nothing else. It never reads the grid's blocked flags, and GMNav never moves anything, so the velocity it hands back can point straight into geometry.
-
-A crowd compressing against a wall pushes the agents nearest the wall into it. Your movement code absorbs that, and the usual result is agents grinding along a wall or idling against it until the crowd disperses. Set `avoid_str` to 0 to disable.
-
-One consequence is worth stating separately, because it fails silently. If you zero the velocity component pointing at a wall before applying it, the move you then test is a move to the position the agent already occupies, which is legal, so your collision test reports nothing. **Stuck detection keyed on collisions never fires for exactly the agents that are most stuck.** Key it on displacement between frames instead.
-
-### GMNAV_FLAG_ONEWAY is experimental
-
-Standing on a one way platform and passing upward through it both work. Dropping down through one does not, because no link type passes through the platform the character is standing on.
-
-A one way deck placed over a solid ledge therefore produces no route down onto that ledge. The search routes around instead, usually to the floor and back up. Correct given the links that exist, rarely what the level intended. Reserved for a future release.
+---
 
 ---
 
 ## Internal Functions
 
+
 Functions prefixed `__gmnav_` are internal and may change without notice.
 
 `gmnav_heap_*` is the binary min-heap backing every search. It is unprefixed for historical reasons but is not part of the public surface.
+
+---

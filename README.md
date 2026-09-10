@@ -8,7 +8,7 @@
 
 ## Overview
 
-GMNav is a complete navigation solution for GameMaker, covering top-down, isometric, hex and side-view platformer games.
+GMNav is a complete navigation solution for GameMaker, covering top-down, isometric, hex and side-view platformer games, on flat ground and on terrain that stacks.
 
 Every search is resumable. Instead of blocking the frame, searches run under a global budget shared across all agents, so pathfinding costs the same milliseconds whether you have ten agents or five hundred.
 
@@ -31,12 +31,21 @@ Every search is resumable. Instead of blocking the frame, searches run under a g
 - **Hexagonal** - Pointy-top and flat-top, with cube coordinate rounding
 - **Anisotropic cost** - Logical or visual step cost for non-square tiles
 
+### Elevation and Layers
+
+- **Height per cell** - Climb and drop limits per unit, so a cliff is one-way without a flag
+- **Stacked walkable surfaces** - A bridge over a road, a walkway behind a cliff, a tower you can circle
+- **Sparse overlays** - A handful of cells above the grid, not a second grid to maintain
+- **Ramps** - Fractional offsets that climb a surface in even steps
+- **Caller-named picking** - A point over a bridge has two answers, and you say which you meant
+
 ### Cost Fields
 
 - **Layered cost maps** - Stack danger, terrain, and faction layers independently
 - **Per-agent weights** - Two agent types read one layer and disagree about it
 - **Baked resolution** - Twelve layers cost the search exactly as much as none
-- **Radial stamps** - Falloff brushes with region-local rebaking for moving sources
+- **Radial and path stamps** - Falloff brushes around a point or along a route
+- **Region rebaking** - Move a threat every frame without touching the rest of the map
 
 ### Clearance
 
@@ -50,6 +59,14 @@ Every search is resumable. Instead of blocking the frame, searches run under a g
 - **Multiple goals** - Nearest exit, nearest cover, in a single build
 - **Distance capping** - Bound the build on large maps
 - **Sliced building** - Spread the work across frames
+- **True travel cost** - Ask any unit what a destination really costs it, in one lookup
+
+### Path Shaping
+
+- **Supercover string pulling** - Removes the staircase without clipping corners
+- **Movement constraints** - Hold a path to four or eight headings for grid-locked characters
+- **Corner rounding and splines** - For anything that cannot turn instantly
+- **Validated throughout** - A shortcut that would clip geometry, climb a cliff, or walk back into priced ground is refused
 
 ### Platformer Navigation
 
@@ -57,19 +74,22 @@ Every search is resumable. Instead of blocking the frame, searches run under a g
 - **Your movement model** - Gravity, jump velocity, run speed, terminal fall
 - **Three link types** - Walk, fall, and jump, each with traversal cost in frames
 - **One-way awareness** - Drops that cannot be climbed back up
+- **Optional arc replay** - Let the framework fly the jumps, or read the links and fly them yourself
 
 ### Agents
 
 - **Velocity proposal** - Writes vx and vy, never moves your instances
-- **Path smoothing** - Supercover string pulling, no corner clipping
+- **Scoped replanning** - Repaths only when a change lands on the route still to walk
 - **Local avoidance** - Separation steering with speed clamping
-- **Automatic replanning** - Detects world changes and re-requests
+- **Nothing hidden** - Every behaviour is a public call, so your own agent class loses nothing
 
 ### Debug Renderer
 
 - **Layout-accurate cells** - Draws diamonds and hexagons, not squares
+- **Layer-aware** - Raised cells draw where they sit, with a line to the ground beneath
 - **Flow field arrows** - Direction and distance ramp per cell
 - **Clearance and cost ramps** - See exactly what an agent type pays
+- **Reachability** - Colour by connected component, for any agent size
 - **Search frontier** - Watch open and closed sets expand across frames
 - **Platformer link graph** - Colour-coded arcs, filterable and focusable
 
@@ -113,6 +133,18 @@ gmnav_costprofile_bake(grunt);
 gmnav_scheduler_request(sched, from, to, gmnav_priority.NORMAL, false, grunt);
 ```
 
+### Bridges and Ramps
+
+```gml
+var _ov = gmnav_overlay_create(grid);
+
+var _deck = [];
+for (var _c = 5; _c <= 9; _c++) array_push(_deck, gmnav_overlay_add(_ov, _c, 10, 1));
+
+gmnav_overlay_link(_ov, gmnav_grid_node(grid, 4, 10), _deck[0], gmnav_link.STAIR, true);
+gmnav_overlay_finish(_ov);
+```
+
 ### Platformer
 
 ```gml
@@ -134,10 +166,12 @@ var _links = gmnav_scheduler_get_links(ticket);
 | A\* blocks the frame          | Resumable search under a shared budget       |
 | Cost scales with agent count | Fixed frame cost, queue drains slower        |
 | Square grids only            | Orthogonal, isometric, staggered, hex        |
+| Flat ground assumed          | Height per cell, and surfaces that stack     |
 | One cost per cell            | Layered cost fields, weighted per agent type |
 | One agent size               | Clearance-aware routing for any radius       |
 | Top-down assumed             | Side-view navigation with simulated jumps    |
 | Rebuild per goal             | Flow fields serve unlimited agents at once   |
+| Any edit repaths everyone    | Only agents the change concerns              |
 | Guess why the path looks odd | Full debug renderer for every subsystem      |
 
 ---
@@ -152,6 +186,8 @@ var _links = gmnav_scheduler_get_links(ticket);
 | Isometric and hex     | ✅     | ❌        | ❌               |
 | Weighted terrain cost | ✅     | ❌        | ⚠️               |
 | Layered cost fields   | ✅     | ❌        | ❌               |
+| Elevation limits      | ✅     | ❌        | ❌               |
+| Stacked surfaces      | ✅     | ❌        | ❌               |
 | Agent clearance       | ✅     | ❌        | ❌               |
 | Flow fields           | ✅     | ❌        | ❌               |
 | Platformer navigation | ✅     | ❌        | ❌               |
@@ -164,9 +200,9 @@ var _links = gmnav_scheduler_get_links(ticket);
 
 ## Documentation
 
-- **[API Reference](RawDocumentation.md)** - Complete API reference, tuning, and known behaviours
-- **[Getting Started](GettingStarted.md)** - Getting started guide
-- **[Tutorials](https://github.com/erkan612/GMNav/tree/main/Tutorials)** - Complete API reference, tuning, and known behaviours
+- **[API Reference](RawDocumentation.md)** - Every function with its arguments, return shape, edge cases, and known behaviours
+- **[Getting Started](GettingStarted.md)** - From an empty project to a moving agent, then each subsystem in the order you are likely to need it
+- **[Tutorials](https://github.com/erkan612/GMNav/tree/main/Tutorials)** - Nineteen chapters, from what pathfinding is to a navigation system you can see and diagnose
 
 ---
 
@@ -179,6 +215,8 @@ Hart, P. E., Nilsson, N. J. and Raphael, B. (1968) "[A Formal Basis for the Heur
 Borgefors, G. (1986) "[Distance Transformations in Digital Images](https://www.sciencedirect.com/science/article/abs/pii/0734189X86900472)", Computer Vision, Graphics, and Image Processing, 34(3), 344-371
 
 **Grid traversal and line of sight** Amanatides, J. and Woo, A. (1987) "[A Fast Voxel Traversal Algorithm for Ray Tracing](https://www.cse.yorku.ca/~amana/research/grid.pdf)", Eurographics '87
+
+**Curves and corner rounding** Catmull, E. and Rom, R. (1974) "A Class of Local Interpolating Splines", in Barnhill, R. E. and Riesenfeld, R. F. (eds.) Computer Aided Geometric Design, Academic Press, 317-326
 
 **Steering and local avoidance** Reynolds, C. W. (1987) "[Flocks, Herds and Schools: A Distributed Behavioral Model](https://dl.acm.org/doi/10.1145/37402.37406)", SIGGRAPH '87, 25-34
 Reynolds, C. W. (1999) "[Steering Behaviors For Autonomous Characters](https://www.red3d.com/cwr/steer/gdc99/)", Game Developers Conference
