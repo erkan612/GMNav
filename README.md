@@ -1,8 +1,4 @@
-# GMNav
-
-**Pathfinding and navigation framework for GameMaker**
-
-> Pure GML. No extensions. No DLLs.
+<img width="1200" height="360" alt="banner" src="https://github.com/user-attachments/assets/dfcd0ccb-810e-4410-ab05-83eb4fecbfb9" />
 
 ---
 
@@ -95,106 +91,51 @@ Every search is resumable. Instead of blocking the frame, searches run under a g
 
 ---
 
-## Quick Example
-
-```gml
-// Create
-grid  = gmnav_grid_create(60, 40, gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
-gmnav_grid_import_tilemap(grid, layer_tilemap_get_id("Tiles_Collision"));
-
-sched = gmnav_scheduler_create(grid, 2000, 4);
-agent = gmnav_agent_create(sched, x, y, 12, 3);
-```
-
-```gml
-// Step
-gmnav_scheduler_update(sched);
-gmnav_agent_update(agent);
-
-x += agent.vx;
-y += agent.vy;
-```
-
-```gml
-// Anywhere
-gmnav_agent_goto(agent, target_x, target_y);
-```
-
-### Cost Fields
-
-```gml
-danger = gmnav_costlayer_create(grid, "danger");
-gmnav_costlayer_stamp_radial(danger, player_x, player_y, 200, 12, 2);
-
-grunt = gmnav_costprofile_create(grid, "grunt");
-gmnav_costprofile_add(grunt, danger, 1);
-gmnav_costprofile_bake(grunt);
-
-gmnav_scheduler_request(sched, from, to, gmnav_priority.NORMAL, false, grunt);
-```
-
-### Bridges and Ramps
-
-```gml
-var _ov = gmnav_overlay_create(grid);
-
-var _deck = [];
-for (var _c = 5; _c <= 9; _c++) array_push(_deck, gmnav_overlay_add(_ov, _c, 10, 1));
-
-gmnav_overlay_link(_ov, gmnav_grid_node(grid, 4, 10), _deck[0], gmnav_link.STAIR, true);
-gmnav_overlay_finish(_ov);
-```
-
-### Platformer
-
-```gml
-move   = gmnav_movement_create(0.5, 7, 3, 9, 16, 32);
-pgraph = gmnav_platgraph_create(grid, move);
-gmnav_platgraph_bake(pgraph);
-
-// path[i] is a ledge, links[i] is how you reach it
-var _path  = gmnav_scheduler_get_path(ticket);
-var _links = gmnav_scheduler_get_links(ticket);
-```
-
----
+<table>
+<tr>
+<td valign="top">
 
 ## Why GMNav?
 
-| Traditional Approach         | GMNav                                        |
-| ---------------------------- | -------------------------------------------- |
-| A\* blocks the frame          | Resumable search under a shared budget       |
-| Cost scales with agent count | Fixed frame cost, queue drains slower        |
-| Square grids only            | Orthogonal, isometric, staggered, hex        |
-| Flat ground assumed          | Height per cell, and surfaces that stack     |
-| One cost per cell            | Layered cost fields, weighted per agent type |
-| One agent size               | Clearance-aware routing for any radius       |
-| Top-down assumed             | Side-view navigation with simulated jumps    |
-| Rebuild per goal             | Flow fields serve unlimited agents at once   |
-| Any edit repaths everyone    | Only agents the change concerns              |
-| Guess why the path looks odd | Full debug renderer for every subsystem      |
+| Traditional | GMNav |
+| --- | --- |
+| A\* blocks the frame | Resumable search,<br>one shared budget |
+| Cost scales with<br>agent count | Fixed frame cost,<br>queue drains slower |
+| Square grids only | Orthogonal, hex and<br>both isometrics |
+| Flat ground assumed | Height per cell and<br>stacked surfaces |
+| One cost per cell | Layered cost fields,<br>weighted per agent |
+| One agent size | Clearance-aware<br>routing, any radius |
+| Top-down assumed | Side-view nav with<br>simulated jumps |
+| Rebuild per goal | Flow fields serve<br>every agent at once |
+| Any edit repaths<br>everyone | Only agents the<br>change concerns |
+| Guess why the path<br>looks odd | Debug renderer for<br>every subsystem |
 
----
+</td>
+<td valign="top">
 
 ## Quick Comparison
 
-| Feature               | GMNav | mp\_grid | Hand-rolled A\* |
-| --------------------- | ----- | -------- | --------------- |
-| Grid pathfinding      | ✅     | ✅        | ✅               |
-| Frame-safe search     | ✅     | ❌        | ❌               |
-| Shared frame budget   | ✅     | ❌        | ❌               |
-| Isometric and hex     | ✅     | ❌        | ❌               |
-| Weighted terrain cost | ✅     | ❌        | ⚠️               |
-| Layered cost fields   | ✅     | ❌        | ❌               |
-| Elevation limits      | ✅     | ❌        | ❌               |
-| Stacked surfaces      | ✅     | ❌        | ❌               |
-| Agent clearance       | ✅     | ❌        | ❌               |
-| Flow fields           | ✅     | ❌        | ❌               |
-| Platformer navigation | ✅     | ❌        | ❌               |
-| Dynamic obstacles     | ✅     | ⚠️        | ⚠️               |
-| Determinism guarantee | ✅     | ❌        | ❌               |
-| Debug visualisation   | ✅     | ❌        | ❌               |
-| Pure GML              | ✅     | ✅        | ✅               |
+| Feature | GMNav | mp\_grid | A\* |
+| --- | :---: | :---: | :---: |
+| Grid pathfinding | ✅ | ✅ | ✅ |
+| Frame-safe search | ✅ | ❌ | ❌ |
+| Shared frame<br>budget | ✅ | ❌ | ❌ |
+| Isometric and hex | ✅ | ❌ | ❌ |
+| Weighted terrain<br>cost | ✅ | ❌ | ⚠️ |
+| Layered cost fields | ✅ | ❌ | ❌ |
+| Elevation limits | ✅ | ❌ | ❌ |
+| Stacked surfaces | ✅ | ❌ | ❌ |
+| Agent clearance | ✅ | ❌ | ❌ |
+| Flow fields | ✅ | ❌ | ❌ |
+| Platformer<br>navigation | ✅ | ❌ | ❌ |
+| Dynamic obstacles | ✅ | ⚠️ | ⚠️ |
+| Determinism<br>guarantee | ✅ | ❌ | ❌ |
+| Debug visualisation | ✅ | ❌ | ❌ |
+| Pure GML | ✅ | ✅ | ✅ |
+
+</td>
+</tr>
+</table>
 
 ---
 
