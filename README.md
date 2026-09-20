@@ -1,5 +1,9 @@
 <img width="1200" height="360" alt="banner" src="https://github.com/user-attachments/assets/dfcd0ccb-810e-4410-ab05-83eb4fecbfb9" />
 
+<img width="1200" height="180" alt="layouts" src="https://github.com/user-attachments/assets/e77fa1e2-14bd-4d42-9095-b5d76c0a1ace" />
+
+<img width="1200" height="50" alt="badges_4badge_alt" src="https://github.com/user-attachments/assets/3b1647ac-1acc-4ac0-b8e1-90e21550bc6c" />
+
 ---
 
 ## Overview
@@ -12,12 +16,18 @@ Every search is resumable. Instead of blocking the frame, searches run under a g
 
 ## Features at a Glance
 
+<table>
+<tr>
+<td valign="top">
+
 ### Core Search
 
 - **Resumable A\*** - Stops mid-search, resumes next frame, never blocks
 - **Global frame budget** - One shared pool of node expansions, not per agent
 - **Request priorities** - Low, normal, high, and immediate with FIFO fairness
 - **Deterministic** - Identical input always returns the identical path
+
+---
 
 ### Layouts
 
@@ -27,6 +37,8 @@ Every search is resumable. Instead of blocking the frame, searches run under a g
 - **Hexagonal** - Pointy-top and flat-top, with cube coordinate rounding
 - **Anisotropic cost** - Logical or visual step cost for non-square tiles
 
+---
+
 ### Elevation and Layers
 
 - **Height per cell** - Climb and drop limits per unit, so a cliff is one-way without a flag
@@ -34,6 +46,8 @@ Every search is resumable. Instead of blocking the frame, searches run under a g
 - **Sparse overlays** - A handful of cells above the grid, not a second grid to maintain
 - **Ramps** - Fractional offsets that climb a surface in even steps
 - **Caller-named picking** - A point over a bridge has two answers, and you say which you meant
+
+---
 
 ### Cost Fields
 
@@ -43,11 +57,16 @@ Every search is resumable. Instead of blocking the frame, searches run under a g
 - **Radial and path stamps** - Falloff brushes around a point or along a route
 - **Region rebaking** - Move a threat every frame without touching the rest of the map
 
+---
+
 ### Clearance
 
 - **Chebyshev distance transform** - Two linear sweeps, no per-node box scans
 - **Size-aware routing** - One nav graph serves agents of every radius
 - **Start relaxation** - Agents in tight spots can still path out
+
+</td>
+<td valign="top">
 
 ### Flow Fields
 
@@ -57,12 +76,16 @@ Every search is resumable. Instead of blocking the frame, searches run under a g
 - **Sliced building** - Spread the work across frames
 - **True travel cost** - Ask any unit what a destination really costs it, in one lookup
 
+---
+
 ### Path Shaping
 
 - **Supercover string pulling** - Removes the staircase without clipping corners
 - **Movement constraints** - Hold a path to four or eight headings for grid-locked characters
 - **Corner rounding and splines** - For anything that cannot turn instantly
 - **Validated throughout** - A shortcut that would clip geometry, climb a cliff, or walk back into priced ground is refused
+
+---
 
 ### Platformer Navigation
 
@@ -72,12 +95,16 @@ Every search is resumable. Instead of blocking the frame, searches run under a g
 - **One-way awareness** - Drops that cannot be climbed back up
 - **Optional arc replay** - Let the framework fly the jumps, or read the links and fly them yourself
 
+---
+
 ### Agents
 
 - **Velocity proposal** - Writes vx and vy, never moves your instances
 - **Scoped replanning** - Repaths only when a change lands on the route still to walk
 - **Local avoidance** - Separation steering with speed clamping
 - **Nothing hidden** - Every behaviour is a public call, so your own agent class loses nothing
+
+---
 
 ### Debug Renderer
 
@@ -88,6 +115,10 @@ Every search is resumable. Instead of blocking the frame, searches run under a g
 - **Reachability** - Colour by connected component, for any agent size
 - **Search frontier** - Watch open and closed sets expand across frames
 - **Platformer link graph** - Colour-coded arcs, filterable and focusable
+
+</td>
+</tr>
+</table>
 
 ---
 
