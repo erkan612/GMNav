@@ -50,15 +50,17 @@ function gmnav_search_begin(_srch, _start_node, _goal_node, _corner_cut = false,
     if (_slot == undefined) return false; // state stays IDLE, retry later
 
     var _lay = _grid.layout;
-    var _w   = _grid.width;
 
     _srch.slot       = _slot;
     _srch.start      = _start_node;
     _srch.goal       = _goal_node;
-    _srch.goal_c     = _goal_node % _w;
-    _srch.goal_r     = _goal_node div _w;
-    _srch.goal_x     = gmnav_layout_cell_x(_lay, _srch.goal_c, _srch.goal_r);
-    _srch.goal_y     = gmnav_layout_cell_y(_lay, _srch.goal_c, _srch.goal_r);
+    _srch.goal_c     = gmnav_grid_col(_grid, _goal_node);
+    _srch.goal_r     = gmnav_grid_row(_grid, _goal_node);
+
+    var _gp          = gmnav_grid_node_to_world(_grid, _goal_node);
+    _srch.goal_x     = _gp[0];
+    _srch.goal_y     = _gp[1];
+	
     _srch.h_mode     = __gmnav_heuristic_resolve(_lay, _srch.h_mode);
     _srch.corner_cut = _corner_cut;
     _srch.profile    = _profile;
@@ -79,7 +81,9 @@ function gmnav_search_begin(_srch, _start_node, _goal_node, _corner_cut = false,
     _slot.depth[_start_node]  = 0;
     _slot.mark[_start_node]   = _slot.gen;
 
-    var _h0 = __gmnav_h(_srch, _srch.start % _w, _srch.start div _w);
+    var _h0 = __gmnav_h(_srch,
+                        gmnav_grid_col(_grid, _srch.start),
+                        gmnav_grid_row(_grid, _srch.start));
     gmnav_heap_push(_srch.heap, _h0, _h0, _start_node);
 
     return true;
