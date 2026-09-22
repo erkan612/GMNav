@@ -32,6 +32,7 @@ gmt_test_edit_scope();
 gmt_test_smooth_headings();
 gmt_test_curve();
 gmt_test_stamp_path();
+gmt_test_stamp_overlay();
 
 gmt_head("D scheduler (running)");
 

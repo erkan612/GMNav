@@ -4542,7 +4542,7 @@ rebake only the rectangles involved.
 **Syntax:**
 
 ```gml
-gmnav_costlayer_clear_region(layer, c1, r1, c2, r2);
+gmnav_costlayer_clear_region(layer, c1, r1, c2, r2, ov_layer);
 ```
 
 | Argument | Type | Description |
@@ -4552,6 +4552,7 @@ gmnav_costlayer_clear_region(layer, c1, r1, c2, r2);
 | r1 | Integer | One corner row |
 | c2 | Integer | Other corner column |
 | r2 | Integer | Other corner row |
+| ov_layer | Integer | Optional, default 0. Which surface to clear |
 
 **Returns:** N/A
 
@@ -4585,11 +4586,19 @@ rectangle might be a third of the cells and the saving is modest. On a 500 by
 difference between influence maps being a nice idea and being something you can
 afford every frame.
 
-**Careful:** this clears **base** cells only. If you authored values on an
-overlay with `gmnav_costlayer_set_node`, clear them the same way, by looping the
-overlay cells and setting them to 0.
+**`ov_layer` selects which surface is cleared.** `0` clears base cells, `1` or
+higher clears the overlay layer with that index. Note that the region is always
+in cell coordinates; an overlay cell uses the same `(col, row)` as the base cell
+it sits over, so the same rect applies to both surfaces. That means a single
+rect is correct for both — you just have to call the function twice if you want
+to clear both, once with `ov_layer` 0 and once with the layer you want.
 
-**See also:** `gmnav_costprofile_bake_region`, `gmnav_costlayer_stamp_radial`
+Clearing an overlay surface does not touch the base cells underneath it, and
+vice versa. That is the point of the argument, and it matches the separation
+that already exists between `set` and `set_node`.
+
+**See also:** `gmnav_costprofile_bake_region`, `gmnav_costlayer_stamp_radial`,
+`gmnav_costlayer_stamp_path`
 
 ---
 
@@ -4598,7 +4607,7 @@ overlay cells and setting them to 0.
 **Syntax:**
 
 ```gml
-gmnav_costlayer_stamp_radial(layer, wx, wy, radius, peak, falloff);
+gmnav_costlayer_stamp_radial(layer, wx, wy, radius, peak, falloff, ov_layer);
 ```
 
 | Argument | Type | Description |
@@ -4609,6 +4618,7 @@ gmnav_costlayer_stamp_radial(layer, wx, wy, radius, peak, falloff);
 | radius | Real | Reach in pixels |
 | peak | Real | Value at the centre |
 | falloff | Real | Optional, default 1. Falloff exponent |
+| ov_layer | Integer | Optional, default 0. Which surface to paint |
 
 **Returns:** Array, `[c1, r1, c2, r2]`, the cells actually written
 
@@ -4617,11 +4627,23 @@ gmnav_costlayer_stamp_radial(layer, wx, wy, radius, peak, falloff);
 ```gml
 // a turret covering the middle of the battlefield
 var _rect = gmnav_costlayer_stamp_radial(danger, turret_x, turret_y, 200, 8, 2);
+
+// the same stamp, painting the deck of a bridge instead of the road
+var _deck_rect = gmnav_costlayer_stamp_radial(danger, turret_x, turret_y,
+                                              200, 8, 2, 1);
 ```
 
 The above code paints a blob of cost with the peak at the centre falling off
 outward. A falloff of 1 is linear; 2 falls off faster near the edge, which reads
 as a hot core with a soft fringe.
+
+**`ov_layer` names which surface the stamp writes to.** `0` is the base grid,
+which is what every call before this version did. `1` or higher writes cells on
+that overlay layer instead, using the world positions the cells are actually
+drawn at, so the radius is measured against the surface as you see it. The two
+are entirely separate: a radial stamp over a bridge hits either the road or the
+deck, not both. Call twice if you want both. The returned rectangle is the
+bounding box of the cells actually written, on the surface you asked for.
 
 **Stamps combine with max, not with plus.** Two turrets covering the same cell
 make it dangerous, not twice as dangerous. That is deliberate: adding would mean
@@ -4643,9 +4665,8 @@ do nothing at all.
 The returned rectangle is the cells actually written, not the box scanned, which
 is what makes region rebaking tight.
 
-**Careful:** base cells only. See `gmnav_costlayer_set_node`.
-
-**See also:** `gmnav_costlayer_stamp_path`, `gmnav_costlayer_clear_region`
+**See also:** `gmnav_costlayer_stamp_path`, `gmnav_costlayer_clear_region`,
+`gmnav_costprofile_bake_region`
 
 ---
 
@@ -4654,7 +4675,7 @@ is what makes region rebaking tight.
 **Syntax:**
 
 ```gml
-gmnav_costlayer_stamp_path(layer, points, width, peak, falloff);
+gmnav_costlayer_stamp_path(layer, points, width, peak, falloff, ov_layer);
 ```
 
 | Argument | Type | Description |
@@ -4664,6 +4685,7 @@ gmnav_costlayer_stamp_path(layer, points, width, peak, falloff);
 | width | Real | Half width of the band, in pixels |
 | peak | Real | Value on the centreline |
 | falloff | Real | Optional, default 1. Falloff exponent |
+| ov_layer | Integer | Optional, default 0. Which surface to paint |
 
 **Returns:** Array, `[c1, r1, c2, r2]`, the cells actually written
 
@@ -4673,6 +4695,9 @@ gmnav_costlayer_stamp_path(layer, points, width, peak, falloff);
 // the stretch of lane the guard is about to walk
 var _ahead = [[x, y], [x + lengthdir_x(180, dir), y + lengthdir_y(180, dir)]];
 var _rect  = gmnav_costlayer_stamp_path(danger, _ahead, 56, 8, 1);
+
+// the same band, painting a raised walkway instead of the ground
+var _deck_rect = gmnav_costlayer_stamp_path(danger, _ahead, 56, 8, 1, 1);
 ```
 
 The above code paints danger along the route a patrol is about to take rather
@@ -4691,12 +4716,20 @@ Work follows the route rather than the bounding box of the whole thing, so a
 long path across a map costs what its own length costs rather than what its
 extent costs.
 
+**`ov_layer` works exactly as it does on `stamp_radial`**, and the two branches
+are implemented differently on purpose. The base branch iterates the polyline's
+segments and finds the cells each one covers. The overlay branch iterates the
+overlay's cells and finds the nearest segment to each one, which is cheaper when
+the overlay is small relative to the map, and is the common case. Same result
+either way.
+
 Everything from `gmnav_costlayer_stamp_radial` applies: max combining, modest
-peaks, and the returned rectangle being what was written.
+peaks, and the returned rectangle being what was written. The rect is in cell
+coordinates, so it works equally well as an argument to `clear_region` and
+`bake_region` with the same `ov_layer` value.
 
-**Careful:** base cells only.
-
-**See also:** `gmnav_costlayer_stamp_radial`, `gmnav_costprofile_bake_region`
+**See also:** `gmnav_costlayer_stamp_radial`, `gmnav_costlayer_clear_region`,
+`gmnav_costprofile_bake_region`
 
 ---
 
@@ -4971,7 +5004,7 @@ changing continuously, `gmnav_costprofile_bake_region` is the answer.
 **Syntax:**
 
 ```gml
-gmnav_costprofile_bake_region(profile, c1, r1, c2, r2);
+gmnav_costprofile_bake_region(profile, c1, r1, c2, r2, ov_layer);
 ```
 
 | Argument | Type | Description |
@@ -4981,6 +5014,7 @@ gmnav_costprofile_bake_region(profile, c1, r1, c2, r2);
 | r1 | Integer | One corner row |
 | c2 | Integer | Other corner column |
 | r2 | Integer | Other corner row |
+| ov_layer | Integer | Optional, default 0. Which surface to bake |
 
 **Returns:** N/A
 
@@ -4997,10 +5031,26 @@ for (var _i = 0; _i < 3; _i++) {
     gmnav_costprofile_bake_region(_profiles[_i],
         new_rect[0], new_rect[1], new_rect[2], new_rect[3]);
 }
+
+// and if the change was on a bridge deck, the same rect with ov_layer 1
+for (var _i = 0; _i < 3; _i++) {
+    gmnav_costprofile_bake_region(_profiles[_i],
+        old_rect[0], old_rect[1], old_rect[2], old_rect[3], 1);
+
+    gmnav_costprofile_bake_region(_profiles[_i],
+        new_rect[0], new_rect[1], new_rect[2], new_rect[3], 1);
+}
 ```
 
 The above code updates every profile that reads a moving layer. This is what
 makes influence maps affordable rather than a nice idea.
+
+**`ov_layer` matches the argument on the layer functions.** After stamping or
+clearing an overlay layer with `ov_layer` set, call this with the same value and
+the same rect to refresh the profile's resolved values for that surface. Without
+it, the profile still holds the old resolved values on that layer, and searches
+will see stale costs. A stamp on a deck is invisible to the search until this
+runs with `ov_layer` set to that deck's layer.
 
 **Region baking is per profile.** A profile that misses the update is not stale
 in any way the framework can tell you about, it simply holds an older world and
@@ -5012,7 +5062,8 @@ rectangle you named, and the rest of the map may still be out of date. Pretendin
 otherwise would hide bugs, so `gmnav_costprofile_is_dirty` keeps returning `true`
 until a full bake happens.
 
-**See also:** `gmnav_costlayer_clear_region`, `gmnav_costprofile_bake`
+**See also:** `gmnav_costlayer_clear_region`, `gmnav_costprofile_bake`,
+`gmnav_costlayer_stamp_radial`
 
 ---
 
@@ -8037,11 +8088,14 @@ push; to pull a unit toward something, seed it as a goal in a flow field.
 base cost of 1. A peak far above that puts every reasonable weight past the
 point where a unit's decision flips, so tuning appears to do nothing.
 
-**Cost stamps reach base cells only.** `gmnav_costlayer_stamp_radial`,
-`stamp_path` and `clear_region` work in world space and write base cells. On a
-map with bridges or cliff tops, authoring hazards by stamping leaves every
-raised surface silently free of danger. Use `gmnav_costlayer_set_node` in a loop
-over the overlay's cells.
+**Stamps and region clearing cover one surface at a time.**
+`gmnav_costlayer_stamp_radial`, `stamp_path`, `clear_region` and
+`gmnav_costprofile_bake_region` all take a trailing `ov_layer` argument. The
+default of 0 writes base cells, matching prior behaviour. Pass 1 or greater to
+write cells on that overlay layer instead. A stamp at a position over a bridge
+does not automatically reach both the road and the deck; call it once per
+surface, and rebake the profile once per surface too. A stamp on a deck that has
+not been rebaked with the same `ov_layer` is invisible to the search.
 
 **Region baking is per profile.** A moving threat read by three unit types needs
 all three profiles rebaked, over both the old and the new rectangle.

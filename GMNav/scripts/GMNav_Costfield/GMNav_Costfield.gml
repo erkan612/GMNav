@@ -67,10 +67,48 @@ function gmnav_costlayer_get_node(_layer, _node) {
     return _layer.values[_node];
 }
 
-function gmnav_costlayer_stamp_radial(_layer, _wx, _wy, _radius, _peak, _falloff = 1) {
+function gmnav_costlayer_stamp_radial(_layer, _wx, _wy, _radius, _peak, _falloff = 1, _ov_layer = 0) {
     var _grid = _layer.grid;
     var _lay  = _grid.layout;
+    var _ir   = 1 / max(0.0001, _radius);
 
+    // overlay
+    if (_ov_layer > 0) {
+        if (!gmnav_grid_has_overlay(_grid)) return [0, 0, -1, -1];
+
+        _layer.values = __gmnav_cost_fit(_layer.values, _grid, 0);
+        var _v  = _layer.values;
+        var _ov = _grid.overlay;
+
+        var _mc1 = _grid.width, _mr1 = _grid.height, _mc2 = -1, _mr2 = -1;
+
+        for (var _i = 0; _i < _ov.count; _i++) {
+            if (_ov.layer[_i] != _ov_layer) continue;
+            if ((_ov.flags[_i] & GMNAV_FLAG_BLOCKED) != 0) continue;
+
+            var _node = _ov.base + _i;
+            var _p    = gmnav_grid_node_to_world(_grid, _node);
+            var _dd   = point_distance(_p[0], _p[1], _wx, _wy);
+            if (_dd > _radius) continue;
+
+            var _val = _peak * power(1 - _dd * _ir, _falloff);
+            if (_val > _v[_node]) _v[_node] = _val;
+
+            var _c = _ov.col[_i];
+            var _r = _ov.row[_i];
+            if (_c < _mc1) _mc1 = _c;
+            if (_c > _mc2) _mc2 = _c;
+            if (_r < _mr1) _mr1 = _r;
+            if (_r > _mr2) _mr2 = _r;
+        }
+
+        _layer.version++;
+
+        if (_mc2 < 0) return [0, 0, -1, -1];
+        return [_mc1, _mr1, _mc2, _mr2];
+    }
+
+    // base
     var _a = gmnav_layout_world_to_cell(_lay, _wx - _radius, _wy - _radius);
     var _b = gmnav_layout_world_to_cell(_lay, _wx + _radius, _wy - _radius);
     var _c = gmnav_layout_world_to_cell(_lay, _wx - _radius, _wy + _radius);
@@ -83,7 +121,6 @@ function gmnav_costlayer_stamp_radial(_layer, _wx, _wy, _radius, _peak, _falloff
 
     var _v  = _layer.values;
     var _w  = _grid.width;
-    var _ir = 1 / max(0.0001, _radius);
 
     for (var _r = _r1; _r <= _r2; _r++) {
         var _base = _r * _w;
@@ -104,15 +141,39 @@ function gmnav_costlayer_stamp_radial(_layer, _wx, _wy, _radius, _peak, _falloff
     return [_c1, _r1, _c2, _r2];
 }
 
-function gmnav_costlayer_clear_region(_layer, _c1, _r1, _c2, _r2) {
+function gmnav_costlayer_clear_region(_layer, _c1, _r1, _c2, _r2, _ov_layer = 0) {
     var _grid = _layer.grid;
-    var _v    = _layer.values;
     var _w    = _grid.width;
 
     var _cl = clamp(min(_c1, _c2), 0, _w - 1);
     var _cr = clamp(max(_c1, _c2), 0, _w - 1);
     var _rt = clamp(min(_r1, _r2), 0, _grid.height - 1);
     var _rb = clamp(max(_r1, _r2), 0, _grid.height - 1);
+
+    // overlay
+    if (_ov_layer > 0) {
+        if (!gmnav_grid_has_overlay(_grid)) return;
+
+        _layer.values = __gmnav_cost_fit(_layer.values, _grid, 0);
+        var _v  = _layer.values;
+        var _ov = _grid.overlay;
+
+        for (var _i = 0; _i < _ov.count; _i++) {
+            if (_ov.layer[_i] != _ov_layer) continue;
+
+            var _c = _ov.col[_i];
+            var _r = _ov.row[_i];
+            if (_c < _cl || _c > _cr) continue;
+            if (_r < _rt || _r > _rb) continue;
+
+            _v[_ov.base + _i] = 0;
+        }
+        _layer.version++;
+        return;
+    }
+
+    // base
+    var _v = _layer.values;
 
     for (var _r = _rt; _r <= _rb; _r++) {
         var _base = _r * _w;
@@ -219,10 +280,8 @@ function gmnav_costprofile_bake_if_dirty(_profile) {
     if (gmnav_costprofile_is_dirty(_profile)) gmnav_costprofile_bake(_profile);
 }
 
-function gmnav_costprofile_bake_region(_profile, _c1, _r1, _c2, _r2) {
+function gmnav_costprofile_bake_region(_profile, _c1, _r1, _c2, _r2, _ov_layer = 0) {
     var _grid = _profile.grid;
-    var _base = _grid.cost;
-    var _out  = _profile.resolved;
     var _w    = _grid.width;
     var _ln   = array_length(_profile.layers);
 
@@ -230,6 +289,39 @@ function gmnav_costprofile_bake_region(_profile, _c1, _r1, _c2, _r2) {
     var _cr = clamp(max(_c1, _c2), 0, _w - 1);
     var _rt = clamp(min(_r1, _r2), 0, _grid.height - 1);
     var _rb = clamp(max(_r1, _r2), 0, _grid.height - 1);
+
+    // overlay
+    if (_ov_layer > 0) {
+        if (!gmnav_grid_has_overlay(_grid)) return;
+
+        var _ov  = _grid.overlay;
+        var _n   = _grid.count;
+        var _out = _profile.resolved;
+
+        for (var _i = 0; _i < _ov.count; _i++) {
+            if (_ov.layer[_i] != _ov_layer) continue;
+
+            var _c = _ov.col[_i];
+            var _r = _ov.row[_i];
+            if (_c < _cl || _c > _cr) continue;
+            if (_r < _rt || _r > _rb) continue;
+
+            var _idx = _n + _i;
+            var _acc = _ov.cost[_i];
+
+            for (var _l = 0; _l < _ln; _l++) {
+                var _wt = _profile.weights[_l];
+                if (_wt != 0) _acc += _profile.layers[_l].values[_idx] * _wt;
+            }
+
+            _out[_idx] = (_acc < 1) ? 1 : _acc;
+        }
+        return;
+    }
+
+    // base
+    var _base = _grid.cost;
+    var _out  = _profile.resolved;
 
     for (var _r = _rt; _r <= _rb; _r++) {
         var _row = _r * _w;
@@ -267,18 +359,67 @@ function __gmnav_seg_distance(_px, _py, _x1, _y1, _x2, _y2) { // shortest distan
     return point_distance(_px, _py, _x1 + _dx * _t, _y1 + _dy * _t);
 }
 
-function gmnav_costlayer_stamp_path(_layer, _points, _width, _peak, _falloff = 1) { // paints a band of cost along a polyline, for a road, a patrol route, a spreading fire
+function gmnav_costlayer_stamp_path(_layer, _points, _width, _peak, _falloff = 1, _ov_layer = 0) { // paints a band of cost along a polyline, for a road, a patrol route, a spreading fire
     var _n = array_length(_points);
     if (_n == 0) return [0, 0, -1, -1];
 
     var _grid = _layer.grid;
     var _lay  = _grid.layout;
-    var _v    = _layer.values;
-    var _w    = _grid.width;
     var _iw   = 1 / max(0.0001, _width);
 
-    var _mc1 = _grid.width, _mr1 = _grid.height, _mc2 = -1, _mr2 = -1;
+    // overlay
+    if (_ov_layer > 0) {
+        if (!gmnav_grid_has_overlay(_grid)) return [0, 0, -1, -1];
 
+        _layer.values = __gmnav_cost_fit(_layer.values, _grid, 0);
+        var _v  = _layer.values;
+        var _ov = _grid.overlay;
+
+        var _mc1 = _grid.width, _mr1 = _grid.height, _mc2 = -1, _mr2 = -1;
+        var _segs = max(1, _n - 1);
+
+        for (var _i = 0; _i < _ov.count; _i++) {
+            if (_ov.layer[_i] != _ov_layer) continue;
+            if ((_ov.flags[_i] & GMNAV_FLAG_BLOCKED) != 0) continue;
+
+            var _node = _ov.base + _i;
+            var _p    = gmnav_grid_node_to_world(_grid, _node);
+            var _best = _width;
+
+            for (var _s = 0; _s < _segs; _s++) {
+                var _x1 = _points[_s][0];
+                var _y1 = _points[_s][1];
+                var _x2 = (_n == 1) ? _x1 : _points[_s + 1][0];
+                var _y2 = (_n == 1) ? _y1 : _points[_s + 1][1];
+
+                var _dd = __gmnav_seg_distance(_p[0], _p[1], _x1, _y1, _x2, _y2);
+                if (_dd < _best) _best = _dd;
+            }
+
+            if (_best > _width) continue;
+
+            var _val = _peak * power(1 - _best * _iw, _falloff);
+            if (_val > _v[_node]) _v[_node] = _val;
+
+            var _c = _ov.col[_i];
+            var _r = _ov.row[_i];
+            if (_c < _mc1) _mc1 = _c;
+            if (_c > _mc2) _mc2 = _c;
+            if (_r < _mr1) _mr1 = _r;
+            if (_r > _mr2) _mr2 = _r;
+        }
+
+        _layer.version++;
+
+        if (_mc2 < 0) return [0, 0, -1, -1];
+        return [_mc1, _mr1, _mc2, _mr2];
+    }
+
+    // base
+    var _v  = _layer.values;
+    var _w  = _grid.width;
+
+    var _mc1 = _grid.width, _mr1 = _grid.height, _mc2 = -1, _mr2 = -1;
     var _segs = max(1, _n - 1);
 
     for (var _s = 0; _s < _segs; _s++) {

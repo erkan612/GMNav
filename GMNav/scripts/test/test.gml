@@ -3764,3 +3764,55 @@ function gmt_test_stamp_path() {
               (array_get_index(_cr2, gmnav_overlay_node_at(_cg2.overlay, 5, 5, 1)) >= 0), true);
     gmt_check_f("and the toll was charged", _cp2.resolved[gmnav_overlay_node_at(_cg2.overlay, 5, 5, 1)], 7.0);
 }
+
+function gmt_test_stamp_overlay() {
+    gmt_head("U13 stamps and clear_region cover overlay layers");
+
+    var _g  = gmt_bridge_level();
+    var _ov = _g.overlay;
+
+    var _d1 = gmnav_overlay_node_at(_ov, 5, 4, 1);
+    var _d2 = gmnav_overlay_node_at(_ov, 5, 5, 1);
+    var _d3 = gmnav_overlay_node_at(_ov, 5, 6, 1);
+    var _base_mid = gmnav_grid_node(_g, 5, 5);
+
+    gmt_check("three deck cells", gmnav_overlay_count(_ov), 3);
+
+    var _l = gmnav_costlayer_create(_g, "danger");
+    var _p = gmnav_grid_node_to_world(_g, _d2);
+
+    // 32px tiles, three cells vertically. radius 60 covers all three.
+    var _rect = gmnav_costlayer_stamp_radial(_l, _p[0], _p[1], 60, 10, 1, 1);
+
+    gmt_note("rect", gmt_arr_str(_rect));
+
+    gmt_check("middle deck written", (gmnav_costlayer_get_node(_l, _d2) > 0), true);
+    gmt_check("top deck written",    (gmnav_costlayer_get_node(_l, _d1) > 0), true);
+    gmt_check("bottom deck written", (gmnav_costlayer_get_node(_l, _d3) > 0), true);
+    gmt_check("base cell untouched", gmnav_costlayer_get_node(_l, _base_mid), 0);
+
+    var _prof = gmnav_costprofile_create(_g, "test");
+    gmnav_costprofile_add(_prof, _l, 1);
+    gmnav_costprofile_bake(_prof);
+
+    gmt_check("deck resolves with layer", _prof.resolved[_d2] > 1, true);
+    gmt_check_f("base resolved unchanged", _prof.resolved[_base_mid], 1.0);
+
+    gmnav_costlayer_clear_region(_l, _rect[0], _rect[1], _rect[2], _rect[3], 1);
+    gmnav_costprofile_bake_region(_prof, _rect[0], _rect[1], _rect[2], _rect[3], 1);
+
+    gmt_check("deck cleared", gmnav_costlayer_get_node(_l, _d2), 0);
+    gmt_check_f("resolved cleared", _prof.resolved[_d2], 1.0);
+
+    // stamp_path on overlay
+    var _l2 = gmnav_costlayer_create(_g, "trail");
+    var _w1 = gmnav_grid_node_to_world(_g, _d1);
+    var _w3 = gmnav_grid_node_to_world(_g, _d3);
+
+    gmnav_costlayer_stamp_path(_l2,
+        [[_w1[0], _w1[1]], [_w3[0], _w3[1]]],
+        40, 8, 1, 1);
+
+    gmt_check("path hit middle",  (gmnav_costlayer_get_node(_l2, _d2) > 0), true);
+    gmt_check("path missed base", gmnav_costlayer_get_node(_l2, _base_mid), 0);
+}
