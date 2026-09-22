@@ -7970,8 +7970,8 @@ is omitted.
 | `domain` | Enum | Detected from the target |
 | `budget` | Integer | Node expansions per frame, shared |
 | `concurrent` | Integer | Maximum simultaneous searches |
-| `last_pops` | Integer | Pops used on the previous update |
-| `last_active` | Integer | Searches running on the previous update |
+| `last_pops` | Integer | Pops used on the most recent update that ran searches |
+| `last_active` | Integer | Searches running on the most recent update that ran searches |
 
 ---
 
