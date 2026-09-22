@@ -430,12 +430,14 @@ function __gmnav_path_line_z_ok(_grid, _a, _b, _climb, _drop) {
     if (_climb == undefined) return true;
     if (!gmnav_grid_has_heights(_grid)) return true;
 
+    if (_a >= _grid.count || _b >= _grid.count) return true;
+
     var _w  = _grid.width;
     var _h  = _grid.height;
     var _hz = _grid.height_z;
 
-    var _c0 = _a % _w, _r0 = _a div _w;
-    var _c1 = _b % _w, _r1 = _b div _w;
+    var _c0 = gmnav_grid_col(_grid, _a), _r0 = gmnav_grid_row(_grid, _a);
+    var _c1 = gmnav_grid_col(_grid, _b), _r1 = gmnav_grid_row(_grid, _b);
 
     var _dc = abs(_c1 - _c0);
     var _dr = abs(_r1 - _r0);
@@ -508,6 +510,8 @@ function __gmnav_path_corridor_ok(_grid, _a, _b, _climb, _drop, _radius) {
 
     if (_uses_z && !__gmnav_path_line_z_ok(_grid, _a, _b, _climb, _drop)) return false;
     if (_radius <= 0) return true;
+
+    if (_a >= _grid.count || _b >= _grid.count) return false;
 
     var _lay = _grid.layout;
     var _w   = _grid.width;
