@@ -305,8 +305,10 @@ function gmnav_overlay_set_cost(_ov, _node, _cost) {
     var _i = _node - _ov.base;
     if (_i < 0 || _i >= _ov.count) return false;
 
-    if (_ov.cost[_i] != _cost) {
-        _ov.cost[_i] = max(1, _cost);
+    var _c = max(1, _cost);
+
+    if (_ov.cost[_i] != _c) {
+        _ov.cost[_i] = _c;
         _ov.grid.version++;
         __gmnav_grid_note_edit(_ov.grid, _ov.col[_i], _ov.row[_i],
                                          _ov.col[_i], _ov.row[_i]);
