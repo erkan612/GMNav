@@ -59,10 +59,15 @@ function gmnav_scheduler_request(_sched, _start_node, _goal_node,
 function gmnav_scheduler_update(_sched) {
     __gmnav_sched_promote(_sched);
 
+    //var _n = array_length(_sched.active);
+    //_sched.last_active = _n;
+    //_sched.last_pops   = 0;
+    //if (_n == 0) return;
+
     var _n = array_length(_sched.active);
+    if (_n == 0) return;
     _sched.last_active = _n;
     _sched.last_pops   = 0;
-    if (_n == 0) return;
 
     var _share = max(1, _sched.budget div _n);
     var _spare = _sched.budget - (_share * _n);

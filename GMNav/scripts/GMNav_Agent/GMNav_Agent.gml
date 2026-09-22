@@ -85,6 +85,7 @@ function gmnav_agent_stop(_agent) {
     _agent.path     = undefined;
     _agent.has_goal = false;
     _agent.arrived  = false;
+    _agent.failed   = false; // how tf did i miss this
     _agent.seek_i   = 1;
 }
 

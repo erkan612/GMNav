@@ -211,7 +211,9 @@ function __gmnav_field_expand(_field, _budget) {
                 if (_on < _obase && (_flags[_on] & GMNAV_FLAG_BLOCKED) != 0) continue;
                 if (_on >= _obase && gmnav_overlay_is_blocked(_ov, _on)) continue;
 
-                var _ocost = (_on >= _obase) ? _ov.cost[_on - _obase] : _cost[_on];
+                var _ocost = (_on >= _obase && _field.profile == undefined)
+						   ? _ov.cost[_on - _obase]
+						   : _cost[_on];
                 var _od    = _cd + _ov.edge_cost[e] * _ocost;
 
                 if (_od > _cap) continue;
@@ -288,7 +290,9 @@ function __gmnav_field_expand(_field, _budget) {
 
                 if (_un >= _obase && gmnav_overlay_is_blocked(_ov, _un)) continue;
 
-                var _ucost = (_un >= _obase) ? _ov.cost[_un - _obase] : _cost[_un];
+                var _ucost = (_un >= _obase && _field.profile == undefined)
+				           ? _ov.cost[_un - _obase]
+				           : _cost[_un];
                 var _ud    = _cd + _ov.up_cost[u] * _ucost;
 
                 if (_ud > _cap) continue;
