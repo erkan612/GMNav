@@ -101,6 +101,9 @@ function gmnav_clearance_for_radius(_grid, _radius) {
 function gmnav_clearance_nearest(_grid, _node, _need, _max_rings = 8) {
     if (_node == GMNAV_NO_NODE) return GMNAV_NO_NODE;
     if (_grid.clear == undefined) return _node;
+
+    if (_node >= _grid.count) return GMNAV_NO_NODE;
+
     if (_grid.clear[_node] >= _need) return _node;
 
     var _w  = _grid.width;
