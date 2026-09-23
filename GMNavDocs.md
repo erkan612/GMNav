@@ -5880,6 +5880,135 @@ the road beneath it.
 
 ---
 
+## Avoidance
+
+Local avoidance steers agents away from each other, and in one of the modes
+away from walls. It is separate from pathfinding — the search decides which
+route, avoidance decides how the agent moves along it. A path can be perfectly
+optimal and still produce a crowd that jitters, stalls, or shoves itself into
+a doorway. The avoidance model is what decides how it looks in motion.
+
+Three models ship with the framework. They share the same API — the agent's
+`avoid_mode` field selects which one runs — and every behaviour that used to
+be a hardcoded constant is now a per-agent field, so different units in the
+same crowd can react to each other differently.
+
+Every mode returns a push vector and a speed scale. The push is added to the
+desired direction, with the part that opposes the path stripped out. The scale
+multiplies the desired speed, which is how FOLLOW slows a crowd into a queue
+without moving anyone off their path.
+
+### The three modes
+
+### BASIC
+
+The default. Agents within range push each other apart. The push is a
+separation force, strongest at contact and falling off with distance, and the
+sum is normalised to one unit before being applied.
+
+BASIC is cheap, correct, and open ground looks fine. At a chokepoint it
+becomes chaotic — agents press into walls, get shoved off their path by
+neighbours behind them, and pass through each other in tight corridors. That
+is its documented behaviour, not a bug. If you need a crowd that files through
+a door instead of fighting for it, use FOLLOW.
+
+### CONTEXT
+
+Probes 16 directions around the agent and scores each for three things:
+
+- how well it points toward the goal
+- how much neighbour danger is in that direction
+- whether it faces a wall
+
+The best-scoring direction wins, and the push is the difference between that
+direction and the desired one. An agent with a wall dead ahead is pushed
+sideways. An agent with a neighbour dead ahead is pushed around them. Neither
+case is hardcoded.
+
+Handles corners and doorways because the wall check is a full line test, not
+a point sample. Costs more than BASIC — every probe runs a short supercover
+walk against the grid.
+
+### FOLLOW
+
+Queue formation. The agent looks for neighbours directly ahead in a narrow
+cone and scales its speed down based on the tightest gap it sees. Nothing is
+pushed off the path — the agent just moves slower when someone is in front of
+it. A crowd files naturally behind its leader.
+
+Two agents side by side, both heading the same direction, ignore each other.
+Only the cone ahead counts.
+
+The separation force is still there, but weaker than BASIC's and only active
+when bodies overlap. Lower `follow_sep` further for a patient queue, raise it
+for a crowd that jostles.
+
+### Choosing a mode
+
+If you have to pick one, FOLLOW handles the widest range of situations
+without embarrassing itself. BASIC is right for open spaces and large crowds
+where the extra cost of CONTEXT or FOLLOW is not worth it. CONTEXT is right
+for a small number of units that need to steer around walls and each other
+precisely, and can afford the cost.
+
+The three modes can be mixed in one crowd. A tower defense might use BASIC
+for its two hundred creeps and CONTEXT for the single boss.
+
+### Per-agent fields
+
+Every field defaults to something reasonable, so an agent works without
+setting anything. All of them are writable at any time, and take effect on
+the next `gmnav_agent_update`.
+
+| Field | Default | Used by | Description |
+|---|---|---|---|
+| `avoid_mode` | `gmnav_avoid.BASIC` | all | Which model runs |
+| `avoid_str` | 1.0 | all | Overall strength multiplier. 0 disables avoidance |
+| `avoid_range` | 3.0 | all | Reach in multiples of the agent's radius |
+| `basic_clear_div` | 3.0 | BASIC | Clearance that produces a full-strength push |
+| `basic_clear_min` | 0.15 | BASIC | Floor on the clearance scale |
+| `basic_open_min` | 0.2 | BASIC | Same floor for the fallback when clearance was not built |
+| `cs_probes` | 16 | CONTEXT | How many directions are sampled |
+| `cs_wall_weight` | 2.0 | CONTEXT | How hard a wall rejects a direction |
+| `cs_wall_range` | 2.5 | CONTEXT | How far ahead a probe looks for a wall, in radius units |
+| `cs_danger_weight` | 1.5 | CONTEXT | How much a blocked neighbour penalises a probe |
+| `follow_gap` | 1.6 | FOLLOW | Full speed at this gap, in radius-sum units |
+| `follow_min` | 0.9 | FOLLOW | Hard stop just below this gap |
+| `follow_floor` | 0.15 | FOLLOW | Slowest the queue can go. Zero deadlocks |
+| `follow_cone` | 0.4 | FOLLOW | Half-width of the ahead cone |
+| `follow_sep` | 0.3 | FOLLOW | Separation strength when bodies overlap |
+| `follow_sep_range` | 1.5 | FOLLOW | How close before separation kicks in |
+
+### Avoidance and the path
+
+When the framework combines the push with the desired direction, it strips
+whatever part of the push points backward along the path. The path always
+wins — avoidance can steer an agent sideways, but it can never stop one dead.
+Without this, a crowd pressing from behind can cancel an agent's forward
+motion entirely, and the agent stands frozen with a valid path and no visible
+reason.
+
+The upshot is that a crowded agent moves slower along its path than a lone
+one, and may drift sideways into a lane that has less congestion, but it
+never gives up on reaching its goal.
+
+### The neighbour list
+
+Avoidance requires a neighbour list. `gmnav_agent_update(agent, neighbours)`
+only runs the avoidance block when `_neighbours` is not `undefined`, and
+silently skips it otherwise.
+
+The framework does not keep a spatial index. It could, but your game almost
+certainly already has one, and a navigation library maintaining a second one
+in parallel would be a source of bugs rather than a convenience. So you supply
+the list.
+
+A neighbour only needs three fields: `x`, `y`, and `radius`. Anything with
+those three works, so an agent can be a `gmnav_agent`, a game object, or a
+bare struct.
+
+---
+
 ## Platformer Functions
 
 Side view connectivity is not grid adjacency. Two ledges can touch on screen and
