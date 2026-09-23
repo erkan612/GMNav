@@ -8781,9 +8781,9 @@ Which local avoidance model an agent uses.
 | `CONTEXT` | Probe-based. 16 directions scored for goal alignment, neighbour danger, and wall reach. Handles corners and doorways |
 | `FOLLOW` | Queue formation. Agents slow down behind a neighbour directly ahead instead of pushing sideways. A crowd files rather than fights |
 
-PPPgml
+```gml
 agent.avoid_mode = gmnav_avoid.FOLLOW;
-PPP
+```
 
 The mode is a per-agent field. Different units in the same crowd can use
 different models, and the mode can be changed at any time. The next
@@ -9060,27 +9060,44 @@ is omitted.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `x`, `y` | Real | - | Position. Yours to write |
-| `vx`, `vy` | Real | 0 | Proposed velocity, written every update |
-| `radius` | Real | 8 | Avoidance, arrival, and smoothing body check |
+| `x`, `y` | Real | - | Position. Yours to write, the agent never touches it |
+| `vx`, `vy` | Real | 0 | Proposed velocity. Written every update |
+| `radius` | Real | 8 | Used for avoidance, arrival, and passed to smoothing |
 | `speed` | Real | 2 | Maximum speed |
-| `accel` | Real | 0.35 | How sharply desired velocity is approached |
+| `accel` | Real | 0.35 | How fast desired velocity is approached, 0 to 1 |
 | `arrive_dist` | Real | 24 | Start easing off inside this range |
 | `reach_dist` | Real | 4 | Close enough, journey complete |
 | `arrived` | Boolean | false | Latched until the next `goto` or `stop` |
-| `failed` | Boolean | false | Last goal could not be routed to |
-| `layer` | Integer | 0 | Surface the agent is on |
-| `goal_layer` | Integer | 0 | Surface the goal is on |
-| `profile` | Struct | undefined | Passed on every request and to smoothing |
-| `need_clear` | Integer | 0 | Passed on every request |
-| `max_climb`, `max_drop` | Real | undefined | Passed on every request and to smoothing |
-| `headings` | Integer | 0 | Headings smoothing may use |
-| `curve_mode` | Enum | `NONE` | Curve applied after smoothing |
+| `failed` | Boolean | false | Last goal could not be routed to. Latched the same way |
+| `layer` | Integer | 0 | Surface the agent is standing on |
+| `goal_layer` | Integer | 0 | Surface the goal is on, remembered so a repath asks for the same one |
+| `profile` | Struct | `undefined` | Cost profile, passed on every request and to smoothing |
+| `need_clear` | Integer | 0 | Minimum clearance, passed on every request |
+| `max_climb`, `max_drop` | Real | `undefined` | Elevation limits, passed on every request and to smoothing |
+| `headings` | Integer | 0 | Headings smoothing may use. 0 unconstrained, 4 cardinals, 8 with diagonals |
+| `curve_mode` | Enum | `gmnav_curve.NONE` | Curve applied after smoothing and anchoring |
 | `curve_radius` | Real | 16 | Corner radius when curving |
-| `curve_steps` | Integer | 4 | Samples per arc |
+| `curve_steps` | Integer | 4 | Samples per arc when curving |
 | `repath_gap` | Integer | 20 | Frames between repath attempts |
-| `avoid_str` | Real | 1.0 | Separation strength, 0 disables |
+| `avoid_str` | Real | 1.0 | Separation strength, 0 disables avoidance |
 | `avoid_range` | Real | 3.0 | Separation reach, in multiples of radius |
+| `avoid_mode` | Enum | `gmnav_avoid.BASIC` | Which avoidance model runs |
+| `basic_clear_div` | Real | 3.0 | BASIC. Clearance that produces a full-strength push |
+| `basic_clear_min` | Real | 0.15 | BASIC. Floor on the clearance scale |
+| `basic_open_min` | Real | 0.2 | BASIC. Floor for the fallback when clearance was not built |
+| `cs_probes` | Integer | 16 | CONTEXT. Directions sampled per frame |
+| `cs_wall_weight` | Real | 2.0 | CONTEXT. How hard a wall rejects a direction |
+| `cs_wall_range` | Real | 2.5 | CONTEXT. Wall probe distance, in radius units |
+| `cs_danger_weight` | Real | 1.5 | CONTEXT. How much a blocked neighbour penalises a probe |
+| `follow_gap` | Real | 1.6 | FOLLOW. Full speed at this gap, in radius-sum units |
+| `follow_min` | Real | 0.9 | FOLLOW. Hard stop just below this gap |
+| `follow_floor` | Real | 0.15 | FOLLOW. Slowest the queue can go. Zero deadlocks |
+| `follow_cone` | Real | 0.4 | FOLLOW. Half-width of the ahead cone |
+| `follow_sep` | Real | 0.3 | FOLLOW. Separation strength when bodies overlap |
+| `follow_sep_range` | Real | 1.5 | FOLLOW. How close before separation kicks in |
+| `path` | Struct | `undefined` | Current path object |
+| `ticket` | Struct | `undefined` | Request in flight |
+| `seek_i` | Integer | 1 | Index of the waypoint being steered toward |
 
 ### Movement
 
