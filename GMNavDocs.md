@@ -7467,6 +7467,955 @@ overlay, when you want the numbers without the full stats panel.
 
 ---
 
+## Util Functions
+
+`GMNav/Util/GMNav_Util.gml` is a convenience module. Every function in it
+composes public calls and decides nothing. It exists because the same three
+or four lines get written in every project, and writing them by hand gets old.
+
+Nothing here is required. Delete the folder and the rest of the framework is
+unaffected. The functions are grouped by what a caller is usually trying to
+do, and none of them hide a decision you might want to make differently.
+
+### Grid setup
+
+Building a grid that matches the room, or one that matches a tilemap, is
+the first thing every project does. These three cover the common shapes.
+
+### gmnav_util_grid_for_room
+
+```gml
+gmnav_util_grid_for_room(tile_w, tile_h, mode, neighbours);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| tile_w | Real | Tile width in pixels |
+| tile_h | Real | Optional, defaults to tile_w. Tile height |
+| mode | Enum | Optional, default ORTHO. A `gmnav_layout` member |
+| neighbours | Enum | Optional, default EIGHT. A `gmnav_neighbours` member |
+
+**Returns:** Grid struct
+
+A grid sized to fit the room, with a matching layout. Square tiles when
+`tile_h` is left out, which is the common case.
+
+**Example:**
+
+```gml
+// the plain case, 32 pixel tiles filling the room
+grid = gmnav_util_grid_for_room(32);
+
+// isometric, 64 by 32
+grid = gmnav_util_grid_for_room(64, 32, gmnav_layout.ISO_DIAMOND);
+```
+
+The above replaces the two-line grid setup that appears in every demo. Same
+grid, same layout, one call.
+
+### gmnav_util_border_blocked
+
+```gml
+gmnav_util_border_blocked(grid, thickness);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| grid | Struct | The grid |
+| thickness | Integer | Optional, default 1. How many cells thick the border is |
+
+**Returns:** Boolean, whether anything changed
+
+Walls around the edge of the map. Every demo writes this by hand, usually as
+four `gmnav_grid_fill_blocked` calls. This does the same thing with one call
+and handles any thickness.
+
+**Example:**
+
+```gml
+gmnav_util_border_blocked(grid);      // one cell thick
+gmnav_util_border_blocked(grid, 3);   // three cells thick
+```
+
+The return value follows the same no-op discipline the rest of the grid
+functions use: re-asserting an existing border does nothing and does not bump
+the version.
+
+### gmnav_util_grid_from_tilemap
+
+```gml
+gmnav_util_grid_from_tilemap(tilemap, tile_w, tile_h, mode, neighbours, is_blocked);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| tilemap | Id | A tilemap element id |
+| tile_w | Real | Tile width in pixels |
+| tile_h | Real | Optional, defaults to tile_w. Tile height |
+| mode | Enum | Optional, default ORTHO |
+| neighbours | Enum | Optional, default EIGHT |
+| is_blocked | Function | Optional. Given a tile index, returns whether it blocks |
+
+**Returns:** Grid struct
+
+The whole top-down level setup in one call: size the grid to the tilemap,
+build a matching layout, import the collision, block the border. This is the
+pattern from the Getting Started guide with the boilerplate removed.
+
+**Example:**
+
+```gml
+grid = gmnav_util_grid_from_tilemap(layer_tilemap_get_id("Collision"), 32);
+```
+
+Tile height defaults to tile width, mode defaults to ORTHO, neighbours
+defaults to EIGHT, and `is_blocked` defaults to "any non-zero tile blocks".
+Every argument past `tile_w` is optional, so the common case is one call.
+
+### Node query and picking
+
+A cell is not a position you can stand at. These functions bridge that gap
+and refuse to return somewhere an agent cannot actually be.
+
+### gmnav_util_node_at
+
+```gml
+gmnav_util_node_at(grid, x, y, layer);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| grid | Struct | The grid |
+| x | Real | World x |
+| y | Real | World y |
+| layer | Integer | Optional, default 0. Which surface to ask about |
+
+**Returns:** Node id, or `GMNAV_NO_NODE` if the position is off the map or blocked
+
+`gmnav_grid_world_to_node` returns a node for any position inside the grid,
+including blocked cells. This returns a node only if the cell there is
+walkable. Same two-line check that appears in every click handler, wrapped.
+
+**Example:**
+
+```gml
+var _n = gmnav_util_node_at(grid, mouse_x, mouse_y);
+
+if (_n != GMNAV_NO_NODE) {
+    // somewhere the player can actually send a unit
+}
+```
+
+### gmnav_util_cursor_node
+
+```gml
+gmnav_util_cursor_node(grid, mode);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| grid | Struct | The grid |
+| mode | Integer | Optional, default 0. 0 asks topmost, 1 asks the ground |
+
+**Returns:** Node id, or `GMNAV_NO_NODE`
+
+The node under the cursor, if it is somewhere an agent could stand.
+`mode = 0` walks down from the highest overlay layer, which is what a click
+on a bridge usually means. `mode = 1` asks layer 0, so the click passes under
+a bridge.
+
+**Example:**
+
+```gml
+if (mouse_check_button_pressed(mb_left)) {
+    var _n = gmnav_util_cursor_node(grid);
+
+    if (_n != GMNAV_NO_NODE) {
+        // send the player's unit there
+    }
+}
+```
+
+### gmnav_util_snap_open
+
+```gml
+gmnav_util_snap_open(grid, x, y, max_rings);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| grid | Struct | The grid |
+| x | Real | World x |
+| y | Real | World y |
+| max_rings | Integer | Optional, default 4. How far out to search |
+
+**Returns:** Node id, or `GMNAV_NO_NODE`
+
+The nearest open node to a world position, when the exact cell is blocked or
+off the map. Walks outward in rings, no clearance required. Useful for spawn
+points, for forgiving clicks, and for anything that has to produce a walkable
+position from an arbitrary one.
+
+**Example:**
+
+```gml
+// a cutscene spawn point that might be inside geometry
+var _n = gmnav_util_snap_open(grid, cutscene_x, cutscene_y);
+
+if (_n != GMNAV_NO_NODE) {
+    var _p = gmnav_grid_node_to_world(grid, _n);
+    instance_create_layer(_p[0], _p[1], "Units", obj_guard);
+}
+```
+
+### gmnav_util_random_open
+
+```gml
+gmnav_util_random_open(grid, max_attempts);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| grid | Struct | The grid |
+| max_attempts | Integer | Optional, default 200. How many cells to sample |
+
+**Returns:** Node id, or `GMNAV_NO_NODE`
+
+A random walkable node. Samples cells uniformly, not walkable cells, so a
+mostly blocked map wants a higher attempt budget.
+
+**Example:**
+
+```gml
+// scatter a crowd over the open ground
+for (var i = 0; i < 20; i++) {
+    var _n = gmnav_util_random_open(grid);
+    if (_n == GMNAV_NO_NODE) continue;
+
+    var _p = gmnav_grid_node_to_world(grid, _n);
+    instance_create_layer(_p[0], _p[1], "Units", obj_guard);
+}
+```
+
+### gmnav_util_random_open_world
+
+```gml
+gmnav_util_random_open_world(grid, max_attempts);
+```
+
+Same as `gmnav_util_random_open`, returning the world position as an `[x, y]`
+array instead of the node id. `undefined` if nothing was found.
+
+**Example:**
+
+```gml
+var _p = gmnav_util_random_open_world(grid);
+
+if (_p != undefined) {
+    agent.x = _p[0];
+    agent.y = _p[1];
+}
+```
+
+### Inspection
+
+For debug messages and overlays. These are the "what does the framework
+think about this cell" helpers.
+
+### gmnav_util_probe_node
+
+```gml
+gmnav_util_probe_node(grid, node);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| grid | Struct | The grid |
+| node | Integer | Node id, base or overlay |
+
+**Returns:** Struct, or `undefined` if the node is invalid
+
+Everything the framework knows about one node, as a struct: column, row,
+layer, blocked state, base cost, clearance, elevation, overlay offset, world
+position.
+
+**Example:**
+
+```gml
+var _pr = gmnav_util_probe_node(grid, _n);
+
+show_debug_message("cell " + string(_pr.col) + "," + string(_pr.row)
+                 + " layer " + string(_pr.layer)
+                 + " cost " + string(_pr.cost)
+                 + " clearance " + string(_pr.clearance));
+```
+
+### gmnav_util_describe_node
+
+```gml
+gmnav_util_describe_node(grid, node);
+```
+
+**Returns:** String
+
+A one-line human readable summary: `(col,row) layer N cost X.XX` with
+`blocked` inserted when applicable. Handles `GMNAV_NO_NODE` and invalid ids
+without erroring.
+
+**Example:**
+
+```gml
+show_debug_message("clicked " + gmnav_util_describe_node(grid, _n));
+// prints:  clicked (5,3) layer 0 cost 1.00
+```
+
+### Agent control
+
+Sending an agent somewhere, or a group of agents, with the position resolved
+and the surface chosen.
+
+### gmnav_util_send_agent
+
+```gml
+gmnav_util_send_agent(agent, grid, x, y, mode, priority);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| agent | Struct | The agent |
+| grid | Struct | The grid |
+| x | Real | World x |
+| y | Real | World y |
+| mode | Integer | Optional, default 0. 0 topmost surface, 1 ground |
+| priority | Enum | Optional, default NORMAL |
+
+**Returns:** Boolean, `false` if the point is not somewhere an agent can stand
+
+The whole click-to-move handler in one call. Resolves the click to a node,
+checks it is walkable, and if so sends the agent there on the correct layer.
+
+**Example:**
+
+```gml
+if (mouse_check_button_pressed(mb_left)) {
+    gmnav_util_send_agent(agent, grid, mouse_x, mouse_y);
+}
+```
+
+### gmnav_util_send_agent_node
+
+```gml
+gmnav_util_send_agent_node(agent, grid, node, priority);
+```
+
+Same as `gmnav_util_send_agent` but takes a node id the caller already has.
+Useful after a lookup that returned a node rather than a position.
+
+### gmnav_util_send_group
+
+```gml
+gmnav_util_send_group(agents, grid, x, y, spread, priority);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| agents | Array | The agents |
+| grid | Struct | The grid |
+| x | Real | World x of the centre of the group |
+| y | Real | World y |
+| spread | Real | Optional, default 0. Radius of the disc, in pixels |
+| priority | Enum | Optional, default NORMAL |
+
+**Returns:** Integer, how many agents accepted the order
+
+Send every agent in an array to a point, spread across a disc so they do not
+stack on one cell. Uses a golden-angle distribution, which gives even coverage
+without the pattern looking regular.
+
+**Example:**
+
+```gml
+// send 20 guards to a spot, spread over a disc 60 pixels wide
+gmnav_util_send_group(guards, grid, target_x, target_y, 60);
+```
+
+### gmnav_util_reset_agent
+
+```gml
+gmnav_util_reset_agent(agent, grid, x, y, layer);
+```
+
+Stop an agent, move it to a position, and clear every trace of the old
+journey. Cleaner than calling `gmnav_agent_stop` and then setting `x`, `y`
+and the latches by hand.
+
+**Example:**
+
+```gml
+// respawn a unit at a checkpoint
+gmnav_util_reset_agent(agent, grid, spawn_x, spawn_y);
+```
+
+### Agent state
+
+Reading the state of an agent, or a group of agents, for HUDs and debug
+overlays. These are live reads — nothing is cached.
+
+### gmnav_util_agent_state
+
+```gml
+gmnav_util_agent_state(agent);
+```
+
+**Returns:** String, one of `"arrived"`, `"failed"`, `"walking"`, `"waiting"`, `"idle"`
+
+A single word describing what the agent is doing right now. Order of checks
+matters: arrived and failed win over walking, which wins over waiting.
+
+**Example:**
+
+```gml
+draw_text(x, y - 20, gmnav_util_agent_state(agent));
+```
+
+### gmnav_util_agent_summary
+
+```gml
+gmnav_util_agent_summary(agents);
+```
+
+**Returns:** Struct with fields `total`, `walking`, `waiting`, `idle`, `arrived`, `failed`
+
+Tally a group of agents. Useful for a HUD counter that reads
+`"12/20 moving, 3 arrived"` without looping through agents in the draw event.
+
+### gmnav_util_scheduler_snapshot
+
+```gml
+gmnav_util_scheduler_snapshot(sched);
+```
+
+**Returns:** Struct with fields `domain`, `budget`, `concurrent`, `pending`, `active`, `pops_used`, `pooled`
+
+Everything a HUD wants to know about a scheduler, in one call. Reads the same
+fields the built-in debug panel uses.
+
+### Synchronous path queries
+
+These run a search to completion inside the call. Fine for tools, level
+validation, spawn checks, and anything outside gameplay. Wrong for anything
+per frame, which is what the scheduler is for.
+
+### gmnav_util_shortest_path
+
+```gml
+gmnav_util_shortest_path(grid, from, to, profile, need_clear, max_climb, max_drop, max_steps);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| grid | Struct | The grid |
+| from | Integer | Start node |
+| to | Integer | Goal node |
+| profile | Struct | Optional. A cost profile |
+| need_clear | Integer | Optional, default 0 |
+| max_climb, max_drop | Real | Optional. Elevation limits |
+| max_steps | Integer | Optional, default 1000000. Safety cap |
+
+**Returns:** Path struct, or `undefined`
+
+The whole pipeline in one call: search to completion, reconstruct, smooth.
+Handy for level tools and previews. Not for gameplay.
+
+### gmnav_util_is_reachable
+
+```gml
+gmnav_util_is_reachable(grid, from, to, profile, need_clear, max_climb, max_drop, max_steps);
+```
+
+**Returns:** Boolean
+
+Whether any route exists between two nodes. Same arguments as
+`gmnav_util_shortest_path`, same synchronous behaviour. Use it for spawn
+validation and objective checks, not per frame.
+
+**Example:**
+
+```gml
+// refuse to spawn a unit that cannot reach the objective
+if (gmnav_util_is_reachable(grid, spawn_node, objective_node)) {
+    spawn_enemy(spawn_x, spawn_y);
+}
+```
+
+### gmnav_util_path_cost
+
+```gml
+gmnav_util_path_cost(grid, nodes, profile);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| grid | Struct | The grid |
+| nodes | Array | Node ids |
+| profile | Struct | Optional. A cost profile |
+
+**Returns:** Real
+
+The cost the search would charge for a route, given as nodes. No search runs
+— it adds up the resolved costs of each step. Useful for comparing two routes
+you already have, or for deciding whether a detour is worth taking.
+
+### gmnav_util_path_is_valid
+
+```gml
+gmnav_util_path_is_valid(grid, nodes, need_clear);
+```
+
+**Returns:** Boolean
+
+Whether every node on a route still exists and remains walkable. Call this
+after grid edits to decide whether a held path is worth keeping.
+
+**Example:**
+
+```gml
+// the warehouse just changed shape, is our route still good?
+if (!gmnav_util_path_is_valid(grid, my_path_nodes)) {
+    request_new_path();
+}
+```
+
+### Cost fields
+
+### gmnav_util_costfield_single
+
+```gml
+gmnav_util_costfield_single(grid, name);
+```
+
+**Returns:** Struct with fields `layer` and `profile`
+
+A layer plus a profile that reads it with weight 1. The common case by far,
+and two calls that always go together.
+
+**Example:**
+
+```gml
+var _danger = gmnav_util_costfield_single(grid, "danger");
+
+gmnav_costlayer_stamp_radial(_danger.layer, x, y, 200, 8, 2);
+gmnav_costprofile_bake(_danger.profile);
+```
+
+### gmnav_util_move_threat
+
+```gml
+gmnav_util_move_threat(layer, profiles, old_rect, new_rect);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| layer | Struct | The layer |
+| profiles | Array | Every profile that reads it |
+| old_rect | Array | `[c1, r1, c2, r2]`, the footprint being cleared |
+| new_rect | Array | `[c1, r1, c2, r2]`, the footprint being written |
+
+After a threat moves, clear the footprint it left and rebake both rectangles
+for every profile that reads the layer. Both rects, always, which is the
+pattern the docs warn about elsewhere. This function exists so nobody has to
+remember the rule twice.
+
+**Example:**
+
+```gml
+// a turret that has just moved
+var _old = old_footprint;
+var _new = gmnav_costlayer_stamp_radial(danger, x, y, 200, 8, 2);
+
+gmnav_util_move_threat(danger, [soldier, scout], _old, _new);
+old_footprint = _new;
+```
+
+### Overlay authoring
+
+### gmnav_util_overlay_room
+
+```gml
+gmnav_util_overlay_room(ov, c1, r1, c2, r2, layer);
+```
+
+**Returns:** Integer, the count of cells added
+
+Fill a rectangle with overlay cells. Returns how many were actually created,
+which may be less than the rectangle if some cells already existed.
+
+### gmnav_util_overlay_bridge
+
+```gml
+gmnav_util_overlay_bridge(grid, ov, c1, r1, c2, r2, layer);
+```
+
+**Returns:** Array `[first_node, last_node]`
+
+A straight run of overlay cells from one point to the other, with links at
+each end to the ground below. Handles horizontal, vertical and diagonal runs.
+The two links are the only edges you need, because cells on one layer are
+neighbours by the ordinary neighbour table.
+
+**Example:**
+
+```gml
+// a five cell bridge crossing a road at column 5
+gmnav_util_overlay_bridge(grid, ov, 5, 4, 5, 8, 1);
+gmnav_overlay_finish(ov);
+```
+
+### Target selection
+
+### gmnav_util_nearest_in_array
+
+```gml
+gmnav_util_nearest_in_array(x, y, items);
+```
+
+**Returns:** The array entry, or `undefined`
+
+The array entry closest to a point by straight line distance. Uses `_items[i].x`
+and `_items[i].y`, so it works on agents, structs, or anything with those two
+fields.
+
+### gmnav_util_agents_within_radius
+
+```gml
+gmnav_util_agents_within_radius(x, y, agents, radius);
+```
+
+**Returns:** Array
+
+Every entry closer than the radius. The array to pass is usually the same one
+you gathered for avoidance.
+
+### gmnav_util_agents_sorted_by_distance
+
+```gml
+gmnav_util_agents_sorted_by_distance(x, y, agents);
+```
+
+**Returns:** Array, a copy sorted nearest first
+
+A copy of the array sorted by straight line distance. Handy for threat
+priority and for picking the closest target with an early break.
+
+### gmnav_util_reachable_nearest
+
+```gml
+gmnav_util_reachable_nearest(grid, from_node, candidates, profile, max_steps);
+```
+
+**Returns:** Node id, or `GMNAV_NO_NODE`
+
+The candidate the search can actually reach, and among those, the one with
+the lowest path cost. Unlike `nearest_in_array`, this respects walls — a
+target twenty pixels away on the other side of a river does not win.
+
+Costs one search per candidate, so keep the list short.
+
+**Example:**
+
+```gml
+var _targets = [spawn_a_node, spawn_b_node, spawn_c_node];
+var _best = gmnav_util_reachable_nearest(grid, my_node, _targets);
+
+if (_best != GMNAV_NO_NODE) {
+    gmnav_agent_goto(agent, gmnav_grid_node_to_world(grid, _best));
+}
+```
+
+### World-space queries
+
+### gmnav_util_cost_at_world
+
+```gml
+gmnav_util_cost_at_world(layer, x, y);
+```
+
+**Returns:** Real, 0 if the position is off the map
+
+The layer value under a world position. Reads the value at the cell containing
+the point.
+
+### gmnav_util_clearance_at_world
+
+```gml
+gmnav_util_clearance_at_world(grid, x, y, layer);
+```
+
+**Returns:** Integer, 0 if there is nothing there
+
+The clearance at a world position.
+
+### gmnav_util_danger_around
+
+```gml
+gmnav_util_danger_around(layer, x, y, radius);
+```
+
+**Returns:** Real
+
+The highest layer value in a disc around a point. "How bad is it here"
+without committing to a specific cell.
+
+### Path following
+
+The path object gives you a list of waypoints and a total length. These give
+you "where will I be in N pixels along it", which most agents eventually want.
+
+### gmnav_util_path_waypoint_index
+
+```gml
+gmnav_util_path_waypoint_index(path, distance);
+```
+
+**Returns:** Integer
+
+The waypoint index the path has reached at a given distance along it. The
+inverse of `gmnav_path_sample`.
+
+### gmnav_util_path_direction_at
+
+```gml
+gmnav_util_path_direction_at(path, distance);
+```
+
+**Returns:** Real, degrees
+
+The heading of the path at a distance along it. Aim a turret, orient a sprite,
+angle a trail.
+
+### gmnav_util_path_lookahead
+
+```gml
+gmnav_util_path_lookahead(path, distance, ahead);
+```
+
+**Returns:** Array `[x, y]`
+
+A point N pixels further along the path than a given distance. Clamped at
+the ends. The "follow the road ahead" position for anticipation.
+
+### gmnav_util_path_length_between
+
+```gml
+gmnav_util_path_length_between(path, from, to);
+```
+
+**Returns:** Real
+
+The distance along the path between two distance values. For "how much is
+left" style readouts.
+
+### Grid validation
+
+Level design questions: is the map connected, can anything reach the
+objective, where are the dead zones. Run these in a tool, on level load, or
+from a debug key. Not per frame.
+
+### gmnav_util_reachable_set
+
+```gml
+gmnav_util_reachable_set(grid, from_node, need_clear);
+```
+
+**Returns:** Array of node ids
+
+Every node reachable from a starting point. Flood fill, no cost involved, no
+search budget. Follows authored overlay links, so a deck joined by a stair
+reads as part of the floor it connects to.
+
+### gmnav_util_is_connected
+
+```gml
+gmnav_util_is_connected(grid, need_clear);
+```
+
+**Returns:** Boolean
+
+True when every walkable cell can be reached from every other. False means
+the map has islands, which is usually a level design bug rather than a
+feature.
+
+### gmnav_util_unreachable_from
+
+```gml
+gmnav_util_unreachable_from(grid, from_node, need_clear);
+```
+
+**Returns:** Array of node ids
+
+Every walkable node that cannot be reached from a point. The complement of
+`reachable_set`, which is what you actually want to draw when a level has
+islands.
+
+### Flow field to path
+
+### gmnav_util_flowfield_to_path
+
+```gml
+gmnav_util_flowfield_to_path(grid, field, from_node, max_hops);
+```
+
+**Returns:** Path struct, or `undefined` if the chain loops or does not reach a goal
+
+Walk the field's `next` chain from a start, return a path object. No search
+runs — the field already knows the route. Useful for previews, tooling, and
+for handing a field route to code that expects a path object.
+
+### Line of sight
+
+### gmnav_util_has_line_of_sight
+
+```gml
+gmnav_util_has_line_of_sight(grid, x1, y1, x2, y2, radius);
+```
+
+**Returns:** Boolean
+
+Whether a straight line from one world point to another is unobstructed for
+a body of a given radius. Radius 0 is the point test the framework already
+does. Useful for stealth, vision cones and sniper AI.
+
+### Repath staggering
+
+When a group of agents share a repath trigger, they all ask on the same frame
+and the queue fills. Giving each a slightly different gap and offset spreads
+them across the frame.
+
+### gmnav_util_stagger_repath_gaps
+
+```gml
+gmnav_util_stagger_repath_gaps(agents, base_gap, jitter);
+```
+
+Give each agent a `repath_gap` spread around a base value. Call once at setup.
+Cheap way to stop a crowd synchronising.
+
+### gmnav_util_stagger_repath_offsets
+
+```gml
+gmnav_util_stagger_repath_offsets(agents, frame_span);
+```
+
+Give each agent a different `repath_at` offset, so their first repath lands on
+different frames. Call once at setup, not per frame.
+
+### Motion tracker
+
+An agent that has not moved for a while is stuck. Detection needs history, and
+history needs state the framework does not carry. These two functions are a
+tiny companion struct rather than a field on the agent.
+
+### gmnav_util_motion_tracker_create
+
+```gml
+gmnav_util_motion_tracker_create(frames, min_dist);
+```
+
+**Returns:** Struct
+
+A tracker that watches for N frames and reports stuck if the agent moved less
+than a distance in that time.
+
+### gmnav_util_motion_tracker_update
+
+```gml
+gmnav_util_motion_tracker_update(tracker, x, y);
+```
+
+**Returns:** Boolean, whether the agent has been stationary for the window
+
+Push a position, get back whether the agent is stuck. Resets automatically on
+movement.
+
+**Example:**
+
+```gml
+// per agent, per frame
+if (gmnav_util_motion_tracker_update(agent_tracker, agent.x, agent.y)) {
+    // five seconds without moving, give up on this goal
+    gmnav_agent_stop(agent);
+}
+```
+
+### Spawning
+
+### gmnav_util_spawn_points_around
+
+```gml
+gmnav_util_spawn_points_around(grid, x, y, count, radius, max_attempts);
+```
+
+**Returns:** Array of `[x, y]`
+
+Positions evenly spaced on a circle around a point, each snapped to the
+nearest open cell. May return fewer than `count` if some snap failed.
+
+### gmnav_util_spawn_points_in_rect
+
+```gml
+gmnav_util_spawn_points_in_rect(grid, c1, r1, c2, r2, count, max_attempts);
+```
+
+**Returns:** Array of `[x, y]`
+
+`count` random open positions inside a cell rectangle, in world space.
+Duplicate cells are allowed, so pass a count smaller than the rectangle if
+you want them distinct.
+
+### Formations
+
+### gmnav_util_formation_grid_offsets
+
+```gml
+gmnav_util_formation_grid_offsets(count, cols, spacing);
+```
+
+**Returns:** Array of `[dx, dy]`
+
+Offsets for a rectangular block formation, centred on 0. One per slot, in
+row-major order.
+
+### gmnav_util_formation_ring_offsets
+
+```gml
+gmnav_util_formation_ring_offsets(count, radius, phase);
+```
+
+**Returns:** Array of `[dx, dy]`
+
+Offsets on a circle, centred on 0, in order around the ring. `phase` rotates
+the whole ring in degrees.
+
+### gmnav_util_send_group_formation
+
+```gml
+gmnav_util_send_group_formation(agents, grid, cx, cy, offsets, priority);
+```
+
+**Returns:** Integer, how many agents accepted
+
+Send a group to a formation centred on a world point. Pairs with the two
+offset builders above.
+
+**Example:**
+
+```gml
+var _offsets = gmnav_util_formation_grid_offsets(9, 3, 40);
+gmnav_util_send_group_formation(squad, grid, target_x, target_y, _offsets);
+```
+
+---
+
 ## Enum Reference
 
 ### gmnav_layout
