@@ -939,3 +939,17 @@ function gmt_path_nodes_open(_grid, _path) {
     }
     return true;
 }
+
+function gmt_neighbour(_x, _y, _radius = 8) { // a plain struct usable as a neighbour for avoidance tests. avoids needing a full agent
+    return { x : _x, y : _y, radius : _radius };
+}
+
+function gmt_corridor_grid(_size = 9, _col = 4, _r1 = 2, _r2 = 6) { // a room with a single one cell wide open column. clearance is built. cell (_col, _r1.._r2) is the corridor
+    var _g = gmt_room_grid(_size, _size);
+
+    gmnav_grid_fill_blocked(_g, 1, 1, _size - 2, _size - 2, true);
+    gmnav_grid_fill_blocked(_g, _col, _r1, _col, _r2, false);
+
+    gmnav_clearance_build(_g);
+    return _g;
+}

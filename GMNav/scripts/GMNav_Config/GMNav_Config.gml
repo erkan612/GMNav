@@ -73,6 +73,12 @@ enum gmnav_curve {
     SPLINE								// curve the whole path through its waypoints
 }
 
+enum gmnav_avoid {
+    BASIC,								// separation forces, scaled by local clearance. cheap, good in the open, weaker at choke points
+    CONTEXT,							// probe based steering. 16 directions scored for goal alignment, neighbour danger and wall reach. handles doorways, costs more
+    FOLLOW								// queue formation. slow down when blocked ahead, stay on the path
+}
+
 #macro GMNAV_FLAG_BLOCKED   0x0001
 #macro GMNAV_FLAG_ONEWAY    0x0002		// [[EXPERIMENTAL]]
 #macro GMNAV_FLAG_LINK      0x0004		// [[RESERVED]] - endpoint of an off-graph link (jump, ladder, door)

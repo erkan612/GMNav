@@ -3,46 +3,69 @@ function gmnav_agent_create(_sched, _x, _y, _radius = 8, _speed = 2) {
         sched      : _sched,
         grid       : _sched.grid,
 
-        profile    : undefined,     // gmnav_costprofile_create(), or undefined
-        need_clear : 0,             // minimum clearance, 0 to ignore
-		
-        layer      : 0,				// the layer that the agent stands on
-		
-        max_climb  : undefined,
-        max_drop   : undefined,
-
-        x          : _x,
-        y          : _y,
-        vx         : 0,
-        vy         : 0,
-
-        radius     : _radius,
-        headings : 0,				// 0 leaves smoothing unconstrained, 4 or 8 hold it to the movement model
-        speed      : _speed,
-        accel      : 0.35,          // 0..1, how fast desired velocity is approached
-        arrive_dist: 24,            // start slowing inside this range
-        reach_dist : 4,             // considered arrived inside this range
-
-        path       : undefined,
-        ticket     : undefined,
-        seek_i     : 1,             // index of the waypoint being steered toward
-
-        arrived    : false,
-        failed : false,				// the last goal could not be routed to. cleared by the next goto or stop
-
-        goal_x     : 0,
-        goal_y     : 0,
-        goal_layer : 0,
-        has_goal   : false,
-        repath_at  : 0,             // guard against repath spam
+        profile    : undefined,				// gmnav_costprofile_create(), or undefined
+        need_clear : 0,						// minimum clearance, 0 to ignore
+											
+        layer      : 0,						// the layer that the agent stands on
+											
+        max_climb  : undefined,				
+        max_drop   : undefined,				
+											
+        x          : _x,					
+        y          : _y,					
+        vx         : 0,						
+        vy         : 0,						
+											
+        radius     : _radius,				
+        headings : 0,						// 0 leaves smoothing unconstrained, 4 or 8 hold it to the movement model
+        speed      : _speed,				
+        accel      : 0.35,					// 0..1, how fast desired velocity is approached
+        arrive_dist: 24,					// start slowing inside this range
+        reach_dist : 4,						// considered arrived inside this range
+											
+        path       : undefined,				
+        ticket     : undefined,				
+        seek_i     : 1,						// index of the waypoint being steered toward
+											
+        arrived    : false,					
+        failed : false,						// the last goal could not be routed to. cleared by the next goto or stop
+											
+        goal_x     : 0,						
+        goal_y     : 0,						
+        goal_layer : 0,						
+        has_goal   : false,					
+        repath_at  : 0,						// guard against repath spam
         repath_gap : 20,
 		
         curve_mode   : gmnav_curve.NONE,
         curve_radius : 16,
         curve_steps  : 4,
 
-        avoid_str  : 1.0,           // 0 disables local avoidance
-        avoid_range: 3.0            // multiples of radius
+        avoid_str  : 1.0,					// 0 disables local avoidance
+        avoid_range: 3.0,					// multiples of radius
+
+        avoid_mode : gmnav_avoid.BASIC,		// BASIC, CONTEXT or FOLLOW
+
+        // mode-specific tuning
+
+        // BASIC
+        basic_clear_div  : 3.0,				// clearance that produces a full strength push. larger means tight spaces weaken avoidance less
+        basic_clear_min  : 0.15,			// floor on the clearance scale, so a corner does not fully mute the push
+        basic_open_min   : 0.2,				// the same floor for the fallback when clearance was never built
+											
+        // CONTEXT							
+        cs_probes        : 16,				// direction samples. 8 is coarse, 16 is standard, 24 is smooth
+        cs_wall_weight   : 2.0,				// how hard a wall rejects a direction
+        cs_wall_range    : 2.5,				// how far ahead a probe looks for a wall, in radius units
+        cs_danger_weight : 1.5,				// how much a blocked neighbour penalizes a probe
+											
+        // FOLLOW							
+        follow_gap       : 1.6,				// full speed at this gap, in radius-sum units. larger means a more patient queue
+        follow_min       : 0.9,				// hard stop just below this gap, same units. do not push past 1.3
+        follow_floor     : 0.15,			// slowest the queue can go. zero deadlocks
+        follow_cone      : 0.4,				// half-width of the ahead cone, same units
+        follow_sep       : 0.3,				// separation strength when bodies overlap. 0 disables separation entirely
+        follow_sep_range : 1.5				// how close before separation kicks in, in radius units
     };
 }
 
@@ -150,10 +173,40 @@ function gmnav_agent_update(_agent, _neighbours = undefined) {
         _dvy = (_dy / _d) * _spd;
     }
 
+    //if (_neighbours != undefined && _agent.avoid_str > 0) { // how tf can i keep missing this?
+    //    var _av = __gmnav_agent_avoid(_agent, _neighbours, _dvx, _dvy);
+
+    //    var _scl = _av[2];
+
+    //    _dvx = _dvx * _scl + _av[0] * _spd * _agent.avoid_str;
+    //    _dvy = _dvy * _scl + _av[1] * _spd * _agent.avoid_str;
+
+    //    var _m = point_distance(0, 0, _dvx, _dvy);
+    //    if (_m > _spd) {
+    //        _dvx = (_dvx / _m) * _spd;
+    //        _dvy = (_dvy / _m) * _spd;
+    //    }
+    //}
+
     if (_neighbours != undefined && _agent.avoid_str > 0) {
-        var _av = __gmnav_agent_avoidance(_agent, _neighbours);
-        _dvx += _av[0] * _spd * _agent.avoid_str;
-        _dvy += _av[1] * _spd * _agent.avoid_str;
+        var _av = __gmnav_agent_avoid(_agent, _neighbours, _dvx, _dvy);
+
+        var _px = _av[0] * _spd * _agent.avoid_str;
+        var _py = _av[1] * _spd * _agent.avoid_str;
+
+        if (_d > 0.0001) {
+            var _ux  = _dx / _d;
+            var _uy  = _dy / _d;
+            var _dot = _px * _ux + _py * _uy;
+
+            if (_dot < 0) {
+                _px -= _dot * _ux;
+                _py -= _dot * _uy;
+            }
+        }
+
+        _dvx += _px;
+        _dvy += _py;
 
         var _m = point_distance(0, 0, _dvx, _dvy);
         if (_m > _spd) {
@@ -247,7 +300,18 @@ function __gmnav_agent_try_repath(_agent) {
                                             _agent.max_climb, _agent.max_drop);
 }
 
-function __gmnav_agent_avoidance(_agent, _neighbours) {
+function __gmnav_agent_avoid(_agent, _neighbours, _desired_x, _desired_y) { // dispatch on the agent's mode. every mode returns [push_x, push_y, speed_scale]
+    switch (_agent.avoid_mode) {
+        case gmnav_avoid.CONTEXT:
+            return __gmnav_agent_avoid_context(_agent, _neighbours, _desired_x, _desired_y);
+
+        case gmnav_avoid.FOLLOW:
+            return __gmnav_agent_avoid_follow(_agent, _neighbours, _desired_x, _desired_y);
+    }
+    return __gmnav_agent_avoid_basic(_agent, _neighbours);
+}
+
+function __gmnav_agent_avoid_basic(_agent, _neighbours) { // the pre-1.2 model, plus a clearance scale
     var _sx = 0, _sy = 0;
     var _cnt = 0;
     var _range = _agent.radius * _agent.avoid_range;
@@ -277,12 +341,205 @@ function __gmnav_agent_avoidance(_agent, _neighbours) {
         _cnt++;
     }
 
-    if (_cnt == 0) return [0, 0];
+    if (_cnt == 0) return [0, 0, 1.0];
 
     var _m = point_distance(0, 0, _sx, _sy);
-    if (_m < 0.0001) return [0, 0];
+    if (_m < 0.0001) return [0, 0, 1.0];
 
-    return [_sx / _m, _sy / _m];
+    var _sc = __gmnav_agent_room_scale(_agent);
+
+    return [(_sx / _m) * _sc, (_sy / _m) * _sc, 1.0];
+}
+
+function __gmnav_agent_room_scale(_agent) { // 1.0 in the open, down to basic_clear_min in the tightest space
+    var _grid = _agent.grid;
+
+    if (_grid.clear != undefined) {
+        var _node = gmnav_grid_world_to_node(_grid, _agent.x, _agent.y, _agent.layer);
+
+        if (_node != GMNAV_NO_NODE && _node < _grid.count) {
+            var _c = _grid.clear[_node];
+            if (_c > 0) return clamp(_c / _agent.basic_clear_div,
+                                     _agent.basic_clear_min, 1.0);
+        }
+        return 1.0;
+    }
+
+    // no clearance built, so probe the four cardinals directly
+    var _open = 0;
+    var _r    = _agent.radius * 1.5;
+
+    for (var d = 0; d < 4; d++) {
+        var _wx = _agent.x + lengthdir_x(_r, d * 90);
+        var _wy = _agent.y + lengthdir_y(_r, d * 90);
+        var _n  = gmnav_grid_world_to_node(_grid, _wx, _wy, _agent.layer);
+
+        if (_n != GMNAV_NO_NODE && !gmnav_grid_is_blocked(_grid, _n)) _open++;
+    }
+    return clamp(_open / 4, _agent.basic_open_min, 1.0);
+}
+
+function __gmnav_agent_avoid_context(_agent, _neighbours, _desired_x, _desired_y) { // probe based steering
+    var _probes = max(4, _agent.cs_probes);
+    var _step   = 360 / _probes;
+    var _range  = _agent.radius * _agent.avoid_range;
+    var _wall_r = _agent.radius * _agent.cs_wall_range;
+    var _ww     = _agent.cs_wall_weight;
+    var _dw     = _agent.cs_danger_weight;
+    var _grid   = _agent.grid;
+
+    var _dm = point_distance(0, 0, _desired_x, _desired_y); // desired direction, unit length. zero means no preference
+    var _dx = 0, _dy = 0;
+    if (_dm > 0.0001) {
+        _dx = _desired_x / _dm;
+        _dy = _desired_y / _dm;
+    }
+
+    var _n_src = gmnav_grid_world_to_node(_grid, _agent.x, _agent.y, _agent.layer);
+
+    var _best_score = -infinity;
+    var _best_px = 0, _best_py = 0;
+
+    for (var p = 0; p < _probes; p++) {
+        var _ang = p * _step;
+        var _px  = lengthdir_x(1, _ang);
+        var _py  = lengthdir_y(1, _ang);
+
+        // 1. interest
+        var _interest = (_dx != 0 || _dy != 0) ? (_px * _dx + _py * _dy) : 0;
+
+        // 2. neighbour danger
+        var _danger = 0;
+        for (var i = 0; i < array_length(_neighbours); i++) {
+            var _o = _neighbours[i];
+            if (_o == _agent) continue;
+
+            var _ox = _o.x - _agent.x;
+            var _oy = _o.y - _agent.y;
+            var _od = point_distance(0, 0, _ox, _oy);
+
+            var _min_d = _agent.radius + _o.radius;
+            if (_od > _range || _od > _min_d * 2) continue;
+
+            var _align = (_od > 0.0001) ? (_ox * _px + _oy * _py) / _od : 0;
+            if (_align <= 0) continue;
+
+            _danger += _align * (1 - (_od / (_min_d * 2)));
+        }
+
+        // 3. wall reach
+        var _wall = 0;
+        if (_n_src != GMNAV_NO_NODE) {
+            var _wx = _agent.x + _px * _wall_r;
+            var _wy = _agent.y + _py * _wall_r;
+            var _n_dst = gmnav_grid_world_to_node(_grid, _wx, _wy, _agent.layer);
+
+            if (_n_dst == GMNAV_NO_NODE) {
+                _wall = _ww;
+            } else if (!gmnav_grid_node_line_clear(_grid, _n_src, _n_dst)) {
+                _wall = _ww;
+            }
+        }
+
+        var _score = _interest - _danger * _dw - _wall;
+
+        if (_score > _best_score) {
+            _best_score = _score;
+            _best_px    = _px;
+            _best_py    = _py;
+        }
+    }
+
+    return [_best_px - _dx, _best_py - _dy, 1.0];
+}
+
+function __gmnav_agent_avoid_follow(_agent, _neighbours, _desired_x, _desired_y) { // queue formation. nobody gets pushed off the path. agents slow down when someone is ahead in their direction of travel, and a small damped separation keeps bodies from overlapping
+    var _dm = point_distance(0, 0, _desired_x, _desired_y);
+
+    // no desired direction means no path to follow. nothing to do
+    if (_dm < 0.0001) return [0, 0, 1.0];
+
+    var _ux = _desired_x / _dm;
+    var _uy = _desired_y / _dm;
+
+    var _safe_gap = _agent.follow_gap;   // full speed at this gap
+    var _min_gap  = _agent.follow_min;   // hard stop at this gap
+    var _floor    = _agent.follow_floor; // slowest the queue can go
+    var _cone     = _agent.follow_cone;  // ahead cone half-width
+    var _scale    = 1.0;
+
+    // speed scale from the tightest blocker ahead
+    for (var i = 0; i < array_length(_neighbours); i++) {
+        var _o = _neighbours[i];
+        if (_o == _agent) continue;
+
+        var _dx = _o.x - _agent.x;
+        var _dy = _o.y - _agent.y;
+
+        // forward component. behind us means no concern
+        var _fwd = _dx * _ux + _dy * _uy;
+        if (_fwd <= 0) continue;
+
+        // lateral component. outside a narrow cone ahead, not in our lane
+        var _lat = abs(_dx * (-_uy) + _dy * _ux);
+
+        var _sum_r = _agent.radius + _o.radius;
+        if (_lat > _sum_r * _cone) continue;
+
+        // gap in units of radius-sum. 1.0 means touching, 3.0 means comfortable
+        var _gap = _fwd / _sum_r;
+
+        if (_gap < _safe_gap) {
+            var _k = clamp((_gap - _min_gap) / (_safe_gap - _min_gap), 0, 1);
+
+            if (_k < _floor) _k = _floor;
+
+            if (_k < _scale) _scale = _k;
+        }
+    }
+
+    // damped separation
+    var _px = 0, _py = 0;
+
+    if (_scale > _floor * 2 && _agent.follow_sep > 0) {
+        var _sx = 0, _sy = 0, _cnt = 0;
+        var _range = _agent.radius * _agent.follow_sep_range;
+
+        for (var i = 0; i < array_length(_neighbours); i++) {
+            var _o = _neighbours[i];
+            if (_o == _agent) continue;
+
+            var _dx = _agent.x - _o.x;
+            var _dy = _agent.y - _o.y;
+            var _d  = point_distance(0, 0, _dx, _dy);
+            var _min_d = _agent.radius + _o.radius;
+
+            if (_d > _range || _d > _min_d) continue;
+
+            if (_d < 0.0001) {
+                var _ang = (_agent.seek_i * 73 + i * 137) % 360;
+                _sx += dcos(_ang);
+                _sy -= dsin(_ang);
+                _cnt++;
+                continue;
+            }
+
+            var _w = 1 - (_d / _min_d);
+            _sx += (_dx / _d) * _w;
+            _sy += (_dy / _d) * _w;
+            _cnt++;
+        }
+
+        if (_cnt > 0) {
+            var _m = point_distance(0, 0, _sx, _sy);
+            if (_m > 0.0001) {
+                _px = (_sx / _m) * _agent.follow_sep;
+                _py = (_sy / _m) * _agent.follow_sep;
+            }
+        }
+    }
+
+    return [_px, _py, _scale];
 }
 
 function gmnav_agent_layer(_agent) { // 0 is the base grid

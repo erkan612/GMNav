@@ -507,33 +507,31 @@ function gmt_test_agent() {
     gmt_check("goal dropped", _w.has_goal, false);
     gmt_check("ticket released", _w.ticket == undefined, true);
 
-    gmt_head("A4 avoidance");
+        gmt_head("A4 avoidance");
 
     var _vs = gmnav_scheduler_create(gmt_open5(), 5000, 4);
     var _a1 = gmnav_agent_create(_vs, 70, 80, 8, 2);
-    var _a2 = gmnav_agent_create(_vs, 75, 80, 8, 2);
+    var _a2 = gmnav_agent_create(_vs, 80, 70, 8, 2);   // perpendicular, not behind
     var _crowd = [_a1, _a2];
 
     gmnav_agent_goto(_a1, 144, 80, gmnav_priority.IMMEDIATE);
-    gmnav_agent_goto(_a2, 144, 80, gmnav_priority.IMMEDIATE);
+    gmnav_agent_goto(_a2, 144, 70, gmnav_priority.IMMEDIATE);
 
-    var _d0 = point_distance(_a1.x, _a1.y, _a2.x, _a2.y);
-    for (var i = 0; i < 20; i++) {
+    var _y0 = _a1.y;
+
+    for (var i = 0; i < 30; i++) {
         gmnav_agent_update(_a1, _crowd);
         gmnav_agent_update(_a2, _crowd);
         _a1.x += _a1.vx; _a1.y += _a1.vy;
         _a2.x += _a2.vx; _a2.y += _a2.vy;
     }
-    gmt_check("separated", point_distance(_a1.x, _a1.y, _a2.x, _a2.y) > _d0, true);
-    gmt_check("speed cap respected", point_distance(0, 0, _a1.vx, _a1.vy) <= 2.001, true);
 
-    var _n = gmnav_agent_create(gmnav_scheduler_create(gmt_open5(), 5000, 2), 16, 80, 8, 2);
-    gmnav_agent_goto(_n, 144, 80, gmnav_priority.IMMEDIATE);
-    for (var i = 0; i < 10; i++) {
-        gmnav_agent_update(_n);
-        _n.x += _n.vx; _n.y += _n.vy;
-    }
-    gmt_check_f("no drift without neighbours", _n.y, 80, 0.001);
+    gmt_check("neighbour pushed a1 off its line",
+              (_a1.y > _y0 + 2), true);
+    gmt_check("a1 still made forward progress",
+              (_a1.x > 70 + 20), true);
+    gmt_check("speed cap respected",
+              point_distance(0, 0, _a1.vx, _a1.vy) <= 2.001, true);
 
     gmt_head("A5 repath on stale");
 
@@ -3815,4 +3813,134 @@ function gmt_test_stamp_overlay() {
 
     gmt_check("path hit middle",  (gmnav_costlayer_get_node(_l2, _d2) > 0), true);
     gmt_check("path missed base", gmnav_costlayer_get_node(_l2, _base_mid), 0);
+}
+
+function gmt_test_avoidance() {
+    gmt_head("S1 basic, no neighbours");
+
+    var _g     = gmt_room_grid(10, 10);
+    var _sched = gmnav_scheduler_create(_g, 500, 1);
+    var _a     = gmnav_agent_create(_sched, 112, 112, 8, 2);
+
+    var _av = __gmnav_agent_avoid_basic(_a, []);
+    gmt_check_f("basic, empty list, x", _av[0], 0);
+    gmt_check_f("basic, empty list, y", _av[1], 0);
+
+    gmt_head("S2 basic, one neighbour, open space");
+
+    // both agents in the same cell (3,3). neighbour at +8px
+    var _b = gmt_neighbour(120, 112);
+
+    _av = __gmnav_agent_avoid_basic(_a, [_b]);
+
+    // weight = 1 - 8 / (16*2) = 0.75. normalised push (-1, 0) no clearance built, fallback probes at 12px in 4 directions all land in cell (3,3) which is open, so room scale = 1
+    gmt_check_f("basic, open space, x", _av[0], -1);
+    gmt_check_f("basic, open space, y", _av[1], 0);
+
+    gmt_head("S3 basic, tight space scales down");
+
+    var _cg = gmt_corridor_grid();
+    gmt_check("corridor cell (4,4) has clearance 1",
+              gmnav_clearance_at(_cg, gmnav_grid_node(_cg, 4, 4)), 1);
+
+    var _csched = gmnav_scheduler_create(_cg, 500, 1);
+    var _ca = gmnav_agent_create(_csched, 144, 144, 8, 2);
+    var _cb = gmt_neighbour(152, 144);
+
+    _av = __gmnav_agent_avoid_basic(_ca, [_cb]);
+
+    // clearance 1 -> scale clamp(1/3) = 1/3. push = (-1,0) * 1/3
+    gmt_check_f("basic, tight space, x", _av[0], -1 / 3, 0.001);
+    gmt_check_f("basic, tight space, y", _av[1], 0);
+
+    gmt_head("S4 context, no threats");
+
+    var _og     = gmt_room_grid(10, 10);
+    var _osched = gmnav_scheduler_create(_og, 500, 1);
+    var _oa     = gmnav_agent_create(_osched, 112, 112, 8, 2);
+    _oa.avoid_mode    = gmnav_avoid.CONTEXT;
+    _oa.cs_probes     = 16;
+    _oa.cs_wall_weight = 2.0;
+
+    _av = __gmnav_agent_avoid_context(_oa, [], 1, 0);
+
+    // 16 probes, all walls clear, no neighbours. probe at 0 has the highest interest, equals the desired, so the push is zero
+    gmt_check_f("context, no threats, x", _av[0], 0);
+    gmt_check_f("context, no threats, y", _av[1], 0);
+
+    gmt_head("S5 context, one neighbour blocks the way");
+
+    // neighbour is at +8px. desired is (1, 0), straight at it
+    var _ob = gmt_neighbour(120, 112);
+
+    _av = __gmnav_agent_avoid_context(_oa, [_ob], 1, 0);
+    gmt_note("push", gmt_arr_str(_av));
+
+    // forward probes pick up danger
+    gmt_check_f("context, blocked forward, x", _av[0], -1, 0.001);
+    gmt_check_f("context, blocked forward, y", _av[1], -1, 0.001);
+
+    gmt_head("S6 context, wall ahead");
+
+    var _wg     = gmt_corridor_grid();
+    var _wsched = gmnav_scheduler_create(_wg, 500, 1);
+    var _wa     = gmnav_agent_create(_wsched, 144, 144, 8, 2);
+    _wa.avoid_mode    = gmnav_avoid.CONTEXT;
+    _wa.cs_probes     = 16;
+    _wa.cs_wall_weight = 2.0;
+
+    // desired is +x, but the corridor only opens up and down
+    _av = __gmnav_agent_avoid_context(_wa, [], 1, 0);
+    gmt_note("push", gmt_arr_str(_av));
+
+    gmt_check_f("context, wall right, x", _av[0], 0.7071067811865476 - 1, 0.001);
+    gmt_check_f("context, wall right, y", _av[1], -0.7071067811865476, 0.001);
+
+    gmt_head("S7 dispatcher honours the mode");
+
+    // an agent with avoid_mode BASIC routes through basic
+    var _da = gmnav_agent_create(_osched, 112, 112, 8, 2);
+    _da.avoid_mode = gmnav_avoid.BASIC;
+
+    var _basic_push    = __gmnav_agent_avoid(_da, [_ob], 1, 0);
+    var _context_push  = __gmnav_agent_avoid(_oa, [_ob], 1, 0);
+
+    gmt_check("BASIC and CONTEXT disagree",
+              _basic_push[0] != _context_push[0]
+           || _basic_push[1] != _context_push[1], true);
+	
+    gmt_head("S8 update honours the neighbour list");
+
+    var _ug     = gmt_room_grid(10, 10);
+    var _usched = gmnav_scheduler_create(_ug, 500, 2);
+
+    var _u1 = gmnav_agent_create(_usched, 112, 112, 8, 2);
+    var _u2 = gmnav_agent_create(_usched, 118, 112, 8, 2); // 6px east of u1
+
+    // u1 needs a path, or update returns at the path == undefined check before avoidance ever runs
+    gmnav_agent_goto(_u1, 240, 240, gmnav_priority.IMMEDIATE);
+    gmnav_scheduler_update(_usched);
+    gmnav_agent_update(_u1);
+
+    gmt_check("u1 has a path", gmnav_agent_has_path(_u1), true);
+
+    // baseline. no neighbours, pure path following
+    _u1.vx = 0; _u1.vy = 0;
+    gmnav_agent_update(_u1);
+    var _vx_alone = _u1.vx;
+    var _vy_alone = _u1.vy;
+
+    // same call, neighbours passed. the neighbour is east, so avoidance pushes west. vx should move toward negative
+    _u1.vx = 0; _u1.vy = 0;
+    gmnav_agent_update(_u1, [_u2]);
+    var _vx_with = _u1.vx;
+    var _vy_with = _u1.vy;
+
+    gmt_note("alone",         string_format(_vx_alone, 1, 4) + ", " + string_format(_vy_alone, 1, 4));
+    gmt_note("with neighbour", string_format(_vx_with,  1, 4) + ", " + string_format(_vy_with,  1, 4));
+
+    gmt_check("both produce motion",
+              (_vx_alone != 0 || _vy_alone != 0), true);
+    gmt_check("the neighbour changes the result",
+              (_vx_alone != _vx_with || _vy_alone != _vy_with), true);
 }

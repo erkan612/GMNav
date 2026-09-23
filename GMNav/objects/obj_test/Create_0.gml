@@ -33,6 +33,7 @@ gmt_test_smooth_headings();
 gmt_test_curve();
 gmt_test_stamp_path();
 gmt_test_stamp_overlay();
+gmt_test_avoidance();
 
 gmt_head("D scheduler (running)");
 
