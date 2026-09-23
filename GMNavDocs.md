@@ -5670,23 +5670,40 @@ The above code updates an agent and applies its velocity. Note the last two
 lines: the agent needs telling where the unit actually ended up, since your
 collision may not have let it go where it wanted.
 
-Each call collects a resolved ticket if one arrived, repaths if a change landed
-on the part of the route still to walk, advances waypoints, and writes `vx` and
-`vy`. It does **not** write `x` or `y`.
+Each call collects a resolved ticket if one arrived, repaths if a change
+landed on the part of the route still to walk, advances waypoints, and writes
+`vx` and `vy`. It does **not** write `x` or `y`.
+
+**Local avoidance is opt-in.** The `neighbours` argument is what turns it on.
+Pass `undefined` and the avoidance block is skipped entirely — the agent
+follows its path with no awareness of anything around it. This is why the
+demo's click-to-move code sometimes looks like the agents are walking through
+each other: the demo is passing a neighbour list, but if it is not, they
+genuinely have no interaction.
+
+**The mode is chosen per agent.** Set `agent.avoid_mode` to `BASIC`,
+`CONTEXT`, or `FOLLOW`. See the Avoidance section for what each mode does and
+what the per-agent tuning fields are.
+
+**The path always wins.** The push returned by the avoidance model is
+projected onto the plane perpendicular to the desired direction, so whichever
+part of it opposes the path is stripped before being applied. An agent can be
+steered sideways or slowed down by a crowd, but it cannot be pushed backward
+along its own path. This is what stops a crowd from freezing an agent in
+place — before this rule existed, a ring of neighbours could sum to a push
+exactly opposite the goal and produce zero net velocity.
 
 **Local avoidance is separation, not reciprocal avoidance.** It stops crowds
-stacking into one pixel, which is what most games need. It will not resolve two
-agents walking directly into each other in a one tile corridor: both push
-symmetrically, both stall, and neither yields. If your game has narrow corridors
-and two way traffic, plan for that at the design level with wider passages, one
-way routes, or letting agents pass through each other.
+stacking into one pixel, which is what most games need. It will not resolve
+two agents walking directly into each other in a one tile corridor: both push
+symmetrically, both stall, and neither yields. If your game has narrow
+corridors and two way traffic, plan for that at the design level with wider
+passages, one way routes, or letting agents pass through each other.
 
-It also does not know about walls. When a crowd compresses against geometry it
-pushes bodies into walls and your movement code absorbs that.
-
-A neighbour needs only `x`, `y` and `radius`, so anything with those three
-fields works. GMNav does not keep a spatial index because your game almost
-certainly already has one.
+It also does not know about walls in BASIC or FOLLOW mode. When a crowd
+compresses against geometry it pushes bodies into walls and your movement code
+absorbs that. CONTEXT does probe for walls, and is the mode to reach for when
+this matters.
 
 **See also:** `gmnav_agent_create`, `gmnav_scheduler_update`
 
