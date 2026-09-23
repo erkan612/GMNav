@@ -26,7 +26,8 @@ function gmnav_scheduler_request(_sched, _start_node, _goal_node,
                                  _profile = undefined,
                                  _need_clear = 0,
                                  _max_climb = undefined,
-                                 _max_drop = undefined) {
+                                 _max_drop = undefined,
+                                 _allow_drop = false) {
     var _ticket = {
         state      : gmnav_state.IDLE,
         priority   : _priority,
@@ -39,6 +40,7 @@ function gmnav_scheduler_request(_sched, _start_node, _goal_node,
         need_clear : _need_clear,
 		max_climb  : _max_climb,
         max_drop   : _max_drop,
+        allow_drop : _allow_drop,
 
         search     : undefined,
         path       : [],
@@ -140,7 +142,7 @@ function __gmnav_sched_make(_sched) {
 
 function __gmnav_sched_begin(_sched, _srch, _t) {
     if (_sched.domain == gmnav_domain.PLATFORM) {
-        return gmnav_graphsearch_begin(_srch, _t.start, _t.goal);
+        return gmnav_graphsearch_begin(_srch, _t.start, _t.goal, _t.allow_drop);
     }
     return gmnav_search_begin(_srch, _t.start, _t.goal,
                               _t.corner_cut, _t.profile, _t.need_clear,

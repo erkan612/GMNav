@@ -2,7 +2,8 @@ function gmnav_movement_create(_gravity, _jump_vel, _run_speed, _max_fall,
                                _width, _height,
                                _air_speed = undefined,
                                _jump_levels = 3,
-                               _jump_bias = 1.15) {
+                               _jump_bias = 1.15,
+                               _can_drop = false) {
     return {
         gravity     : _gravity,
         jump_vel    : _jump_vel,
@@ -14,8 +15,10 @@ function gmnav_movement_create(_gravity, _jump_vel, _run_speed, _max_fall,
         air_speed   : (_air_speed == undefined) ? _run_speed : _air_speed,
 
         jump_levels : max(1, _jump_levels),
-        jump_min    : 0.5,   // weakest sampled jump, as a fraction of full
+        jump_min    : 0.5,
 		jump_bias   : _jump_bias,
+
+        can_drop    : _can_drop,
     };
 }
 
@@ -62,6 +65,9 @@ function gmnav_platgraph_create(_grid, _movement) {
         max_step  : point_distance(0, 0,
                                    max(_movement.run_speed, _movement.air_speed),
                                    _movement.max_fall),
+
+        // mirrors the movement model. when false, no DROP links are baked and the per request flag on the search has nothing to filter
+        allow_drop : _movement.can_drop,
 
         slots     : array_create(2, undefined),
         slot_max  : 2
@@ -262,6 +268,15 @@ function __gmnav_plat_links_for(_pg, _pnode) {
                               _d * _mv.air_speed, 0, gmnav_link.FALL);
     }
 
+    if (_pg.allow_drop) {
+        var _belowsolid = gmnav_grid_node(_grid, _c, _r + 1);
+
+        if (_belowsolid != GMNAV_NO_NODE
+        &&  (_grid.flags[_belowsolid] & GMNAV_FLAG_ONEWAY) != 0) {
+            __gmnav_plat_simulate_drop(_pg, _pnode, _fx, _fy);
+        }
+    }
+
     var _levels = _mv.jump_levels;
     for (var _l = 0; _l < _levels; _l++) {
         var _t = (_levels == 1) ? 1 : (_l / (_levels - 1));
@@ -363,7 +378,48 @@ function __gmnav_plat_simulate(_pg, _from, _x0, _y0, _vx, _vy, _type) {
     }
 }
 
-function __gmnav_plat_blocked(_pg, _x, _y, _vy) {
+function __gmnav_plat_simulate_drop(_pg, _from, _x0, _y0) { // drop straight down through the one way the character is standing on, then land on the next platform below. one ways below the starting platform stop the fall like any other surface, so a drop is one tier, not a chain
+    var _grid = _pg.grid;
+    var _lay  = _grid.layout;
+    var _mv   = _pg.move;
+
+    var _x = _x0;
+    var _y = _y0;
+    var _vy = 0;
+    var _frames = 0;
+
+    var _ignore_until_y = _y0 + _lay.tile_h;
+
+    while (_frames < global.gmnav.config.PLAT_MAX_SIM) {
+        _frames++;
+
+        _vy = min(_vy + _mv.gravity, _mv.max_fall);
+
+        var _ny = _y + _vy;
+        var _ignore = (_y < _ignore_until_y);
+
+        if (__gmnav_plat_blocked(_pg, _x, _ny, _vy, _ignore)) {
+            var _lr = floor((_ny - _lay.origin_y) / _lay.tile_h);
+            var _lc = floor((_x  - _lay.origin_x) / _lay.tile_w);
+
+            var _stand = gmnav_grid_node(_grid, _lc, _lr - 1);
+            if (_stand == GMNAV_NO_NODE) return;
+
+            var _to = _pg.node_of[_stand];
+            if (_to < 0 || _to == _from) return;
+
+            var _cx   = _lay.origin_x + (_lc + 0.5) * _lay.tile_w;
+            var _cost = _frames + abs(_x - _cx) / max(0.0001, _mv.run_speed);
+
+            __gmnav_plat_add(_pg, _from, _to, _cost, gmnav_link.DROP, 0, 0);
+            return;
+        }
+
+        _y = _ny;
+    }
+}
+
+function __gmnav_plat_blocked(_pg, _x, _y, _vy, _ignore_oneway = false) {
     var _grid = _pg.grid;
     var _lay  = _grid.layout;
     var _fl   = _grid.flags;
@@ -388,7 +444,7 @@ function __gmnav_plat_blocked(_pg, _x, _y, _vy) {
             var _f = _fl[_r * _w + _c];
             if ((_f & GMNAV_FLAG_BLOCKED) != 0) return true;
 
-            if ((_f & GMNAV_FLAG_ONEWAY) != 0 && _vy > 0 && _r == _r2) {
+            if ((_f & GMNAV_FLAG_ONEWAY) != 0 && !_ignore_oneway && _vy > 0 && _r == _r2) {
                 var _top = _lay.origin_y + _r * _lay.tile_h;
                 if (_prev_y <= _top) return true;
             }
@@ -506,6 +562,6 @@ function gmnav_platgraph_link_get(_pg, _from, _to) {
     return undefined;
 }
 
-function gmnav_platgraph_solid(_pg, _x, _y, _vy = 0) {
-    return __gmnav_plat_blocked(_pg, _x, _y, _vy);
+function gmnav_platgraph_solid(_pg, _x, _y, _vy = 0, _ignore_oneway = false) { // the same test the bake used. pass _ignore_oneway true to reproduce what a DROP simulation sees
+    return __gmnav_plat_blocked(_pg, _x, _y, _vy, _ignore_oneway);
 }

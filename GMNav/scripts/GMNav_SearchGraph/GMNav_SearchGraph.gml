@@ -42,6 +42,8 @@ function gmnav_graphsearch_create(_pg) {
         goal_x     : 0,
         goal_y     : 0,
 
+        allow_drop : false,// opt in per request. DROP edges are skipped unless true
+
         version    : -1,
         stale      : false,
         expansions : 0,
@@ -53,7 +55,7 @@ function gmnav_graphsearch_create(_pg) {
     };
 }
 
-function gmnav_graphsearch_begin(_gs, _start, _goal) {
+function gmnav_graphsearch_begin(_gs, _start, _goal, _allow_drop = false) {
     var _pg = _gs.pg;
 
     gmnav_graphsearch_abort(_gs);
@@ -74,6 +76,7 @@ function gmnav_graphsearch_begin(_gs, _start, _goal) {
     _gs.goal       = _goal;
     _gs.goal_x     = _pg.node_x[_goal];
     _gs.goal_y     = _pg.node_y[_goal];
+    _gs.allow_drop = _allow_drop;
     _gs.version    = _pg.grid.version;
     _gs.stale      = false;
     _gs.expansions = 0;
@@ -145,6 +148,8 @@ function gmnav_graphsearch_step(_gs, _budget = global.gmnav.config.DEFAULT_BUDGE
         var _e1  = _es[_cur + 1];
 
         for (var e = _e0; e < _e1; e++) {
+            if (!_gs.allow_drop && _ey[e] == gmnav_link.DROP) continue;
+
             var _nn = _et[e];
             if (_mark[_nn] == _cgen) continue;
 
@@ -165,8 +170,8 @@ function gmnav_graphsearch_step(_gs, _budget = global.gmnav.config.DEFAULT_BUDGE
     return _gs.state;
 }
 
-function gmnav_graphsearch_solve(_gs, _start, _goal) {
-    if (!gmnav_graphsearch_begin(_gs, _start, _goal)) return false;
+function gmnav_graphsearch_solve(_gs, _start, _goal, _allow_drop = false) {
+    if (!gmnav_graphsearch_begin(_gs, _start, _goal, _allow_drop)) return false;
     return (gmnav_graphsearch_step(_gs, global.gmnav.config.MAX_STEPS) == gmnav_state.FOUND);
 }
 

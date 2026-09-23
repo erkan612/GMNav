@@ -33,18 +33,21 @@ function gmnav_platagent_create(_sched, _x, _y) {
         link     : undefined,
         tx       : 0,
         ty       : 0,
+        drop_ignore_until_y : 0, // during a DROP, ignore one ways only until the feet are clear of the starting platform
 
         arrived  : false,
         failed   : false,
         desync   : 0,
 
-        goal_x   : 0,
-        goal_y   : 0,
-        has_goal : false
+        goal_x     : 0,
+        goal_y     : 0,
+        allow_drop : false,
+        has_goal   : false
     };
 }
 
-function gmnav_platagent_goto(_pa, _x, _y, _priority = gmnav_priority.NORMAL) {
+function gmnav_platagent_goto(_pa, _x, _y, _priority = gmnav_priority.NORMAL,
+                              _allow_drop = false) {
     var _goal = gmnav_platgraph_node_at(_pa.pg, _x, _y);
     if (_goal == GMNAV_NO_NODE) return false;
 
@@ -57,13 +60,17 @@ function gmnav_platagent_goto(_pa, _x, _y, _priority = gmnav_priority.NORMAL) {
         _from = _pa.path[_pa.seek + 1];
     }
 
-    _pa.goal_x   = _x;
-    _pa.goal_y   = _y;
-    _pa.has_goal = true;
-    _pa.arrived  = false;
-    _pa.failed   = false;
+    _pa.goal_x     = _x;
+    _pa.goal_y     = _y;
+    _pa.allow_drop = _allow_drop;
+    _pa.has_goal   = true;
+    _pa.arrived    = false;
+    _pa.failed     = false;
 
-    _pa.ticket = gmnav_scheduler_request(_pa.sched, _from, _goal, _priority);
+    _pa.ticket = gmnav_scheduler_request(_pa.sched, _from, _goal, _priority,
+                                         false, undefined, 0,
+                                         undefined, undefined,
+                                         _allow_drop);
     return true;
 }
 
@@ -165,6 +172,7 @@ function __gmnav_pa_ground(_pa, _mv) {
     _pa.armed = false;
     _pa.guard = 0;
     _pa.mode  = gmnav_pmode.LINK;
+    _pa.drop_ignore_until_y = _pa.y + _pa.pg.grid.layout.tile_h;
 
     if (_lk.vx != 0) _pa.face = sign(_lk.vx);
     return true;
@@ -215,6 +223,11 @@ function __gmnav_pa_link(_pa, _mv) {
         return;
     }
 
+    // a DROP falls straight down, ignoring every one way below
+    if (_pa.link.type == gmnav_link.DROP) {
+        _pa.armed = true;
+    }
+
     // a FALL walks off the ledge first, then gravity takes over
     if (_pa.link.type == gmnav_link.FALL && !_pa.armed) {
         if (gmnav_platgraph_solid(_pg, _pa.x, _pa.y + 1, 1)) {
@@ -229,16 +242,19 @@ function __gmnav_pa_link(_pa, _mv) {
         _pa.armed = true;
     }
 
+    var _ignore_ow = (_pa.link.type == gmnav_link.DROP)
+                  && (_pa.y < _pa.drop_ignore_until_y);
+
     var _x0 = _pg.node_x[_pa.path[_pa.seek]];
 
     _pa.vy = min(_pa.vy + _mv.gravity, _mv.max_fall);
 
     var _nx = _pa.x + _pa.vx;
-    if (gmnav_platgraph_solid(_pg, _nx, _pa.y, 0)) _pa.vx = 0;
-    else                                           _pa.x  = _nx;
+    if (gmnav_platgraph_solid(_pg, _nx, _pa.y, 0, _ignore_ow)) _pa.vx = 0;
+    else                                                       _pa.x  = _nx;
 
     var _ny = _pa.y + _pa.vy;
-    if (gmnav_platgraph_solid(_pg, _pa.x, _ny, _pa.vy)) {
+    if (gmnav_platgraph_solid(_pg, _pa.x, _ny, _pa.vy, _ignore_ow)) {
         if (_pa.vy < 0) {
             _pa.vy = 0; // ceiling, keep falling next frame
             return;

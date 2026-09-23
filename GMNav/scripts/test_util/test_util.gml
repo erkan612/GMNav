@@ -953,3 +953,37 @@ function gmt_corridor_grid(_size = 9, _col = 4, _r1 = 2, _r2 = 6) { // a room wi
     gmnav_clearance_build(_g);
     return _g;
 }
+
+function gmt_drop_level() { // a level whose only route from the upper standing position to the lower one is a DROP through a one way
+    var _g = gmnav_grid_create(6, 12, gmnav_layout_create(gmnav_layout.ORTHO, 16, 16));
+
+    gmnav_grid_fill_blocked(_g, 0, 0,  5, 0,  true);   // top
+    gmnav_grid_fill_blocked(_g, 0, 0,  0, 11, true);   // left
+    gmnav_grid_fill_blocked(_g, 5, 0,  5, 11, true);   // right
+    gmnav_grid_fill_blocked(_g, 0, 11, 5, 11, true);   // floor
+
+    // one way spanning the full open width, so nothing can walk off an edge
+    for (var _c = 1; _c <= 4; _c++) {
+        gmnav_grid_set_flag(_g, _c, 5, GMNAV_FLAG_ONEWAY, true);
+    }
+
+    return _g;
+}
+
+function gmt_pg_edge_type(_pg, _from, _to) { // the type of the edge between two platform nodes, or -1
+    if (_from < 0 || _from >= _pg.count) return -1;
+
+    for (var e = _pg.edge_start[_from]; e < _pg.edge_start[_from + 1]; e++) {
+        if (_pg.edge_to[e] == _to) return _pg.edge_type[e];
+    }
+    return -1;
+}
+
+function gmt_pg_edge_cost(_pg, _from, _to) { // the cost of the edge between two platform nodes, or -1
+    if (_from < 0 || _from >= _pg.count) return -1;
+
+    for (var e = _pg.edge_start[_from]; e < _pg.edge_start[_from + 1]; e++) {
+        if (_pg.edge_to[e] == _to) return _pg.edge_cost[e];
+    }
+    return -1;
+}

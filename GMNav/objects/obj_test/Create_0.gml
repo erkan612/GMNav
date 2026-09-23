@@ -34,6 +34,7 @@ gmt_test_curve();
 gmt_test_stamp_path();
 gmt_test_stamp_overlay();
 gmt_test_avoidance();
+gmt_test_drop_links();
 
 gmt_head("D scheduler (running)");
 

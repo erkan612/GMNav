@@ -3944,3 +3944,160 @@ function gmt_test_avoidance() {
     gmt_check("the neighbour changes the result",
               (_vx_alone != _vx_with || _vy_alone != _vy_with), true);
 }
+
+function gmt_test_drop_links() {
+    gmt_head("P10 DROP links for one way platforms");
+
+    // can_drop off means no DROP links bake
+    var _g_no   = gmt_drop_level();
+    var _mv_no  = gmnav_movement_create(0.5, 6, 3, 8, 12, 24, undefined, 3, 1.15, false);
+    var _pg_no  = gmnav_platgraph_create(_g_no, _mv_no);
+    gmnav_platgraph_bake(_pg_no);
+
+    gmt_check("no DROP links when can_drop is false",
+              gmt_count_links(_pg_no, gmnav_link.DROP), 0);
+
+    // can_drop on means DROP links bake
+    var _g   = gmt_drop_level();
+    var _mv  = gmnav_movement_create(0.5, 6, 3, 8, 12, 24, undefined, 3, 1.15, true);
+    var _pg  = gmnav_platgraph_create(_g, _mv);
+    gmnav_platgraph_bake(_pg);
+
+    gmt_check("DROP links exist when can_drop is true",
+              gmt_count_links(_pg, gmnav_link.DROP) > 0, true);
+
+    // the specific DROP link is present and priced right
+    var _upper_pn = _pg.node_of[gmnav_grid_node(_g, 2, 4)];
+    var _lower_pn = _pg.node_of[gmnav_grid_node(_g, 2, 10)];
+
+    gmt_check("upper standing position exists", _upper_pn >= 0, true);
+    gmt_check("lower standing position exists", _lower_pn >= 0, true);
+
+    var _dtype = gmt_pg_edge_type(_pg, _upper_pn, _lower_pn);
+    gmt_check("edge from upper to lower is DROP", _dtype, gmnav_link.DROP);
+
+    var _dcost = gmt_pg_edge_cost(_pg, _upper_pn, _lower_pn);
+    gmt_note("drop cost", string_format(_dcost, 1, 2));
+
+    // gravity 0.5, max_fall 8, fall distance 96px
+    gmt_check_f("drop cost matches simulation", _dcost, 20, 0.5);
+
+    // no JUMP or FALL reaches from upper to lower
+    gmt_check("no JUMP link from upper to lower",
+              gmt_pg_edge_type(_pg, _upper_pn, _lower_pn) != gmnav_link.JUMP, true);
+
+    gmt_check("no FALL link from upper to lower",
+              gmt_pg_edge_type(_pg, _upper_pn, _lower_pn) != gmnav_link.FALL, true);
+
+    // search without allow_drop refuses
+    var _sn = gmnav_graphsearch_create(_pg);
+    gmt_check("without allow_drop, refused",
+              gmnav_graphsearch_solve(_sn, _upper_pn, _lower_pn, false), false);
+    gmt_check("state FAILED", _sn.state, gmnav_state.FAILED);
+
+    // search with allow_drop finds
+    var _sy = gmnav_graphsearch_create(_pg);
+    gmt_check("with allow_drop, found",
+              gmnav_graphsearch_solve(_sy, _upper_pn, _lower_pn, true), true);
+
+    var _path  = gmnav_graphsearch_get_path(_sy);
+    var _links = gmnav_graphsearch_get_links(_sy);
+
+    gmt_note("path", gmt_arr_str(_path));
+    gmt_check("path has exactly two nodes", array_length(_path), 2);
+    gmt_check("path enters via DROP",
+              _links[array_length(_links) - 1], gmnav_link.DROP);
+    gmt_check("path starts at upper", _path[0], _upper_pn);
+    gmt_check("path ends at lower",   _path[array_length(_path) - 1], _lower_pn);
+
+    // the same graph, a normal WALK query, still works
+    var _walk_to = _pg.node_of[gmnav_grid_node(_g, 3, 4)];
+    var _sw = gmnav_graphsearch_create(_pg);
+    gmt_check("a same layer WALK still works",
+              gmnav_graphsearch_solve(_sw, _upper_pn, _walk_to, false), true);
+
+    // scheduler propagates the flag
+    var _sched = gmnav_scheduler_create(_pg, 4000);
+
+    var _t_no = gmnav_scheduler_request(_sched, _upper_pn, _lower_pn,
+                                        gmnav_priority.IMMEDIATE,
+                                        false, undefined, 0,
+                                        undefined, undefined,
+                                        false);
+    gmt_check("scheduler without allow_drop fails", _t_no.state, gmnav_state.FAILED);
+
+    var _t_yes = gmnav_scheduler_request(_sched, _upper_pn, _lower_pn,
+                                         gmnav_priority.IMMEDIATE,
+                                         false, undefined, 0,
+                                         undefined, undefined,
+                                         true);
+    gmt_check("scheduler with allow_drop found", _t_yes.state, gmnav_state.FOUND);
+
+    var _t_links = gmnav_scheduler_get_links(_t_yes);
+    gmt_check("scheduler returns a DROP link",
+              gmt_has_link(_t_links, gmnav_link.DROP), true);
+
+    // replay: platform agent walks through a DROP
+    var _psched = gmnav_scheduler_create(_pg, 4000);
+
+    var _w_upper = gmnav_platgraph_node_world(_pg, _upper_pn);
+    var _w_lower = gmnav_platgraph_node_world(_pg, _lower_pn);
+
+    var _pa = gmnav_platagent_create(_psched, _w_upper[0], _w_upper[1] - 1);
+    gmt_check("agent snapped to upper node", _pa.node, _upper_pn);
+
+    gmt_check("goto with allow_drop accepted",
+              gmnav_platagent_goto(_pa, _w_lower[0], _w_lower[1], gmnav_priority.NORMAL, true), true);
+
+    var _r = { airborne : false, frames : -1 };
+    var _f = gmt_platagent_run_watch(_psched, _pa, _r);
+
+    gmt_note("drop route frames", _f);
+    gmt_check("agent arrives via DROP", (_f > 0), true);
+    gmt_check("agent landed on lower", _pa.node, _lower_pn);
+    gmt_check("agent went airborne", _r.airborne, true);
+    gmt_check("no desyncs during DROP", _pa.desync, 0);
+	
+    gmt_head("P11 DROP lands on the next one way, not the solid below");
+
+    var _mg = gmnav_grid_create(5, 14, gmnav_layout_create(gmnav_layout.ORTHO, 16, 16));
+
+    gmnav_grid_fill_blocked(_mg, 0, 0,  4, 0,  true);
+    gmnav_grid_fill_blocked(_mg, 0, 0,  0, 13, true);
+    gmnav_grid_fill_blocked(_mg, 4, 0,  4, 13, true);
+    gmnav_grid_fill_blocked(_mg, 0, 13, 4, 13, true);
+
+    gmnav_grid_set_flag(_mg, 2, 4,  GMNAV_FLAG_ONEWAY, true);   // upper
+    gmnav_grid_set_flag(_mg, 2, 7,  GMNAV_FLAG_ONEWAY, true);   // middle
+    gmnav_grid_fill_blocked(_mg, 1, 11, 3, 11, true);           // lower solid
+
+    var _mmv = gmnav_movement_create(0.5, 6, 3, 8, 12, 24, undefined, 3, 1.15, true);
+    var _mpg = gmnav_platgraph_create(_mg, _mmv);
+    gmnav_platgraph_bake(_mpg);
+
+    var _up  = _mpg.node_of[gmnav_grid_node(_mg, 2, 3)];
+    var _mid = _mpg.node_of[gmnav_grid_node(_mg, 2, 6)];
+    var _low = _mpg.node_of[gmnav_grid_node(_mg, 2, 10)];
+
+    gmt_check("upper standing exists", _up  >= 0, true);
+    gmt_check("middle standing exists", _mid >= 0, true);
+    gmt_check("lower standing exists", _low >= 0, true);
+
+    gmt_check("upper has a DROP to middle",
+              gmt_pg_edge_type(_mpg, _up, _mid), gmnav_link.DROP);
+
+    gmt_check("upper has no direct DROP to lower",
+              gmt_pg_edge_type(_mpg, _up, _low) != gmnav_link.DROP, true);
+
+    gmt_check("middle has a DROP to lower",
+              gmt_pg_edge_type(_mpg, _mid, _low), gmnav_link.DROP);
+
+    // and a search still chains them
+    var _msearch = gmnav_graphsearch_create(_mpg);
+    gmt_check("chained drop reaches lower",
+              gmnav_graphsearch_solve(_msearch, _up, _low, true), true);
+
+    var _mpath = gmnav_graphsearch_get_path(_msearch);
+    gmt_note("chained path", gmt_arr_str(_mpath));
+    gmt_check("three hop path", array_length(_mpath), 3);
+}

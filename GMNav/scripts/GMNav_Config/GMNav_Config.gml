@@ -47,13 +47,14 @@ enum gmnav_pmode {
     LINK,								// mid link, integrating the stored launch
     SETTLE								// landed, walking to the node's exact x
 }										
-										
+
 enum gmnav_link {						
     WALK,								// along a contiguous ledge
     FALL,								// stepped off an edge, no jump input
     JUMP,								// ballistic arc from a jump input
-    STAIR								// authored crossing between two layers
-}										
+    STAIR,								// authored crossing between two layers
+    DROP								// falls through a one way platform
+}
 										
 enum gmnav_domain {						
     GRID,								// gmnav_grid_create      - cell graph, A*
