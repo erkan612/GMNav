@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"scr_troopdemo",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"scr_troopdemo",
+  "parent":{
+    "name":"troopdemo",
+    "path":"folders/demos/others/troopdemo.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}
