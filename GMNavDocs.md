@@ -8771,6 +8771,29 @@ Enough for a two stage loading display.
 
 ---
 
+### gmnav_avoid
+
+Which local avoidance model an agent uses.
+
+| Member | Description |
+|---|---|
+| `BASIC` | Simple separation. Agents push each other apart. Cheap, correct in the open, chaotic at a chokepoint |
+| `CONTEXT` | Probe-based. 16 directions scored for goal alignment, neighbour danger, and wall reach. Handles corners and doorways |
+| `FOLLOW` | Queue formation. Agents slow down behind a neighbour directly ahead instead of pushing sideways. A crowd files rather than fights |
+
+PPPgml
+agent.avoid_mode = gmnav_avoid.FOLLOW;
+PPP
+
+The mode is a per-agent field. Different units in the same crowd can use
+different models, and the mode can be changed at any time. The next
+`gmnav_agent_update` uses the new value.
+
+Every mode has its own per-agent tuning fields. See the Avoidance section for
+the full list.
+
+---
+
 ### gmnav_curve
 
 How `gmnav_path_curve` reshapes a path.
