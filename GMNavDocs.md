@@ -3344,7 +3344,7 @@ the allowance.
 **Syntax:**
 
 ```gml
-gmnav_scheduler_request(sched, start_node, goal_node, priority, corner_cut, profile, need_clear, max_climb, max_drop);
+gmnav_scheduler_request(sched, start_node, goal_node, priority, corner_cut, profile, need_clear, max_climb, max_drop, allow_drop);
 ```
 
 | Argument | Type | Description |
@@ -3358,6 +3358,7 @@ gmnav_scheduler_request(sched, start_node, goal_node, priority, corner_cut, prof
 | need_clear | Integer | Optional, default 0. Clearance required |
 | max_climb | Real | Optional, default `undefined`. Largest rise |
 | max_drop | Real | Optional, default `undefined`. Largest fall |
+| allow_drop | Boolean | Optional, default `false`. Whether this route may use DROP links on a platformer graph |
 
 **Returns:** Struct, a ticket
 
@@ -3400,6 +3401,12 @@ cautious unit passes a `profile` so it pays more to cross dangerous ground; a
 unit that cannot climb passes `max_climb` and `max_drop` so a cliff becomes one
 way for it. None of these change the map, only what this one request is willing
 to walk.
+
+**`allow_drop` only applies on a platformer graph.** On a grid the argument is
+accepted and ignored. On a platformer, passing `true` lets the search use DROP
+links if the graph contains them. Passing `false`, the default, filters them
+out even when they exist, so a character that has never learned to drop cannot
+accidentally fall through a platform.
 
 **Priority** orders the queue into bands, and within a band the oldest request
 goes first. That second rule matters more than it looks: without it, a fresh
@@ -6037,6 +6044,14 @@ So GMNav does not guess. It simulates your character's actual jump arcs against
 your actual collision data and keeps the ones that land. A jump link exists in
 the graph only because a simulated character made that jump.
 
+Five kinds of link exist in a platformer graph: `WALK` along a ledge, `FALL`
+off an edge, `JUMP` from a ballistic arc, `STAIR` from an authored overlay
+link, and `DROP` through a one way platform. DROP links are only baked when
+the movement model is created with `can_drop` set, and are filtered at search
+time unless the request passes `allow_drop`. A game without drop-through pays
+nothing for the machinery — the links are not generated, the filter has
+nothing to skip.
+
 Platformer graphs require an `ORTHO` layout.
 
 ---
@@ -6046,7 +6061,7 @@ Platformer graphs require an `ORTHO` layout.
 **Syntax:**
 
 ```gml
-gmnav_movement_create(gravity, jump_vel, run_speed, max_fall, width, height, air_speed, jump_levels, jump_bias);
+gmnav_movement_create(gravity, jump_vel, run_speed, max_fall, width, height, air_speed, jump_levels, jump_bias, can_drop);
 ```
 
 | Argument | Type | Description |
@@ -6060,6 +6075,7 @@ gmnav_movement_create(gravity, jump_vel, run_speed, max_fall, width, height, air
 | air_speed | Real | Optional, defaults to `run_speed` |
 | jump_levels | Integer | Optional, default 3. Jump strengths sampled |
 | jump_bias | Real | Optional, default 1.15. Multiplier on jump link costs |
+| can_drop | Boolean | Optional, default `false`. Whether this character can drop through one way platforms |
 
 **Returns:** Struct
 
@@ -6071,7 +6087,8 @@ move = gmnav_movement_create(0.5, 12, 3, 12, 20, 44, 4, 7);
 
 The above code describes a character with gravity 0.5, a jump velocity of 12, a
 run speed of 3, terminal fall 12, a 20 by 44 body, air speed 4 and seven sampled
-jump strengths.
+jump strengths. Drop is off by default, which suits any character that cannot
+drop through a platform.
 
 **These must be your player controller's real numbers.** Everything the bake
 produces depends on them, and the framework has no way to check. If `jump_vel`
@@ -6086,6 +6103,14 @@ which makes long diagonal jumps impossible and can quietly turn a platform into
 a one way trap: reachable coming down, unreachable going back up, with nothing
 in your level saying so. Most platformers want this at or above `run_speed`.
 
+**Careful — `air_speed` above `run_speed` makes falls cheaper than walks.**
+The `jump_bias` multiplier applies to JUMP links, not to FALL links. A character
+with `air_speed = 4` on `run_speed = 3` moves 33% faster in the air for free,
+and the search will prefer routes that drop off ledges and re-climb over routes
+that walk along flat ground. This shows up as an AI that zigzags through a
+platformer level that has a straight path available. Keep `air_speed` at or
+very close to `run_speed` unless you have a specific reason not to.
+
 **`jump_levels` controls arc quality, not just variety.** It is how many jump
 strengths get sampled between half power and full. The default of 3 is cheap but
 coarse, and arcs overshoot on gaps that fall near a sampling boundary. Seven to
@@ -6097,6 +6122,12 @@ thirds.
 distance as a walk for the same number of frames, so without a bias the search
 chooses arbitrarily between them and you get an AI that jumps everywhere for no
 reason. The default nudges it toward walking when both work.
+
+**`can_drop` enables DROP links.** When true, the bake generates an edge from
+any standing position whose cell sits on a one way platform, to the first
+platform below. The drop is one tier — it falls through the one way the
+character is standing on and stops at the next surface. A chain of drops is
+what gets you from the top of a stack to the bottom, one link at a time.
 
 **See also:** `gmnav_platgraph_create`, `gmnav_platgraph_bake`
 
@@ -6459,7 +6490,7 @@ ledges on long jumps.
 **Syntax:**
 
 ```gml
-gmnav_platgraph_solid(pg, x, y, vy);
+gmnav_platgraph_solid(pg, x, y, vy, ignore_oneway);
 ```
 
 | Argument | Type | Description |
@@ -6468,22 +6499,21 @@ gmnav_platgraph_solid(pg, x, y, vy);
 | x | Real | World x of the character centre |
 | y | Real | World y of the feet |
 | vy | Real | Optional, default 0. Vertical velocity |
+| ignore_oneway | Boolean | Optional, default `false`. Whether one way platforms block this test |
 
 **Returns:** Boolean
 
 **Example:**
 
 ```gml
-// the integration order the bake used. Match it exactly
-vsp = min(vsp + move.gravity, move.max_fall);
+vy = min(vy + move.gravity, move.max_fall);
 
-var _nx = x + hsp;
-if (gmnav_platgraph_solid(pgraph, _nx, y, 0)) hsp = 0; else x = _nx;
+var _nx = x + vx;
+if (gmnav_platgraph_solid(pgraph, _nx, y, 0)) vx = 0; else x = _nx;
 
-var _ny = y + vsp;
-if (gmnav_platgraph_solid(pgraph, x, _ny, vsp)) {
-    if (vsp > 0) on_ground = true;
-    vsp = 0;
+var _ny = y + vy;
+if (gmnav_platgraph_solid(pgraph, x, _ny, vy)) {
+    // landed, or hit a ceiling if vy < 0
 } else {
     y = _ny;
 }
@@ -6502,6 +6532,13 @@ staying in sync, since it is literally the test the bake ran.
 
 The `vy` argument matters for one way platforms: a downward velocity is blocked
 by one, an upward velocity passes through.
+
+**`ignore_oneway` is what a drop simulation uses.** When true, one way platforms
+do not block the test — a downward step passes straight through them. This
+reproduces what a DROP link's simulation sees while it is falling through the
+platform the character is standing on. Nothing in your game code should need to
+pass this, but it is exposed so a replay of a DROP arc behaves identically to
+the bake.
 
 **See also:** `gmnav_platgraph_link_get`, `gmnav_platagent_update`
 
@@ -6566,7 +6603,7 @@ since the agent asks it for platformer routes.
 **Syntax:**
 
 ```gml
-gmnav_platagent_goto(pa, x, y, priority);
+gmnav_platagent_goto(pa, x, y, priority, allow_drop);
 ```
 
 | Argument | Type | Description |
@@ -6575,6 +6612,7 @@ gmnav_platagent_goto(pa, x, y, priority);
 | x | Real | World x of the goal |
 | y | Real | World y of the goal |
 | priority | Enum | Optional, default `gmnav_priority.NORMAL` |
+| allow_drop | Boolean | Optional, default `false`. Whether this route may use DROP links |
 
 **Returns:** Boolean, `false` if either end has no standing position
 
@@ -6599,7 +6637,15 @@ is safe and simply takes effect on landing.
 Returns `false` when either end has no standing position nearby, which usually
 means the target is in mid-air or inside geometry.
 
-**See also:** `gmnav_platagent_update`, `gmnav_platagent_arrived`
+**`allow_drop` is per-request.** A route may only use DROP links if this
+argument is true. The graph still contains the DROP edges — they are baked into
+the graph whenever `can_drop` is set on the movement model — but the search
+skips them unless the request opts in. That means one graph serves a character
+that drops and one that does not, and the character's current intent decides
+which kind of route it gets.
+
+**See also:** `gmnav_platagent_update`, `gmnav_platagent_arrived`,
+`gmnav_movement_create`
 
 ---
 
@@ -6855,7 +6901,7 @@ without either side knowing about the other.
 **Syntax:**
 
 ```gml
-gmnav_graph_search_begin(search, start, goal);
+gmnav_graph_search_begin(search, start, goal, allow_drop);
 ```
 
 | Argument | Type | Description |
@@ -6863,13 +6909,14 @@ gmnav_graph_search_begin(search, start, goal);
 | search | Struct | The graph search |
 | start | Integer | Starting node index |
 | goal | Integer | Target node index |
+| allow_drop | Boolean | Optional, default `false`. Whether this search may use DROP links |
 
 **Returns:** Boolean, whether the search started
 
 **Example:**
 
 ```gml
-if (gmnav_graph_search_begin(gsearch, _from, _to)) {
+if (gmnav_graph_search_begin(search, _from, _to)) {
     searching = true;
 }
 ```
@@ -6879,6 +6926,11 @@ The above code sets a graph search up. It does no work; call
 
 Indices are into the graph's own node list, not grid node ids. For a platformer
 graph, `gmnav_platgraph_node_at` is how you get one.
+
+**`allow_drop` filters DROP links out of the search when false.** The links are
+still in the graph — the bake generated them — but expansion skips any edge
+whose type is `gmnav_link.DROP`. Set it true to let the search use them. This
+is the same flag the scheduler and the platform agent forward through.
 
 **See also:** `gmnav_graph_search_step`, `gmnav_platgraph_node_at`
 
@@ -8735,16 +8787,23 @@ How one node is reached from another.
 | `FALL` | Off an edge, gravity does the rest |
 | `JUMP` | A launch with a stored velocity |
 | `STAIR` | An authored overlay link between two surfaces |
+| `DROP` | Through a one way platform to the surface below |
 
 ```gml
 switch (links[i]) {
     case gmnav_link.JUMP: press_jump(); break;
     case gmnav_link.FALL: run_off_edge(); break;
+    case gmnav_link.DROP: release_drop_through(); break;
 }
 ```
 
-`WALK`, `FALL` and `JUMP` come from the platformer bake. `STAIR` is the default
-type for `gmnav_overlay_link` and marks a change of surface on a grid.
+`WALK`, `FALL`, `JUMP` and `DROP` come from the platformer bake. `STAIR` is the
+default type for `gmnav_overlay_link` and marks a change of surface on a grid.
+
+`DROP` links are only generated when the movement model was created with
+`can_drop` set. When the graph contains them, a search may still filter them
+out via `allow_drop` on the request — the flag is per-request, so one graph
+serves a character that drops and one that does not.
 
 **Note:** the type is stored and reported but nothing in the framework reads it
 back to change behaviour. It is there so your code can tell a stair from a
@@ -9111,6 +9170,7 @@ is omitted.
 | `width`, `height` | Real | Character box |
 | `jump_levels` | Integer | Jump strengths sampled |
 | `jump_bias` | Real | Multiplier on jump link costs |
+| `can_drop` | Boolean | Whether DROP links are baked into any graph using this model |
 
 ### Platformer graph
 
@@ -9118,6 +9178,7 @@ is omitted.
 |---|---|---|
 | `grid` | Struct | Underlying navigation grid |
 | `move` | Struct | Movement model |
+| `allow_drop` | Boolean | Mirrors `move.can_drop`. When false, no DROP links are baked and the per-request flag has nothing to filter |
 | `count` | Integer | Standing positions found |
 | `edge_start` | Array | CSR row offsets, length `count + 1` |
 | `edge_to` | Array | Destination node per edge |
@@ -9134,6 +9195,9 @@ is omitted.
 | `vx`, `vy` | Real | Current velocity during an arc |
 | `node` | Integer | Node the agent is on or heading to |
 | `arrived` | Boolean | Latched until the next `goto` or `stop` |
+| `failed` | Boolean | Last goal could not be routed to |
+| `allow_drop` | Boolean | Whether the agent's current route may use DROP links. Set by the most recent `goto` |
+| `drop_ignore_until_y` | Real | While a DROP is in progress, the y position above which one way platforms do not block the replay. Set by the framework |
 | `desync` | Integer | Frames where replay and world disagreed. Should stay 0 |
 
 ### Flow field
@@ -9181,9 +9245,35 @@ into one pixel, which is what most games need. It will not resolve two agents
 walking into each other in a one tile corridor: both push symmetrically, both
 stall, neither yields. Plan for that at the design level.
 
-**Avoidance does not know about walls.** It repels agents from other agents
-only. When a crowd compresses against geometry it pushes bodies into walls, and
-your movement code absorbs that.
+**Avoidance knowledge of walls depends on the mode.** `BASIC` and `FOLLOW`
+repel agents from other agents only. When a crowd compresses against geometry
+they push bodies into walls, and your movement code absorbs that. `CONTEXT`
+probes for walls directly and steers around them. If a crowd at a doorway is
+the problem, `CONTEXT` is the mode to reach for; if it is only a visual
+problem in open ground, `BASIC` is cheaper.
+
+**The path always wins over avoidance.** The push returned by the avoidance
+model is projected onto the plane perpendicular to the desired direction, so
+whatever part of it opposes the path is stripped before being applied.
+Avoidance can steer an agent sideways or slow it down, but it can never push
+one backward along its own path. Without this rule, a ring of neighbours could
+sum to a push exactly opposite the goal, and the agent would stand frozen with
+a valid path and no visible reason.
+
+**Avoidance only runs when you supply a neighbour list.** `gmnav_agent_update`
+skips the avoidance block entirely when `neighbours` is `undefined`. There is
+no error and no warning, because passing nothing is a legitimate choice.
+Agents that appear to walk through each other are usually being updated with
+no list. The framework deliberately does not maintain a spatial index — your
+game almost certainly has one, and a second one running in parallel would be a
+source of bugs rather than a convenience.
+
+**`follow_floor` must be above zero.** It is the slowest an agent in a
+`FOLLOW` queue can go, and it exists so a fully blocked queue can still creep
+forward and unstick itself. Set it to zero and a queue that deadlocks never
+recovers — the front agent stops, the ones behind stop too, and nothing moves
+again until an external force breaks the stall. The default of 0.15 is
+conservative.
 
 **Editing the grid does not rebuild anything.** Flow fields, clearance and
 platformer graphs go out of date and say so. Rebuilding is your call, because
@@ -9206,6 +9296,23 @@ character could walk it. `gmnav_path_simplify` works everywhere.
 the whole body fits along the line, and a one cell wide bridge cannot contain a
 wider body, so every shortcut across it is refused and every deck cell survives
 as a waypoint. That is correct rather than wasteful.
+
+**Air speed above run speed makes falls cheaper than walks.** A `FALL` link
+moves the character horizontally at `air_speed`, and the `jump_bias` multiplier
+only applies to `JUMP` links. A model with `air_speed > run_speed` therefore
+prices a fall as a discount on horizontal travel, and the search will prefer
+routes that drop off ledges and re-climb over routes that walk along flat
+ground. This shows up as an AI that zigzags through a level that has a
+straight path available. Keep `air_speed` at or very close to `run_speed`
+unless you have a specific reason not to.
+
+**DROP links are opt in at two levels.** The bake generates them only when
+the movement model was created with `can_drop` set. When the graph contains
+them, a search still skips them unless the request passes `allow_drop` true.
+The two flags mean the same graph serves a character that drops and one that
+does not, and the character's current intent decides which kind of route it
+gets. A game that never uses drop pays nothing — no DROP links are baked, and
+the filter has nothing to skip.
 
 **Overlay offsets are drawn height, not climb cost.** They are read by world
 positions and the debug renderer, and are not consulted by `max_climb` or
@@ -9245,9 +9352,13 @@ finished but not ready. Check `ticket.state` if you need to tell them apart.
 **`IMMEDIATE` bypasses the budget, not the workspace pool.** If every workspace
 is busy the request falls back into the queue and resolves later like any other.
 
-**`GMNAV_FLAG_ONEWAY` is partial.** Standing on and jumping up through a one way
-platform work. Dropping down through one is not implemented, so a one way deck
-stacked over a solid ledge routes the long way round.
+**`GMNAV_FLAG_ONEWAY` gives three of four behaviours.** Standing on a one way
+and jumping up through it work. Jumping onto it from below and passing through
+upward work. And dropping through it works when the movement model has
+`can_drop` set — DROP links are baked and available to any request that passes
+`allow_drop`. What remains unimplemented is a downward jump-through from a
+character that has never learned to drop; that case still routes the long way
+round.
 
 **Clearance is `ORTHO` and `ISO_DIAMOND` only.** On staggered and hex a
 Chebyshev radius in cell indices does not correspond to a disc in world space,
