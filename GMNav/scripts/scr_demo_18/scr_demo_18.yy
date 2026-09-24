@@ -1,12 +1,12 @@
 {
   "$GMScript":"v1",
-  "%Name":"scr_troopdemo",
+  "%Name":"scr_demo_18",
   "isCompatibility":false,
   "isDnD":false,
-  "name":"scr_troopdemo",
+  "name":"scr_demo_18",
   "parent":{
-    "name":"troopdemo",
-    "path":"folders/demos/others/troopdemo.yy",
+    "name":"18",
+    "path":"folders/demos/10-19/18.yy",
   },
   "resourceType":"GMScript",
   "resourceVersion":"2.0",
