@@ -128,7 +128,6 @@
 
 - **[Getting Started](GettingStarted.md)** - From an empty project to a moving agent, then each subsystem in the order you are likely to need it
 - **[Documentations](GMNavDocs.md)** - Every function with its arguments, detailed description, example, return shape, edge cases, and known behaviours
-- **[API Reference](RawDocumentation.md)** - Every function with its arguments, return shape, edge cases, and known behaviours
 - **[Tutorials](https://github.com/erkan612/GMNav/tree/main/Tutorials)** - Nineteen chapters, from what pathfinding is to a navigation system you can see and diagnose
 
 ---
