@@ -8,7 +8,7 @@ shared per-frame budget so a large crowd never stalls your game loop.
 
 This guide gets you from an empty project to a moving agent, then shows each
 subsystem in the order you are likely to need it. For the full API see
-[API Reference](RawDocumentation.md). For worked examples with diagrams see the
+[API Reference](GMNavDocs.md). For worked examples with diagrams see the
 tutorial series.
 
 ---
@@ -252,6 +252,67 @@ fields works.
 
 Everything an agent does is a public call. It stores preferences and forwards
 them; it invents nothing. If you write your own agent class, you lose nothing.
+
+---
+
+## Local avoidance
+
+Agents propose a velocity and stop there. Whether they get out of each
+other's way in motion is a separate decision, made by the avoidance
+system, and it is opt-in per call.
+
+```gml
+var _near = [];
+
+with (obj_unit) {
+    if (id != other.id && point_distance(x, y, other.x, other.y) < 64) {
+        array_push(_near, agent);
+    }
+}
+
+gmnav_agent_update(agent, _near);
+```
+
+Pass the list and avoidance runs. Pass nothing and the agent follows its
+path with no awareness of anything around it.
+
+Three models ship with the framework, selected by `agent.avoid_mode`:
+
+**BASIC** — simple separation. Agents push each other apart. Cheap,
+correct in the open, chaotic at a chokepoint. The default.
+
+**CONTEXT** — probes 16 directions and scores each for goal alignment,
+neighbour danger, and wall reach. Handles corners and doorways because
+it knows where the walls are. Costs more.
+
+**FOLLOW** — queue formation. Agents slow down behind someone directly
+ahead rather than pushing sideways. A crowd files rather than fights.
+This is the one that makes a group walk through a door without shoving
+itself into the frame.
+
+Every parameter is a per-agent field, so different units in the same
+crowd can react to each other differently:
+
+```gml
+agent.avoid_mode   = gmnav_avoid.FOLLOW;
+agent.follow_gap   = 2.2;    // full speed at this gap, in radius-sum units
+agent.follow_min   = 1.0;    // hard stop just below this gap
+agent.follow_sep   = 0.02;   // separation strength when bodies overlap
+agent.follow_floor = 0.02;   // slowest the queue can go. Zero deadlocks
+```
+
+A full list is in the Agent struct reference.
+
+**The path always wins.** The push is projected onto the plane
+perpendicular to the desired direction, so it can steer an agent
+sideways but never stop one dead. Without this rule, a ring of
+neighbours could sum to a push exactly opposite the goal and freeze
+the agent in place.
+
+**Avoidance is separation, not reciprocal avoidance.** It will not
+resolve two agents walking into each other in a one-cell corridor.
+Plan for that at the design level with wider passages or one-way
+routes.
 
 ---
 
@@ -579,6 +640,52 @@ default of 3 is cheap but coarse, and arcs will overshoot on gaps that fall
 near a sampling boundary. 7 to 9 gives noticeably flatter, more natural arcs.
 Bake time scales linearly with it.
 
+---
+
+### Dropping through one-way platforms
+
+By default the character cannot drop through a one-way platform, so a
+one-way deck stacked over a solid ledge routes the long way round. To
+enable drop-through, tell the movement model:
+
+```gml
+move = gmnav_movement_create(0.5, 11, 3, 9, 12, 24, 4, 5, 1.5, true);
+//                                                                 ^
+//                                                       can_drop
+```
+
+With `can_drop` true, the bake generates DROP links from every standing
+position on a one-way to the next platform below. A drop is one tier,
+not a chain — it falls through the platform the character is standing on
+and stops at the next surface. Two one-ways stacked means two DROP hops,
+one at a time.
+
+A request still has to opt in:
+
+```gml
+gmnav_platagent_goto(bat, target_x, target_y, gmnav_priority.NORMAL, true);
+//                                                                   ^
+//                                                           allow_drop
+```
+
+So one graph serves a character that drops and one that does not,
+decided by what the request asks for.
+
+**Two things worth knowing:**
+
+`air_speed` above `run_speed` makes falls cheaper than walks. The
+`jump_bias` multiplier only applies to JUMP links, not FALL links, so a
+character with `air_speed = 4` on `run_speed = 3` moves faster in the
+air for free and the search will prefer routes that drop off ledges over
+routes that walk. Keep `air_speed` at or near `run_speed`.
+
+**A DROP is opt-in at two levels.** The bake generates the links only
+when `can_drop` is set on the movement model. The search uses them only
+when `allow_drop` is true on the request. A game that never uses drop
+pays nothing for the machinery.
+
+---
+
 ### Letting the framework fly
 
 For a character that does not need a bespoke controller, the platform agent
@@ -637,6 +744,66 @@ answers what a unit of that size can actually get to.
 
 `gmnav_debug_draw_stats` is the one to leave on longest. It shows pending
 searches and budget use, which is how you tell whether your budget is right.
+
+---
+
+## The Util module
+
+`GMNav/Util/GMNav_Util.gml` is a convenience module. Every function in
+it composes public calls and decides nothing. It exists because the same
+three or four lines get written in every project, and writing them by
+hand gets old.
+
+Nothing here is required. Delete the folder and the rest of the
+framework is unaffected.
+
+The functions cover:
+
+- **Grid setup** — `gmnav_util_grid_for_room`, `gmnav_util_grid_from_tilemap`,
+  `gmnav_util_border_blocked`. The boilerplate around building a grid from
+  a room or a tilemap, in one call each.
+- **Node query** — `gmnav_util_node_at`, `gmnav_util_cursor_node`,
+  `gmnav_util_snap_open`, `gmnav_util_random_open`. Position-to-node
+  lookups that refuse to return somewhere an agent cannot stand.
+- **Agent control** — `gmnav_util_send_agent`, `gmnav_util_send_group`,
+  `gmnav_util_reset_agent`. The click-to-move handler, in one call.
+- **Agent state** — `gmnav_util_agent_state`, `gmnav_util_agent_summary`,
+  `gmnav_util_scheduler_snapshot`. Tallying for HUDs and debug overlays.
+- **Path queries** — `gmnav_util_shortest_path`, `gmnav_util_is_reachable`,
+  `gmnav_util_path_cost`. Synchronous searches for tools and level
+  validation.
+- **Cost fields** — `gmnav_util_costfield_single`, `gmnav_util_move_threat`.
+  The layer-plus-profile pattern in one call, and the "both rectangles,
+  always" rule baked in.
+- **Overlay authoring** — `gmnav_util_overlay_room`, `gmnav_util_overlay_bridge`.
+- **Target selection** — `gmnav_util_nearest_in_array`,
+  `gmnav_util_agents_within_radius`, `gmnav_util_reachable_nearest`.
+- **Path following** — `gmnav_util_path_direction_at`,
+  `gmnav_util_path_lookahead`.
+- **Grid validation** — `gmnav_util_reachable_set`,
+  `gmnav_util_is_connected`, `gmnav_util_unreachable_from`. Flood fill
+  and connectivity checks.
+- **Line of sight** — `gmnav_util_has_line_of_sight`.
+- **Formations** — `gmnav_util_formation_grid_offsets`,
+  `gmnav_util_formation_ring_offsets`,
+  `gmnav_util_send_group_formation`.
+- **Spawning** — `gmnav_util_spawn_points_around`,
+  `gmnav_util_spawn_points_in_rect`.
+- **Repath staggering** — `gmnav_util_stagger_repath_gaps`,
+  `gmnav_util_stagger_repath_offsets`.
+- **Motion tracking** — `gmnav_util_motion_tracker_create`,
+  `gmnav_util_motion_tracker_update`.
+
+A small example that replaces the click handler from earlier:
+
+```gml
+if (mouse_check_button_pressed(mb_left)) {
+    gmnav_util_send_agent(agent, grid, mouse_x, mouse_y);
+}
+```
+
+The full function list with signatures is in the Util Functions section
+of the API reference.
 
 ---
 
