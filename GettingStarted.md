@@ -852,6 +852,18 @@ To pull a unit toward something, seed it as a goal in a flow field.
 one-way platform work. Dropping down through one is not implemented, so a
 one-way deck stacked over a solid ledge routes the long way round.
 
+**The platformer bake approximates variable jump characters.** Each
+sampled arc is a single parabola launched at a fixed strength. That is
+exactly right for an AI enemy choosing from a menu of jumps, and an
+approximation for a player character whose jump is variable — the
+usual pattern of launching at full velocity and cutting the upward
+velocity partway when the button is released. Landings and peaks line
+up most of the time, but the timing of a cut jump differs by a few
+frames from the single-parabola equivalent. If you are matching AI
+movement to a player controller with variable jump height, validate the
+graph's routes against your controller rather than trusting them
+blindly. A two-phase variable jump model is on the roadmap.
+
 ---
 
 ## Where next

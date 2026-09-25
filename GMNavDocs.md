@@ -9325,6 +9325,24 @@ does not, and the character's current intent decides which kind of route it
 gets. A game that never uses drop pays nothing — no DROP links are baked, and
 the filter has nothing to skip.
 
+**The platformer bake models fixed-strength jumps.** Every arc the bake
+simulates is a single parabola, launched at one of `jump_levels` sampled
+strengths and left alone until it lands. That matches an AI that picks a
+jump strength from a menu, which is the case the framework was designed
+for. It does not match a player character whose jump is variable in the
+way most platformers implement it: always launching at full velocity,
+then cutting the upward velocity partway through when the player releases
+the button. That produces a two-phase arc — a rise at full speed, a
+sudden reduction, then a coast and fall — that the bake does not
+simulate. The graph for such a character will be an approximation rather
+than an exact model: landings and peaks will usually line up, but the
+timing of a cut jump differs by a few frames from the single-parabola
+equivalent, and headroom clearance can differ near ceilings. If you are
+matching an AI's movement to a player controller with variable jump
+height, treat the graph as an approximation and validate against your
+controller's real behaviour. An exact model is planned for a future
+release.
+
 **Overlay offsets are drawn height, not climb cost.** They are read by world
 positions and the debug renderer, and are not consulted by `max_climb` or
 `max_drop`. For a slope only some units can take, use `gmnav_grid_set_height`.
