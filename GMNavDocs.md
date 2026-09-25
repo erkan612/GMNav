@@ -6076,6 +6076,7 @@ gmnav_movement_create(gravity, jump_vel, run_speed, max_fall, width, height, air
 | jump_levels | Integer | Optional, default 3. Jump strengths sampled |
 | jump_bias | Real | Optional, default 1.15. Multiplier on jump link costs |
 | can_drop | Boolean | Optional, default `false`. Whether this character can drop through one way platforms |
+| jump_min | Real | Optional, default 0.5. Weakest sampled jump, as a fraction of full peak height |
 
 **Returns:** Struct
 
@@ -6111,12 +6112,21 @@ that walk along flat ground. This shows up as an AI that zigzags through a
 platformer level that has a straight path available. Keep `air_speed` at or
 very close to `run_speed` unless you have a specific reason not to.
 
-**`jump_levels` controls arc quality, not just variety.** It is how many jump
-strengths get sampled between half power and full. The default of 3 is cheap but
-coarse, and arcs overshoot on gaps that fall near a sampling boundary. Seven to
-nine gives noticeably flatter, more natural arcs. Bake time scales linearly with
-it, so set it to 1 for a fixed jump character and cut the bake cost by two
-thirds.
+**`jump_levels` controls arc quality, not just variety.** It is how many
+jump strengths get sampled between `jump_min` and full. The samples are
+spaced by **peak height**, not by launch velocity, so a group of three
+samples covers the range from `jump_min` to full in three even steps of
+arc height. The default of 3 is cheap but coarse, and gaps that fall
+between samples are missed. Seven to nine gives noticeably flatter, more
+natural arcs. Bake time scales linearly with it, so set it to 1 for a
+fixed jump character and cut the bake cost by two thirds.
+
+**`jump_min` is the weakest jump the bake will try.** A value of 0.5
+means the weakest sampled arc reaches half the height of a full jump.
+Above 1.0 is clamped down; below 0.05 is clamped up. Set it lower to give
+the sampler a wider range to cover — useful for characters with a large
+gap between their shortest and longest jump — or raise it toward 1.0 for
+a character whose jumps are nearly uniform.
 
 **`jump_bias` stops bunny hopping.** On level ground a hop covers the same
 distance as a walk for the same number of frames, so without a bias the search
@@ -9169,6 +9179,7 @@ is omitted.
 | `max_fall` | Real | Terminal fall speed |
 | `width`, `height` | Real | Character box |
 | `jump_levels` | Integer | Jump strengths sampled |
+| `jump_min` | Real | Weakest sampled jump, as a fraction of full peak height |
 | `jump_bias` | Real | Multiplier on jump link costs |
 | `can_drop` | Boolean | Whether DROP links are baked into any graph using this model |
 

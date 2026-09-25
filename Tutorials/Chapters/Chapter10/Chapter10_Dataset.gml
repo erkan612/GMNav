@@ -11,6 +11,11 @@
 //   166 WALK links, 19 FALL links, 376 JUMP links, 561 total
 //   990 arcs simulated during the bake
 //
+// Note: link counts were measured with pre-1.2 jump sampling. The 1.2
+// sampler spaces peak heights evenly instead of launch velocities, so
+// the exact link count changes on any rebake. Standing positions and
+// arcs simulated are unchanged, since both depend on jump_levels only.
+//
 // Verified routes:
 //   floor left to floor right   15 nodes, 100.00 frames, crosses the gap by jumping
 //   high shelf to mid ledge     FOUND in 133.97 frames

@@ -3,7 +3,8 @@ function gmnav_movement_create(_gravity, _jump_vel, _run_speed, _max_fall,
                                _air_speed = undefined,
                                _jump_levels = 3,
                                _jump_bias = 1.15,
-                               _can_drop = false) {
+                               _can_drop = false,
+                               _jump_min = 0.5) {
     return {
         gravity     : _gravity,
         jump_vel    : _jump_vel,
@@ -15,7 +16,7 @@ function gmnav_movement_create(_gravity, _jump_vel, _run_speed, _max_fall,
         air_speed   : (_air_speed == undefined) ? _run_speed : _air_speed,
 
         jump_levels : max(1, _jump_levels),
-        jump_min    : 0.5,
+        jump_min    : clamp(_jump_min, 0.05, 1.0),
 		jump_bias   : _jump_bias,
 
         can_drop    : _can_drop,
@@ -278,9 +279,10 @@ function __gmnav_plat_links_for(_pg, _pnode) {
     }
 
     var _levels = _mv.jump_levels;
+    var _min_sq = _mv.jump_min * _mv.jump_min;
     for (var _l = 0; _l < _levels; _l++) {
         var _t = (_levels == 1) ? 1 : (_l / (_levels - 1));
-        var _strength = lerp(_mv.jump_min, 1, _t);
+        var _strength = sqrt(lerp(_min_sq, 1, _t));
         var _vy = -_mv.jump_vel * _strength;
 
         for (var _d = -1; _d <= 1; _d++) {
