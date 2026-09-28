@@ -85,10 +85,11 @@ enum gmnav_avoid {
 #macro GMNAV_FLAG_LINK      0x0004		// [[RESERVED]] - endpoint of an off-graph link (jump, ladder, door)
 #macro GMNAV_FLAG_WATER     0x0008		// [[RESERVED]]
 #macro GMNAV_FLAG_DANGER    0x0010		// [[RESERVED]]
+#macro GMNAV_FLAG_REMOVED   0x0020		// cell has been removed from the overlay. still occupies a slot until gmnav_overlay_compact is called, but is impassable, unreachable from world_to_node, and pruned from adjacency at the next finish
 #macro GMNAV_FLAG_USER0     0x1000		
 #macro GMNAV_FLAG_USER1     0x2000		
 #macro GMNAV_FLAG_USER2     0x4000		
-#macro GMNAV_FLAG_USER3     0x8000		
+#macro GMNAV_FLAG_USER3     0x8000			
 
 #macro GMNAV_NO_NODE   -1
 #macro GMNAV_SQRT2     1.4142135623730951

@@ -42,6 +42,8 @@ gmt_test_flowfield_clearance();
 gmt_test_avoid_pinch();
 gmt_test_avoid_pinch_smoothing();
 gmt_test_relax_zero();
+gmt_test_overlay_removal();
+gmt_test_failed_repath();
 
 gmt_head("D scheduler (running)");
 

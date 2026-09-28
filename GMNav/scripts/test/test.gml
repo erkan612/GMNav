@@ -4801,3 +4801,236 @@ function gmt_test_relax_zero() {
     gmt_check("a clearance 1 agent leaves the pocket",
               gmnav_search_step(_s4, 100000), gmnav_state.FOUND);
 }
+
+function gmt_test_overlay_removal() {
+    gmt_head("B18 overlay cell removal");
+
+    var _g  = gmt_bridge_level();
+    var _ov = _g.overlay;
+
+    var _d1 = gmnav_overlay_node_at(_ov, 5, 4, 1);
+    var _d2 = gmnav_overlay_node_at(_ov, 5, 5, 1);
+    var _d3 = gmnav_overlay_node_at(_ov, 5, 6, 1);
+
+    gmt_check("three deck cells exist",
+              (_d1 != GMNAV_NO_NODE && _d2 != GMNAV_NO_NODE && _d3 != GMNAV_NO_NODE), true);
+    gmt_check("middle is not removed", gmnav_overlay_is_removed(_ov, _d2), false);
+    gmt_check("middle is not blocked", gmnav_overlay_is_blocked(_ov, _d2), false);
+
+    var _v0 = _g.version;
+    gmt_check("removal accepted", gmnav_overlay_remove(_ov, _d2), true);
+    gmt_check("version bumped", _g.version > _v0, true);
+
+    gmt_check("middle reads as removed", gmnav_overlay_is_removed(_ov, _d2), true);
+    gmt_check("middle reads as blocked", gmnav_overlay_is_blocked(_ov, _d2), true);
+    gmt_check("neighbours unaffected",   gmnav_overlay_is_removed(_ov, _d1), false);
+    gmt_check("count unchanged",         gmnav_overlay_count(_ov), 3);
+    gmt_check("node_at cannot find it",
+              gmnav_overlay_node_at(_ov, 5, 5, 1), GMNAV_NO_NODE);
+
+    var _p = gmnav_grid_node_to_world(_g, _d2);
+    gmt_check("world_to_node layer 1 cannot find it",
+              gmnav_grid_world_to_node(_g, _p[0], _p[1], 1), GMNAV_NO_NODE);
+    gmt_check("topmost falls back to the base cell",
+              gmnav_grid_world_to_node_top(_g, _p[0], _p[1]),
+              gmnav_grid_node(_g, 5, 5));
+
+    var _v1 = _g.version;
+    gmt_check("removing again is a no-op", gmnav_overlay_remove(_ov, _d2), true);
+    gmt_check("and does not bump again", _g.version, _v1);
+
+    gmt_head("B19 re-adding a removed cell");
+
+    var _back = gmnav_overlay_add(_ov, 5, 5, 1);
+    gmt_check("re-add returns the same node id", _back, _d2);
+    gmt_check("removed bit cleared",   gmnav_overlay_is_removed(_ov, _d2), false);
+    gmt_check("blocked bit clear too", gmnav_overlay_is_blocked(_ov, _d2), false);
+    gmt_check("count unchanged",       gmnav_overlay_count(_ov), 3);
+    gmt_check("node_at finds it again",
+              gmnav_overlay_node_at(_ov, 5, 5, 1), _d2);
+
+    gmt_head("B20 search and field respect removal");
+
+    var _g2    = gmt_bridge_level();
+    var _ov2   = _g2.overlay;
+    var _north = gmnav_grid_node(_g2, 5, 1);
+    var _south = gmnav_grid_node(_g2, 5, 10);
+
+    gmt_check("path crosses before removal",
+              is_array(gmt_solve_z(_g2, _north, _south)), true);
+
+    var _d2b = gmnav_overlay_node_at(_ov2, 5, 5, 1);
+    gmnav_overlay_remove(_ov2, _d2b);
+
+    gmt_check("path refused after removal",
+              is_undefined(gmt_solve_z(_g2, _north, _south)), true);
+
+    gmnav_overlay_add(_ov2, 5, 5, 1);
+    gmt_check("path crosses again after re-add",
+              is_array(gmt_solve_z(_g2, _north, _south)), true);
+
+    var _g3   = gmt_bridge_level();
+    var _goal = gmnav_grid_node(_g3, 5, 1);
+    var _bank = gmnav_grid_node(_g3, 5, 10);
+
+    var _f1 = gmnav_flowfield_create(_g3);
+    gmnav_flowfield_build(_f1, _goal);
+    gmt_check("field reaches south before removal", _f1.dist[_bank] < GMNAV_INF, true);
+
+    var _d3b = gmnav_overlay_node_at(_g3.overlay, 5, 5, 1);
+    gmnav_overlay_remove(_g3.overlay, _d3b);
+
+    var _f2 = gmnav_flowfield_create(_g3);
+    gmnav_flowfield_build(_f2, _goal);
+    gmt_check("field does not reach south after removal",
+              _f2.dist[_bank] == GMNAV_INF, true);
+
+    gmt_head("B21 compact reclaims the slot");
+
+    var _gc  = gmt_bridge_level();
+    var _ovc = _gc.overlay;
+
+    gmt_check("three cells before compact", gmnav_overlay_count(_ovc), 3);
+
+    var _dc = gmnav_overlay_node_at(_ovc, 5, 5, 1);
+    gmnav_overlay_remove(_ovc, _dc);
+    gmt_check("still three before compact", gmnav_overlay_count(_ovc), 3);
+
+    var _map = gmnav_overlay_compact(_ovc);
+    gmt_check("two cells after compact", gmnav_overlay_count(_ovc), 2);
+    gmt_check("map has three entries",   array_length(_map), 3);
+    gmt_check("removed slot maps to NO_NODE", _map[1], GMNAV_NO_NODE);
+    gmt_check("first live slot maps to 0", _map[0], 0);
+    gmt_check("second live slot maps to 1", _map[2], 1);
+
+    gmt_check("the north deck survives at its position",
+              gmnav_overlay_node_at(_ovc, 5, 4, 1), _ovc.base + 0);
+    gmt_check("the south deck survives at its position",
+              gmnav_overlay_node_at(_ovc, 5, 6, 1), _ovc.base + 1);
+    gmt_check("the removed cell is gone entirely",
+              gmnav_overlay_node_at(_ovc, 5, 5, 1), GMNAV_NO_NODE);
+
+    var _tomb = 0;
+    for (var _i = 0; _i < gmnav_overlay_count(_ovc); _i++) {
+        if (gmnav_overlay_is_removed(_ovc, _ovc.base + _i)) _tomb++;
+    }
+    gmt_check("no tombstones remain", _tomb, 0);
+
+    gmt_head("B22 compact drops links through removed cells");
+
+    var _gl  = gmt_bridge_level();
+    var _ovl = _gl.overlay;
+
+    var _dn = gmnav_overlay_node_at(_ovl, 5, 4, 1);
+    gmnav_overlay_remove(_ovl, _dn);
+    gmnav_overlay_compact(_ovl);
+
+    gmt_check("the north deck is gone",
+              gmnav_overlay_node_at(_ovl, 5, 4, 1), GMNAV_NO_NODE);
+    gmt_check("the south deck remains",
+              gmnav_overlay_node_at(_ovl, 5, 6, 1) != GMNAV_NO_NODE, true);
+
+    var _nl = gmnav_grid_node(_gl, 5, 1);
+    var _sl = gmnav_grid_node(_gl, 5, 10);
+
+    gmt_check("no route once the north stair is dropped",
+              is_undefined(gmt_solve_z(_gl, _nl, _sl)), true);
+
+    gmt_head("B23 compaction over multiple layers");
+
+    var _ml = gmnav_grid_create(12, 12,
+                  gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+
+    var _mo = gmnav_overlay_create(_ml);
+
+    gmnav_overlay_add(_mo, 5, 4, 1);
+    gmnav_overlay_add(_mo, 5, 5, 1);
+    gmnav_overlay_add(_mo, 5, 6, 1);
+
+    gmnav_overlay_add(_mo, 5, 4, 2);
+    gmnav_overlay_add(_mo, 5, 5, 2);
+    gmnav_overlay_finish(_mo);
+
+    gmt_check("five cells over two layers", gmnav_overlay_count(_mo), 5);
+
+    var _rm = gmnav_overlay_node_at(_mo, 5, 5, 1);
+    gmnav_overlay_remove(_mo, _rm);
+    gmnav_overlay_compact(_mo);
+
+    gmt_check("four cells after compact", gmnav_overlay_count(_mo), 4);
+    gmt_check("max layer preserved", _mo.max_layer, 2);
+
+    gmt_check("layer 1 cell at (5,4) survives",
+              gmnav_overlay_node_at(_mo, 5, 4, 1) != GMNAV_NO_NODE, true);
+    gmt_check("layer 1 cell at (5,6) survives",
+              gmnav_overlay_node_at(_mo, 5, 6, 1) != GMNAV_NO_NODE, true);
+    gmt_check("layer 2 cell at (5,4) survives",
+              gmnav_overlay_node_at(_mo, 5, 4, 2) != GMNAV_NO_NODE, true);
+    gmt_check("layer 2 cell at (5,5) survives",
+              gmnav_overlay_node_at(_mo, 5, 5, 2) != GMNAV_NO_NODE, true);
+    gmt_check("removed layer 1 cell at (5,5) is gone",
+              gmnav_overlay_node_at(_mo, 5, 5, 1), GMNAV_NO_NODE);
+	
+    gmt_head("B24 node_at can include tombstones on request");
+
+    var _gq  = gmt_bridge_level();
+    var _ovq = _gq.overlay;
+    var _dq  = gmnav_overlay_node_at(_ovq, 5, 5, 1);
+
+    gmnav_overlay_remove(_ovq, _dq);
+
+    gmt_check("the walkable lookup hides it",
+              gmnav_overlay_node_at(_ovq, 5, 5, 1), GMNAV_NO_NODE);
+    gmt_check("the raw lookup finds it",
+              gmnav_overlay_node_at(_ovq, 5, 5, 1, true), _dq);
+
+    var _readd = gmnav_overlay_add(_ovq, 5, 5, 1);
+    gmt_check("re-adding returns the same id", _readd, _dq);
+    gmt_check("and the walkable lookup sees it again",
+              gmnav_overlay_node_at(_ovq, 5, 5, 1), _dq);
+}
+
+function gmt_test_failed_repath() {
+    gmt_head("A7 a failed repath clears the path");
+
+    var _g    = gmt_doors();
+    var _sched = gmnav_scheduler_create(_g, 5000, 2);
+
+    var _a = gmnav_agent_create(_sched, 16, 176, 8, 2);
+    gmnav_agent_goto(_a, 320, 176);
+
+    for (var _i = 0; _i < 10; _i++) {
+        gmnav_scheduler_update(_sched);
+        gmnav_agent_update(_a);
+        _a.x += _a.vx;
+        _a.y += _a.vy;
+    }
+
+    gmt_check("agent has a path before the change", gmnav_agent_has_path(_a), true);
+    gmt_check("agent has moved", _a.x > 16, true);
+
+    for (var _r = 1; _r < _g.height - 1; _r++) {
+        gmnav_grid_set_blocked(_g, 5, _r, true);
+    }
+
+    gmnav_agent_goto(_a, 320, 176);
+
+    for (var _i = 0; _i < 200; _i++) {
+        gmnav_scheduler_update(_sched);
+        gmnav_agent_update(_a);
+        if (gmnav_agent_failed(_a)) break;
+    }
+
+    gmt_check("agent reports failed", gmnav_agent_failed(_a), true);
+    gmt_check("path is cleared",       gmnav_agent_has_path(_a), false);
+    gmt_check("goal dropped",          _a.has_goal, false);
+    gmt_check("ticket released",       _a.ticket == undefined, true);
+
+    var _v0 = point_distance(0, 0, _a.vx, _a.vy);
+    for (var _j = 0; _j < 30; _j++) {
+        gmnav_agent_update(_a);
+    }
+    var _v1 = point_distance(0, 0, _a.vx, _a.vy);
+
+    gmt_check("velocity decayed after failure", _v1 < _v0, true);
+}

@@ -1,0 +1,13 @@
+{
+  "$GMScript":"v1",
+  "%Name":"scr_demo_20",
+  "isCompatibility":false,
+  "isDnD":false,
+  "name":"scr_demo_20",
+  "parent":{
+    "name":"20",
+    "path":"folders/demos/20-29/20.yy",
+  },
+  "resourceType":"GMScript",
+  "resourceVersion":"2.0",
+}

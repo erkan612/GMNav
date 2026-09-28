@@ -2,7 +2,7 @@ layout_idx  = 0;
 view_mode   = 0;
 
 show_grid   = true;
-avoid_pinch = false;
+avoid_pinch = true;
 
 col_small  = #E8C46A;
 col_medium = #E0A050;

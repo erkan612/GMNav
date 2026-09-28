@@ -726,7 +726,9 @@ function gmt_field_exits_via(_grid, _field, _from, _deck, _max_hops = 128) { // 
 function gmt_ov_clearance_brute(_ov, _index) { // the definition, checked the slow way
     var _cap = global.gmnav.config.CLEARANCE_MAX;
 
-    if ((_ov.flags[_index] & GMNAV_FLAG_BLOCKED) != 0) return 0;
+    var _f = _ov.flags[_index];
+    if ((_f & GMNAV_FLAG_BLOCKED) != 0) return 0;
+    if ((_f & GMNAV_FLAG_REMOVED) != 0) return 0;
 
     var _c = _ov.col[_index];
     var _r = _ov.row[_index];

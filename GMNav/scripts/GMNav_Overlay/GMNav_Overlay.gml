@@ -58,13 +58,29 @@ function gmnav_overlay_layer(_ov, _node) { // layer 0 is the base grid itself, s
     return _ov.layer[_i];
 }
 
-function gmnav_overlay_node_at(_ov, _col, _row, _layer) {
+//function gmnav_overlay_node_at(_ov, _col, _row, _layer) {
+//    if (_layer == 0) return gmnav_grid_node(_ov.grid, _col, _row);
+
+//    var _k = string(_layer) + "," + string(_col) + "," + string(_row);
+//    if (!variable_struct_exists(_ov.key, _k)) return GMNAV_NO_NODE;
+
+//    var _n = _ov.key[$ _k];
+
+//    if (gmnav_overlay_is_removed(_ov, _n)) return GMNAV_NO_NODE;
+
+//    return _n;
+//}
+function gmnav_overlay_node_at(_ov, _col, _row, _layer, _include_removed = false) {
     if (_layer == 0) return gmnav_grid_node(_ov.grid, _col, _row);
 
     var _k = string(_layer) + "," + string(_col) + "," + string(_row);
     if (!variable_struct_exists(_ov.key, _k)) return GMNAV_NO_NODE;
 
-    return _ov.key[$ _k];
+    var _n = _ov.key[$ _k];
+
+    if (!_include_removed && gmnav_overlay_is_removed(_ov, _n)) return GMNAV_NO_NODE;
+
+    return _n;
 }
 
 function gmnav_overlay_col(_ov, _node) {
@@ -81,7 +97,18 @@ function gmnav_overlay_add(_ov, _col, _row, _layer) { // adds one walkable cell 
     if (_layer <= 0) return GMNAV_NO_NODE;
 
     var _k = string(_layer) + "," + string(_col) + "," + string(_row);
-    if (variable_struct_exists(_ov.key, _k)) return _ov.key[$ _k];
+
+    if (variable_struct_exists(_ov.key, _k)) {
+        var _n = _ov.key[$ _k];
+        var _i = _n - _ov.base;
+
+        if ((_ov.flags[_i] & GMNAV_FLAG_REMOVED) != 0) {
+            _ov.flags[_i] = _ov.flags[_i] & ~GMNAV_FLAG_REMOVED;
+            _ov.ready = false;
+            _ov.grid.version++;
+        }
+        return _n;
+    }
 
     var _id = _ov.base + _ov.count;
 
@@ -185,7 +212,10 @@ function gmnav_overlay_finish(_ov) { // joins same layer neighbours automaticall
     var _pax  = _lay.parity_axis;
 
     for (var _i = 0; _i < _ov.count; _i++) {
-        if ((_ov.flags[_i] & GMNAV_FLAG_BLOCKED) != 0) continue;
+        var _f = _ov.flags[_i];
+
+        if ((_f & GMNAV_FLAG_BLOCKED) != 0) continue;
+        if ((_f & GMNAV_FLAG_REMOVED) != 0) continue;
 
         var _c = _ov.col[_i];
         var _r = _ov.row[_i];
@@ -319,7 +349,120 @@ function gmnav_overlay_set_cost(_ov, _node, _cost) {
 function gmnav_overlay_is_blocked(_ov, _node) {
     var _i = _node - _ov.base;
     if (_i < 0 || _i >= _ov.count) return true;
-    return ((_ov.flags[_i] & GMNAV_FLAG_BLOCKED) != 0);
+
+    var _f = _ov.flags[_i];
+    return (((_f & GMNAV_FLAG_BLOCKED) != 0) || ((_f & GMNAV_FLAG_REMOVED) != 0));
+}
+
+
+function gmnav_overlay_is_removed(_ov, _node) {
+    var _i = _node - _ov.base;
+    if (_i < 0 || _i >= _ov.count) return false;
+    return ((_ov.flags[_i] & GMNAV_FLAG_REMOVED) != 0);
+}
+
+
+function gmnav_overlay_remove(_ov, _node) { // marks a cell as gone. it stays in the arrays as a tombstone until gmnav_overlay_compact is called, but from this point on it is impassable, unreachable from world_to_node, and skipped at the next finish. adding the same cell back clears the tombstone and returns the same node id
+    var _i = _node - _ov.base;
+    if (_i < 0 || _i >= _ov.count) return false;
+
+    if ((_ov.flags[_i] & GMNAV_FLAG_REMOVED) != 0) return true;
+
+    _ov.flags[_i] = _ov.flags[_i] | GMNAV_FLAG_REMOVED;
+    _ov.ready = false;
+
+    _ov.grid.version++;
+    __gmnav_grid_note_edit(_ov.grid, _ov.col[_i], _ov.row[_i],
+                                     _ov.col[_i], _ov.row[_i]);
+    return true;
+}
+
+
+function gmnav_overlay_compact(_ov) { // drops every tombstoned cell and renumbers the rest. destructive. any node id the caller holds is invalid after this call, and any id that pointed at a removed cell is gone. the returned array maps old slot index to new slot index, or to GMNAV_NO_NODE for a removed cell
+    var _old_count = _ov.count;
+    if (_old_count == 0) return undefined;
+
+    var _map = array_create(_old_count, GMNAV_NO_NODE);
+
+    var _nc = [];
+    var _nr = [];
+    var _nl = [];
+    var _nf = [];
+    var _nk = [];
+    var _nlr = [];
+    var _no = [];
+
+    for (var _i = 0; _i < _old_count; _i++) {
+        if ((_ov.flags[_i] & GMNAV_FLAG_REMOVED) != 0) continue;
+
+        _map[_i] = array_length(_nc);
+
+        array_push(_nc,  _ov.col[_i]);
+        array_push(_nr,  _ov.row[_i]);
+        array_push(_nl,  _ov.layer[_i]);
+        array_push(_nf,  _ov.flags[_i]);
+        array_push(_nk,  _ov.cost[_i]);
+        array_push(_nlr, _ov.clear[_i]);
+        array_push(_no,  _ov.offset[_i]);
+    }
+
+    // rebuild the position to node map
+    var _key = {};
+    var _new_count = array_length(_nc);
+    var _maxl = 0;
+
+    for (var _i = 0; _i < _new_count; _i++) {
+        var _k = string(_nl[_i]) + "," + string(_nc[_i]) + "," + string(_nr[_i]);
+        _key[$ _k] = _ov.base + _i;
+        if (_nl[_i] > _maxl) _maxl = _nl[_i];
+    }
+
+    // remap every authored link. a link touching a removed cell is dropped and a link touching a live cell is renumbered
+    var _new_links = [];
+
+    for (var _i = 0; _i < array_length(_ov.links); _i++) {
+        var _lk = _ov.links[_i];
+        var _a  = _lk[0];
+        var _b  = _lk[1];
+
+        var _na = _a;
+        var _nb = _b;
+
+        if (_a >= _ov.base) {
+            var _ai = _a - _ov.base;
+            if (_ai < 0 || _ai >= _old_count) continue;
+            if (_map[_ai] == GMNAV_NO_NODE) continue;
+            _na = _ov.base + _map[_ai];
+        }
+
+        if (_b >= _ov.base) {
+            var _bi = _b - _ov.base;
+            if (_bi < 0 || _bi >= _old_count) continue;
+            if (_map[_bi] == GMNAV_NO_NODE) continue;
+            _nb = _ov.base + _map[_bi];
+        }
+
+        array_push(_new_links, [_na, _nb, _lk[2], _lk[3]]);
+    }
+
+    _ov.col      = _nc;
+    _ov.row      = _nr;
+    _ov.layer    = _nl;
+    _ov.flags    = _nf;
+    _ov.cost     = _nk;
+    _ov.clear    = _nlr;
+    _ov.offset   = _no;
+    _ov.key      = _key;
+    _ov.links    = _new_links;
+    _ov.count    = _new_count;
+    _ov.max_layer = _maxl;
+    _ov.ready    = false;
+
+    _ov.grid.version++;
+
+    gmnav_overlay_finish(_ov);
+
+    return _map;
 }
 
 function __gmnav_ov_clearance(_ov) {
@@ -327,7 +470,9 @@ function __gmnav_ov_clearance(_ov) {
     var _cap = global.gmnav.config.CLEARANCE_MAX;
 
     for (var _i = 0; _i < _n; _i++) {
-        _ov.clear[_i] = ((_ov.flags[_i] & GMNAV_FLAG_BLOCKED) != 0) ? 0 : _cap;
+        var _f = _ov.flags[_i];
+        _ov.clear[_i] = (((_f & GMNAV_FLAG_BLOCKED) != 0)
+                      || ((_f & GMNAV_FLAG_REMOVED) != 0)) ? 0 : _cap;
     }
 
     var _changed = true;

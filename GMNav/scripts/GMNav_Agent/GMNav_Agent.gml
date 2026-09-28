@@ -246,6 +246,8 @@ function __gmnav_agent_collect_ticket(_agent) {
         _agent.ticket   = undefined;
         _agent.has_goal = false;
         _agent.failed   = true;
+        _agent.path     = undefined;  // how wonderful it is to miss the most simpliest point
+        _agent.seek_i   = 1;          // this should cover the failed repaths
     }
 }
 
