@@ -1,4 +1,5 @@
-function gmnav_scheduler_create(_target, _budget = global.gmnav.config.DEFAULT_BUDGET, _concurrent = 4) {
+function gmnav_scheduler_create(_target, _budget = global.gmnav.config.DEFAULT_BUDGET,
+                                _concurrent = 4, _heuristic = gmnav_heuristic.AUTO) {
     var _dom = _target[$ "domain"] ?? gmnav_domain.GRID;
 
     return {
@@ -6,6 +7,8 @@ function gmnav_scheduler_create(_target, _budget = global.gmnav.config.DEFAULT_B
         target     : _target,
 
         grid       : (_dom == gmnav_domain.PLATFORM) ? _target.grid : _target,
+
+        heuristic  : _heuristic,
 
         budget     : _budget,
         concurrent : min(_concurrent, _target.slot_max),
@@ -28,7 +31,8 @@ function gmnav_scheduler_request(_sched, _start_node, _goal_node,
                                  _max_climb = undefined,
                                  _max_drop = undefined,
                                  _allow_drop = false,
-                                 _avoid_pinch = false) {
+                                 _avoid_pinch = false,
+                                 _on_complete = undefined) {
     var _ticket = {
         state      : gmnav_state.IDLE,
         priority   : _priority,
@@ -48,7 +52,9 @@ function gmnav_scheduler_request(_sched, _start_node, _goal_node,
         path       : [],
         links      : [],   // platformer domain only
         stale      : false,
-        cancelled  : false
+        cancelled  : false,
+
+        on_complete : _on_complete
     };
 
     if (_priority == gmnav_priority.IMMEDIATE) {
@@ -102,6 +108,8 @@ function gmnav_scheduler_update(_sched) {
             if (_st == gmnav_state.FOUND) __gmnav_sched_collect(_sched, _t);
             __gmnav_sched_recycle(_sched, _t);
             array_delete(_sched.active, i, 1);
+
+            __gmnav_sched_fire_ticket(_t);
         }
     }
 
@@ -139,7 +147,7 @@ function __gmnav_sched_make(_sched) {
 
     return (_sched.domain == gmnav_domain.PLATFORM)
          ? gmnav_graphsearch_create(_sched.target)
-         : gmnav_search_create(_sched.target);
+         : gmnav_search_create(_sched.target, _sched.heuristic);
 }
 
 function __gmnav_sched_begin(_sched, _srch, _t) {
@@ -211,6 +219,7 @@ function __gmnav_sched_promote(_sched) {
         if (_srch.state == gmnav_state.FAILED) {
             _t.state = gmnav_state.FAILED;
             array_delete(_sched.queue, 0, 1);
+            __gmnav_sched_fire_ticket(_t);
             continue;
         }
         break;
@@ -254,6 +263,15 @@ function __gmnav_sched_recycle(_sched, _ticket) {
     }
 }
 
+function __gmnav_sched_fire_ticket(_ticket) {
+    if (_ticket.on_complete == undefined) return;
+
+    var _t = typeof(_ticket.on_complete);
+    if (_t != "function" && _t != "method") return;
+
+    _ticket.on_complete(_ticket);
+}
+
 function __gmnav_sched_run_immediate(_sched, _ticket) {
     var _srch = __gmnav_sched_make(_sched);
 
@@ -274,4 +292,6 @@ function __gmnav_sched_run_immediate(_sched, _ticket) {
 
     _ticket.state = _st;
     __gmnav_sched_recycle(_sched, _ticket);
+
+    __gmnav_sched_fire_ticket(_ticket);
 }

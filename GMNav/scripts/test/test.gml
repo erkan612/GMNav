@@ -5034,3 +5034,307 @@ function gmt_test_failed_repath() {
 
     gmt_check("velocity decayed after failure", _v1 < _v0, true);
 }
+
+function gmt_test_custom_heuristic() {
+    gmt_head("X1 the heuristic argument is honoured");
+
+    var _g = gmt_maze();
+
+    var _auto = gmnav_search_create(_g);
+    gmt_check("default stores AUTO", _auto.h_mode, gmnav_heuristic.AUTO);
+
+    var _zero = gmnav_search_create(_g, gmnav_heuristic.ZERO);
+    gmt_check("an explicit ZERO is stored", _zero.h_mode, gmnav_heuristic.ZERO);
+
+    gmnav_search_begin(_zero, 0, 4);
+    var _guard = 0;
+    while (_zero.state == gmnav_state.WORKING && _guard++ < 1000) {
+        gmnav_search_step(_zero, 1000);
+    }
+    gmt_check("ZERO via the argument resolves to ZERO",
+              _zero.h_mode, gmnav_heuristic.ZERO);
+    gmt_note("ZERO expansions", _zero.expansions);
+
+    gmt_head("X2 a custom function is stored and called");
+
+    var _zero_fn = function(_c, _r, _gc, _gr, _grid) { return 0; };
+
+    var _cust = gmnav_search_create(_g, _zero_fn);
+    gmt_check("the function reference is stored", _cust.h_mode, _zero_fn);
+
+    gmnav_search_begin(_cust, 0, 4);
+    gmt_check("and survives begin", _cust.h_mode, _zero_fn);
+
+    _guard = 0;
+    while (_cust.state == gmnav_state.WORKING && _guard++ < 1000) {
+        gmnav_search_step(_cust, 1000);
+    }
+
+    gmt_check("the route is found", _cust.state, gmnav_state.FOUND);
+    gmt_note("custom zero expansions", _cust.expansions);
+
+    gmt_check("the custom function is being called",
+              _cust.expansions, _zero.expansions);
+
+    gmt_head("X3 a scaled octile estimate is a tighter bound than ZERO");
+
+    var _oct = function(_c, _r, _gc, _gr, _grid) {
+        var _dx = abs(_c - _gc);
+        var _dy = abs(_r - _gr);
+        var _lo = min(_dx, _dy);
+        return (_dx + _dy) + (GMNAV_SQRT2 - 2) * _lo;
+    };
+
+    var _oct_s = gmnav_search_create(_g, _oct);
+    gmnav_search_begin(_oct_s, 0, 4);
+
+    _guard = 0;
+    while (_oct_s.state == gmnav_state.WORKING && _guard++ < 1000) {
+        gmnav_search_step(_oct_s, 1000);
+    }
+
+    gmt_check("a reimplemented octile still finds a route",
+              _oct_s.state, gmnav_state.FOUND);
+    gmt_note("reimplemented octile expansions", _oct_s.expansions);
+
+    var _ref = gmnav_search_create(_g);
+    gmnav_search_begin(_ref, 0, 4);
+
+    _guard = 0;
+    while (_ref.state == gmnav_state.WORKING && _guard++ < 1000) {
+        gmnav_search_step(_ref, 1000);
+    }
+
+    gmt_check("and matches the built in octile expansion for expansion",
+              _oct_s.expansions, _ref.expansions);
+    gmt_check_f("and matches the built in octile on total cost",
+                _oct_s.slot_g_final, _ref.slot_g_final, 0.0001);
+
+    gmt_head("X4 the scheduler carries the heuristic");
+
+    var _sg = gmt_maze();
+    var _sched = gmnav_scheduler_create(_sg, 4000, 2, _zero_fn);
+
+    gmt_check("the scheduler stores the function",
+              _sched.heuristic, _zero_fn);
+
+    var _t = gmnav_scheduler_request(_sched, 0, 4, gmnav_priority.IMMEDIATE);
+    gmt_check("and still resolves", _t.state, gmnav_state.FOUND);
+    gmt_check("into a real route",
+              array_length(gmnav_scheduler_get_path(_t)) > 0, true);
+
+    gmt_head("X5 the platform domain ignores the heuristic");
+
+    var _pgd = gmt_gap_level(16, 2);
+    var _pg  = gmnav_platgraph_create(_pgd, gmt_mover());
+    gmnav_platgraph_bake(_pg);
+
+    var _ps = gmnav_scheduler_create(_pg, 1500, 2, _zero_fn);
+    gmt_check("platform scheduler still accepts the argument",
+              _ps.heuristic, _zero_fn);
+
+    var _pt = gmnav_scheduler_request(_ps, 0, 13, gmnav_priority.IMMEDIATE);
+    gmt_check("and resolves normally", _pt.state, gmnav_state.FOUND);
+}
+
+function gmt_test_callbacks() {
+    gmt_head("CB1 agent on_arrived fires once");
+
+    var _g     = gmt_open5();
+    var _sched = gmnav_scheduler_create(_g, 5000, 2);
+
+    var _a = gmnav_agent_create(_sched, 16, 16, 8, 2);
+    _a.__arrived_calls = 0;
+    _a.on_arrived = function(_ag) { _ag.__arrived_calls++; };
+
+    gmnav_agent_goto(_a, 144, 144, gmnav_priority.IMMEDIATE);
+
+    for (var _i = 0; _i < 400; _i++) {
+        gmnav_scheduler_update(_sched);
+        gmnav_agent_update(_a);
+        _a.x += _a.vx;
+        _a.y += _a.vy;
+        if (gmnav_agent_arrived(_a) && _a.__arrived_calls > 0) break;
+    }
+
+    gmt_check("agent arrived",      gmnav_agent_arrived(_a), true);
+    gmt_check("the callback fired", (_a.__arrived_calls > 0), true);
+    gmt_check("and only once",      _a.__arrived_calls, 1);
+
+    gmt_head("CB2 agent on_failed fires once");
+
+    var _mg = gmt_maze();
+    var _ms = gmnav_scheduler_create(_mg, 5000, 2);
+
+    var _b = gmnav_agent_create(_ms, 16, 16, 8, 2);
+    _b.__failed_calls = 0;
+    _b.on_failed = function(_ag) { _ag.__failed_calls++; };
+
+    gmnav_agent_goto(_b, 80, 16, gmnav_priority.IMMEDIATE);
+
+    for (var _i = 0; _i < 200; _i++) {
+        gmnav_scheduler_update(_ms);
+        gmnav_agent_update(_b);
+        _b.x += _b.vx;
+        _b.y += _b.vy;
+        if (gmnav_agent_failed(_b)) break;
+    }
+
+    gmt_check("agent failed",       gmnav_agent_failed(_b), true);
+    gmt_check("the callback fired", (_b.__failed_calls > 0), true);
+    gmt_check("and only once",      _b.__failed_calls, 1);
+
+    gmt_head("CB3 the callback sees the final state");
+
+    var _cg = gmt_open5();
+    var _cs = gmnav_scheduler_create(_cg, 5000, 2);
+
+    var _c = gmnav_agent_create(_cs, 16, 16, 8, 2);
+    _c.__state_at_callback = "unset";
+    _c.on_arrived = function(_ag) {
+        _ag.__state_at_callback = (gmnav_agent_arrived(_ag) ? "arrived" : "not arrived");
+    };
+
+    gmnav_agent_goto(_c, 144, 144, gmnav_priority.IMMEDIATE);
+
+    for (var _i = 0; _i < 400; _i++) {
+        gmnav_scheduler_update(_cs);
+        gmnav_agent_update(_c);
+        _c.x += _c.vx;
+        _c.y += _c.vy;
+        if (gmnav_agent_arrived(_c)) break;
+    }
+
+    gmt_check("inside the callback the arrival latch is already set",
+              _c.__state_at_callback, "arrived");
+
+    gmt_head("CB4 ticket on_complete fires through the request argument");
+
+    var _tg = gmt_open5();
+    var _ts = gmnav_scheduler_create(_tg, 5000, 2);
+
+    var _cb = function(_tk) {
+        if (!variable_struct_exists(_tk, "__calls")) _tk.__calls = 0;
+        _tk.__calls += 1;
+    };
+
+    var _t = gmnav_scheduler_request(_ts, 0, 24, gmnav_priority.IMMEDIATE,
+                                     false, undefined, 0,
+                                     undefined, undefined, false,
+                                     false, _cb);
+
+    gmt_check("immediate request resolved", _t.state, gmnav_state.FOUND);
+    gmt_check("the callback fired inside the request", _t.__calls, 1);
+
+    var _t3 = gmnav_scheduler_request(_ts, 0, 24, gmnav_priority.NORMAL,
+                                      false, undefined, 0,
+                                      undefined, undefined, false,
+                                      false, _cb);
+
+    for (var _i = 0; _i < 100; _i++) {
+        gmnav_scheduler_update(_ts);
+        if (_t3.state == gmnav_state.FOUND || _t3.state == gmnav_state.FAILED) break;
+    }
+
+    gmt_check("budgeted ticket found", _t3.state, gmnav_state.FOUND);
+    gmt_check("the callback fired once through the update loop", _t3.__calls, 1);
+
+    gmt_head("CB5 a callback attached after an immediate request does not fire");
+
+    var _ig = gmt_open5();
+    var _is = gmnav_scheduler_create(_ig, 5000, 2);
+
+    var _it = gmnav_scheduler_request(_is, 0, 24, gmnav_priority.IMMEDIATE);
+
+    _it.__late_calls = 0;
+    _it.on_complete = function(_tk) { _tk.__late_calls = _tk.__late_calls + 1; };
+
+    gmt_check("immediate request resolved", _it.state, gmnav_state.FOUND);
+    gmt_check("no retroactive fire from the late attach", _it.__late_calls, 0);
+
+    gmt_head("CB6 a callback that is not set is a no-op");
+
+    var _ng = gmt_open5();
+    var _ns = gmnav_scheduler_create(_ng, 5000, 2);
+    var _n  = gmnav_agent_create(_ns, 16, 16, 8, 2);
+
+    gmnav_agent_goto(_n, 144, 144, gmnav_priority.IMMEDIATE);
+
+    var _nframe = 0;
+    for (var _i = 0; _i < 400; _i++) {
+        gmnav_scheduler_update(_ns);
+        gmnav_agent_update(_n);
+        _n.x += _n.vx;
+        _n.y += _n.vy;
+        _nframe = _i;
+        if (gmnav_agent_arrived(_n)) break;
+    }
+
+    gmt_check("the agent still arrives", gmnav_agent_arrived(_n), true);
+    gmt_note("frames", _nframe);
+
+    gmt_head("CB7 a callback set to a non function is silently ignored");
+
+    var _wg = gmt_open5();
+    var _ws = gmnav_scheduler_create(_wg, 5000, 2);
+    var _w  = gmnav_agent_create(_ws, 16, 16, 8, 2);
+
+    _w.on_arrived = 42;
+
+    gmnav_agent_goto(_w, 144, 144, gmnav_priority.IMMEDIATE);
+
+    for (var _i = 0; _i < 400; _i++) {
+        gmnav_scheduler_update(_ws);
+        gmnav_agent_update(_w);
+        _w.x += _w.vx;
+        _w.y += _w.vy;
+        if (gmnav_agent_arrived(_w)) break;
+    }
+
+    gmt_check("the agent arrives with a junk callback set",
+              gmnav_agent_arrived(_w), true);
+
+    gmt_head("CB8 search on_complete fires");
+
+    var _sg = gmt_open5();
+    var _s  = gmnav_search_create(_sg);
+
+    _s.__calls = 0;
+    _s.on_complete = function(_sr) { _sr.__calls = _sr.__calls + 1; };
+
+    gmnav_search_begin(_s, 0, 24);
+
+    var _guard = 0;
+    while (_s.state == gmnav_state.WORKING && _guard++ < 1000) {
+        gmnav_search_step(_s, 1000);
+    }
+
+    gmt_check("search found", _s.state, gmnav_state.FOUND);
+    gmt_check("the callback fired", (_s.__calls > 0), true);
+    gmt_check("and only once", _s.__calls, 1);
+
+    gmt_head("CB9 a callback that repaths the same agent is not fired reentrant");
+
+    var _rg = gmt_open5();
+    var _rs = gmnav_scheduler_create(_rg, 5000, 2);
+
+    var _r = gmnav_agent_create(_rs, 16, 16, 8, 2);
+    _r.__fires = 0;
+
+    _r.on_arrived = function(_ag) {
+        _ag.__fires = _ag.__fires + 1;
+        if (_ag.__fires < 3) gmnav_agent_goto(_ag, 144, 16, gmnav_priority.IMMEDIATE);
+    };
+
+    gmnav_agent_goto(_r, 144, 144, gmnav_priority.IMMEDIATE);
+
+    for (var _i = 0; _i < 800; _i++) {
+        gmnav_scheduler_update(_rs);
+        gmnav_agent_update(_r);
+        _r.x += _r.vx;
+        _r.y += _r.vy;
+        if (_r.__fires >= 3) break;
+    }
+
+    gmt_check("the callback fired multiple times", (_r.__fires >= 3), true);
+}

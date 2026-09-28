@@ -12,7 +12,7 @@ function gmnav_search_create(_grid, _heuristic = gmnav_heuristic.AUTO) {
         goal_x      : 0,
         goal_y      : 0,
 
-        h_mode      : gmnav_heuristic.OCTILE,
+        h_mode      : _heuristic,
         corner_cut  : false,
 		
 		need_clear  : 0,
@@ -27,6 +27,8 @@ function gmnav_search_create(_grid, _heuristic = gmnav_heuristic.AUTO) {
         result      : [],
         slot_g_final: 0,
         profile     : undefined,
+
+        on_complete : undefined
     };
 }
 
@@ -145,6 +147,8 @@ function gmnav_search_step(_srch, _budget = global.gmnav.config.DEFAULT_BUDGET) 
         if (_heap.count == 0) {
             _srch.state = gmnav_state.FAILED;
             gmnav_search_release(_srch);
+
+            __gmnav_search_fire_complete(_srch);
             return _srch.state;
         }
 
@@ -160,6 +164,8 @@ function gmnav_search_step(_srch, _budget = global.gmnav.config.DEFAULT_BUDGET) 
             __gmnav_search_reconstruct(_srch);
             _srch.state = gmnav_state.FOUND;
             gmnav_search_release(_srch);
+
+            __gmnav_search_fire_complete(_srch);
             return _srch.state;
         }
 
@@ -358,6 +364,15 @@ function gmnav_search_release(_srch) {
     }
 }
 
+function __gmnav_search_fire_complete(_srch) {
+    if (_srch.on_complete == undefined) return;
+
+    var _t = typeof(_srch.on_complete);
+    if (_t != "function" && _t != "method") return;
+
+    _srch.on_complete(_srch);
+}
+
 function gmnav_search_abort(_srch) {
     gmnav_search_release(_srch);
     gmnav_heap_clear(_srch.heap);
@@ -388,6 +403,9 @@ function __gmnav_search_reconstruct(_srch) {
 }
 
 function __gmnav_heuristic_resolve(_lay, _requested) {
+    var _t = typeof(_requested);
+    if (_t == "function" || _t == "method") return _requested;
+
     if (_requested != gmnav_heuristic.AUTO) return _requested;
 
     switch (_lay.mode) {
@@ -406,6 +424,11 @@ function __gmnav_heuristic_resolve(_lay, _requested) {
 }
 
 function __gmnav_h(_srch, _col, _row) {
+    var _t = typeof(_srch.h_mode);
+    if (_t == "function" || _t == "method") {
+        return _srch.h_mode(_col, _row, _srch.goal_c, _srch.goal_r, _srch.grid);
+    }
+
     var _dx = abs(_col - _srch.goal_c);
     var _dy = abs(_row - _srch.goal_r);
 

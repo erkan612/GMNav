@@ -29,6 +29,9 @@ function gmnav_agent_create(_sched, _x, _y, _radius = 8, _speed = 2) {
 											
         arrived    : false,					
         failed : false,						// the last goal could not be routed to. cleared by the next goto or stop
+
+        on_arrived : undefined,
+        on_failed  : undefined,
 											
         goal_x     : 0,						
         goal_y     : 0,						
@@ -154,6 +157,8 @@ function gmnav_agent_update(_agent, _neighbours = undefined) {
         _agent.arrived = true;
         _agent.vx = lerp(_agent.vx, 0, _agent.accel);
         _agent.vy = lerp(_agent.vy, 0, _agent.accel);
+
+        __gmnav_agent_fire_arrived(_agent);
         return;
     }
 
@@ -247,7 +252,9 @@ function __gmnav_agent_collect_ticket(_agent) {
         _agent.has_goal = false;
         _agent.failed   = true;
         _agent.path     = undefined;  // how wonderful it is to miss the most simpliest point
-        _agent.seek_i   = 1;          // this should cover the failed repaths
+        _agent.seek_i   = 1;		  // this should cover the failed repaths
+
+        __gmnav_agent_fire_failed(_agent);
     }
 }
 
@@ -551,6 +558,25 @@ function __gmnav_agent_avoid_follow(_agent, _neighbours, _desired_x, _desired_y)
 
 function gmnav_agent_layer(_agent) { // 0 is the base grid
     return _agent.layer;
+}
+
+function __gmnav_agent_fire_arrived(_agent) {
+    if (_agent.on_arrived == undefined) return;
+
+    var _t = typeof(_agent.on_arrived);
+    if (_t != "function" && _t != "method") return;
+
+    _agent.on_arrived(_agent);
+}
+
+
+function __gmnav_agent_fire_failed(_agent) {
+    if (_agent.on_failed == undefined) return;
+
+    var _t = typeof(_agent.on_failed);
+    if (_t != "function" && _t != "method") return;
+
+    _agent.on_failed(_agent);
 }
 
 function __gmnav_agent_path_disturbed(_agent) { // did any edit since this path was built land on the part of it still to walk
