@@ -35,6 +35,13 @@ gmt_test_stamp_path();
 gmt_test_stamp_overlay();
 gmt_test_avoidance();
 gmt_test_drop_links();
+gmt_test_smooth_staggered();
+gmt_test_smooth_hex();
+gmt_test_clearance_layouts();
+gmt_test_flowfield_clearance();
+gmt_test_avoid_pinch();
+gmt_test_avoid_pinch_smoothing();
+gmt_test_relax_zero();
 
 gmt_head("D scheduler (running)");
 

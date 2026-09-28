@@ -17,6 +17,8 @@ function gmnav_search_create(_grid, _heuristic = gmnav_heuristic.AUTO) {
 		
 		need_clear  : 0,
         relax       : 2,
+		
+        avoid_pinch : false, // only on ISO_STAGGERED
 
         version     : -1,
         stale       : false,
@@ -30,7 +32,8 @@ function gmnav_search_create(_grid, _heuristic = gmnav_heuristic.AUTO) {
 
 function gmnav_search_begin(_srch, _start_node, _goal_node, _corner_cut = false,
                             _profile = undefined, _need_clear = 0,
-                            _max_climb = undefined, _max_drop = undefined) {
+                            _max_climb = undefined, _max_drop = undefined,
+                            _avoid_pinch = false) {
     var _grid = _srch.grid;
 
     gmnav_search_abort(_srch);
@@ -67,6 +70,7 @@ function gmnav_search_begin(_srch, _start_node, _goal_node, _corner_cut = false,
     _srch.need_clear = (_grid.clear == undefined) ? 0 : _need_clear;
     _srch.max_climb = _max_climb;
     _srch.max_drop  = _max_drop;
+    _srch.avoid_pinch = _avoid_pinch;
     _srch.version    = _grid.version;
     _srch.stale      = false;
     _srch.expansions = 0;
@@ -135,6 +139,8 @@ function gmnav_search_step(_srch, _budget = global.gmnav.config.DEFAULT_BUDGET) 
 	
     var _profile = _srch.profile;
 
+    var _pinch = _srch.avoid_pinch && (_lay.mode == gmnav_layout.ISO_STAGGERED);
+
     while (_left > 0) {
         if (_heap.count == 0) {
             _srch.state = gmnav_state.FAILED;
@@ -175,7 +181,12 @@ function gmnav_search_step(_srch, _budget = global.gmnav.config.DEFAULT_BUDGET) 
 
                 if (_need > 1 && _on >= _obase) {
                     var _oclr = _ov.clear[_on - _obase];
-                    if (_oclr < _need && (_cd + 1) > _relax) continue;
+
+                    if (_oclr < _need && _on != _goal) {
+                        var _cur_clr_ov = _ov.clear[_cur - _obase];
+                        if (_cur_clr_ov >= _need) continue;
+                        if ((_cd + 1) > _relax) continue;
+                    }
                 }
 
                 var _ocost = (_on >= _obase && _srch.profile == undefined)
@@ -231,8 +242,24 @@ function gmnav_search_step(_srch, _budget = global.gmnav.config.DEFAULT_BUDGET) 
                 if (_dz > _climb || -_dz > _drop) continue;
             }
 
+            //if (_clr != undefined && _clr[_nn] < _need) { // stupid goal exemption, TODO: re enable it if things are still working out after disabling it
+            //    if (_nn != _goal) {
+            //        if (_clr[_cur] >= _need) continue;
+            //        if ((_cd + 1) > _relax) continue;
+            //    }
+            //}
             if (_clr != undefined && _clr[_nn] < _need) {
-                if (_nn != _goal && (_cd + 1) > _relax) continue;
+                if (_clr[_cur] >= _need) continue;
+                if ((_cd + 1) > _relax) continue;
+            }
+
+            if (_pinch) {
+                var _ub = (_nr - 1 < 0)
+                       || ((_flags[_nn - _w] & GMNAV_FLAG_BLOCKED) != 0);
+                var _db = (_nr + 1 >= _h)
+                       || ((_flags[_nn + _w] & GMNAV_FLAG_BLOCKED) != 0);
+
+                if (_ub && _db) continue;
             }
 
             if (_check && _dc != 0 && _dr != 0) {
@@ -278,7 +305,11 @@ function gmnav_search_step(_srch, _budget = global.gmnav.config.DEFAULT_BUDGET) 
 
                 if (_need > 1 && _un >= _obase) {
                     var _uclr = _ov.clear[_un - _obase];
-                    if (_uclr < _need && (_cd + 1) > _relax) continue;
+
+                    if (_uclr < _need && _un != _goal) {
+                        if (_clr[_cur] >= _need) continue;
+                        if ((_cd + 1) > _relax) continue;
+                    }
                 }
 
                 var _ucost = (_un >= _obase && _srch.profile == undefined)

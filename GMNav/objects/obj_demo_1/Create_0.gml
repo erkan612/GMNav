@@ -1,7 +1,7 @@
 tile = 32;
 
 // 1. describe the shape of the world
-layout = gmnav_layout_create(gmnav_layout.ORTHO, tile, tile);
+layout = gmnav_layout_create(gmnav_layout.ORTHO, tile, tile, gmnav_neighbours.FOUR);
 
 // 2. build a grid that covers the room
 grid = gmnav_grid_create(room_width div tile, room_height div tile, layout);

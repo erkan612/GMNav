@@ -28,7 +28,7 @@
 *   					╚██████╔╝██║ ╚═╝ ██║██║ ╚████║██║  ██║ ╚████╔╝ 		                 *
 *   					 ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝  ╚═══╝  		                 *
 *   							Pathfinding Engine for GameMaker	                         *
-*   						             Version 1.2.83										 *
+*   						             Version 1.3.101									 *
 *   																                         *
 *   						              by erkan612					                     *
 *   					***********************************************                      *
@@ -49,7 +49,10 @@ function gmnav_init(_overrides = undefined) {
         CLEARANCE_MAX        : 16,       // largest clearance value stored per cell
 
         // repathing
-        EDIT_RING            : 32        // recent grid edits kept, so an agent repaths only when a change lands on its route. Past this it falls back to repathing on any change, and the scan in changed_since is linear in this
+        EDIT_RING            : 32,       // recent grid edits kept, so an agent repaths only when a change lands on its route. Past this it falls back to repathing on any change, and the scan in changed_since is linear in this
+
+        // world space sampling
+        WORLD_SAMPLE_DIV     : 4         // divisor of the smaller tile dimension for any world space line walk. Smaller means more samples, which catches shallower corner grazes and costs more per call. 4 gives a sample every quarter tile
     };
 
     if (_overrides != undefined) {

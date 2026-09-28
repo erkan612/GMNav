@@ -683,7 +683,8 @@ function gmnav_util_has_line_of_sight(_grid, _x1, _y1, _x2, _y2, _radius = 0) { 
 
     // sample along the line and check the body at each sample
     var _d    = point_distance(_x1, _y1, _x2, _y2);
-    var _step = max(4, _grid.layout.tile_w * 0.25);
+    var _step = min(_grid.layout.tile_w, _grid.layout.tile_h)
+              / max(1, global.gmnav.config.WORLD_SAMPLE_DIV);
     var _n    = max(1, ceil(_d / _step));
 
     for (var i = 0; i <= _n; i++) {

@@ -987,3 +987,149 @@ function gmt_pg_edge_cost(_pg, _from, _to) { // the cost of the edge between two
     }
     return -1;
 }
+
+function gmt_stagger_room() { // an iso staggered room with a wall down the middle, gapped at the bottom. a straight line across the wall must be refused, a line through the gap must pass
+    var _g = gmnav_grid_create(11, 11,
+                 gmnav_layout_create(gmnav_layout.ISO_STAGGERED, 64, 32));
+
+    gmnav_grid_fill_blocked(_g, 0, 0, 10, 0, true);
+    gmnav_grid_fill_blocked(_g, 0, 10, 10, 10, true);
+    gmnav_grid_fill_blocked(_g, 0, 0, 0, 10, true);
+    gmnav_grid_fill_blocked(_g, 10, 0, 10, 10, true);
+
+    gmnav_grid_fill_blocked(_g, 5, 1, 5, 6, true);
+
+    return _g;
+}
+
+function gmt_hex_room() { // a pointy hex room with a wall down column 5 and a gap below it. a straight line across the wall must be refused, a line through the gap must pass
+    var _g = gmnav_grid_create(11, 11,
+                 gmnav_layout_create(gmnav_layout.HEX_POINTY, 32, 36));
+
+    gmnav_grid_fill_blocked(_g, 0, 0, 10, 0, true);
+    gmnav_grid_fill_blocked(_g, 0, 10, 10, 10, true);
+    gmnav_grid_fill_blocked(_g, 0, 0, 0, 10, true);
+    gmnav_grid_fill_blocked(_g, 10, 0, 10, 10, true);
+
+    gmnav_grid_fill_blocked(_g, 5, 1, 5, 6, true);
+
+    return _g;
+}
+
+function gmt_clearance_bfs(_grid, _node, _cap = 16) { // breadth first over the layout's own neighbour table. distance in hops to the nearest blocked cell or out of bounds, capped. matches what gmnav_clearance_build computes on hex and staggered
+    if (gmnav_grid_is_blocked(_grid, _node)) return 0;
+
+    var _lay = _grid.layout;
+    var _n   = _grid.count;
+    var _nbc = _lay.nb_count;
+    var _ndc = _lay.nb_dc;
+    var _ndr = _lay.nb_dr;
+    var _pax = _lay.parity_axis;
+    var _w   = _grid.width;
+
+    var _seen = array_create(_n, -1);
+    var _q    = [_node];
+    var _head = 0;
+
+    _seen[_node] = 0;
+
+    while (_head < array_length(_q)) {
+        var _cur = _q[_head++];
+        var _d   = _seen[_cur];
+
+        if (_d >= _cap) return _cap;
+
+        var _c = _cur % _w;
+        var _r = _cur div _w;
+
+        var _p = 0;
+        if (_pax == 1)      _p = gmnav_parity(_r);
+        else if (_pax == 2) _p = gmnav_parity(_c);
+        var _base = _p * _nbc;
+
+        for (var k = 0; k < _nbc; k++) {
+            var _idx = _base + k;
+            var _nc  = _c + _ndc[_idx];
+            var _nr  = _r + _ndr[_idx];
+
+            var _nn = gmnav_grid_node(_grid, _nc, _nr);
+
+            if (_nn == GMNAV_NO_NODE) return _d + 1;
+            if (_seen[_nn] >= 0) continue;
+            if (gmnav_grid_is_blocked(_grid, _nn)) return _d + 1;
+
+            _seen[_nn] = _d + 1;
+            array_push(_q, _nn);
+        }
+    }
+    return _cap;
+}
+
+function gmt_stagger_pinch() { // 14 by 16 staggered room. one wall down column 7 with two gaps.
+    var _g = gmnav_grid_create(14, 16,
+                 gmnav_layout_create(gmnav_layout.ISO_STAGGERED, 32, 32));
+
+    gmnav_grid_fill_blocked(_g, 0, 0, 13, 0, true);
+    gmnav_grid_fill_blocked(_g, 0, 15, 13, 15, true);
+    gmnav_grid_fill_blocked(_g, 0, 0, 0, 15, true);
+    gmnav_grid_fill_blocked(_g, 13, 0, 13, 15, true);
+
+    gmnav_grid_fill_blocked(_g, 7, 1, 7, 14, true);
+    gmnav_grid_set_blocked(_g, 7, 3, false);
+    gmnav_grid_set_blocked(_g, 7, 8, false);
+    gmnav_grid_set_blocked(_g, 7, 9, false);
+
+    return _g;
+}
+
+function gmt_stagger_pinch_sealed() { // same, but the only gap is the pinched one
+    var _g = gmnav_grid_create(14, 16,
+                 gmnav_layout_create(gmnav_layout.ISO_STAGGERED, 32, 32));
+
+    gmnav_grid_fill_blocked(_g, 0, 0, 13, 0, true);
+    gmnav_grid_fill_blocked(_g, 0, 15, 13, 15, true);
+    gmnav_grid_fill_blocked(_g, 0, 0, 0, 15, true);
+    gmnav_grid_fill_blocked(_g, 13, 0, 13, 15, true);
+
+    gmnav_grid_fill_blocked(_g, 7, 1, 7, 14, true);
+    gmnav_grid_set_blocked(_g, 7, 3, false);
+
+    return _g;
+}
+
+function gmt_solve_pinch(_grid, _a, _b, _avoid) { // a solve with the pinch flag set, since gmt_solve_z does not take it
+    var _s = gmnav_search_create(_grid);
+    if (!gmnav_search_begin(_s, _a, _b, false, undefined, 0,
+                            undefined, undefined, _avoid)) return undefined;
+
+    var _guard = 0;
+    while (_s.state == gmnav_state.WORKING && _guard++ < global.gmnav.config.MAX_STEPS) {
+        gmnav_search_step(_s, 4096);
+    }
+    return (_s.state == gmnav_state.FOUND) ? gmnav_search_get_path(_s) : undefined;
+}
+
+function gmt_path_crosses_cell(_grid, _path, _col, _row) { // samples every segment in world space and reports whether any sample lands in the given cell
+    var _lay = _grid.layout;
+    var _step = min(_lay.tile_w, _lay.tile_h) * 0.25;
+
+    for (var i = 0; i < _path.count - 1; i++) {
+        var _x0 = _path.px[i];
+        var _y0 = _path.py[i];
+        var _x1 = _path.px[i + 1];
+        var _y1 = _path.py[i + 1];
+
+        var _d = point_distance(_x0, _y0, _x1, _y1);
+        var _n = max(1, ceil(_d / _step));
+
+        for (var s = 0; s <= _n; s++) {
+            var _t  = s / _n;
+            var _sx = lerp(_x0, _x1, _t);
+            var _sy = lerp(_y0, _y1, _t);
+
+            var _cr = gmnav_layout_world_to_cell(_lay, _sx, _sy);
+            if (_cr[0] == _col && _cr[1] == _row) return true;
+        }
+    }
+    return false;
+}

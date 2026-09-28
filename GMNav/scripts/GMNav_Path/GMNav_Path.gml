@@ -83,6 +83,65 @@ function gmnav_grid_node_line_clear(_grid, _a, _b) {
                                  gmnav_grid_col(_grid, _b), gmnav_grid_row(_grid, _b));
 }
 
+function __gmnav_path_crosses_pinch(_grid, _a, _b) { // does a straight line between these two cells pass through a staggered pinch. a cell is pinched when its same column neighbours above and below are both blocked. staggered only, elsewhere the answer is always false
+    if (_grid.layout.mode != gmnav_layout.ISO_STAGGERED) return false;
+
+    var _w = _grid.width;
+    var _h = _grid.height;
+    var _fl = _grid.flags;
+
+    var _pa = gmnav_grid_node_to_world(_grid, _a);
+    var _pb = gmnav_grid_node_to_world(_grid, _b);
+
+    var _lay  = _grid.layout;
+    var _d    = point_distance(_pa[0], _pa[1], _pb[0], _pb[1]);
+    var _step = min(_lay.tile_w, _lay.tile_h) / max(1, global.gmnav.config.WORLD_SAMPLE_DIV);
+    var _n    = max(1, ceil(_d / _step));
+
+    for (var i = 0; i <= _n; i++) {
+        var _t  = i / _n;
+        var _sx = lerp(_pa[0], _pb[0], _t);
+        var _sy = lerp(_pa[1], _pb[1], _t);
+
+        var _cr = gmnav_layout_world_to_cell(_lay, _sx, _sy);
+        if (_cr[0] < 0 || _cr[1] < 0 || _cr[0] >= _w || _cr[1] >= _h) continue;
+
+        var _i = _cr[1] * _w + _cr[0];
+        if ((_fl[_i] & GMNAV_FLAG_BLOCKED) != 0) continue;
+
+        var _ub = (_cr[1] - 1 < 0)  || ((_fl[_i - _w] & GMNAV_FLAG_BLOCKED) != 0);
+        var _db = (_cr[1] + 1 >= _h) || ((_fl[_i + _w] & GMNAV_FLAG_BLOCKED) != 0);
+
+        if (_ub && _db) return true;
+    }
+    return false;
+}
+
+
+
+function __gmnav_path_line_clear_world(_grid, _x1, _y1, _x2, _y2) { // walks the segment in pixels and asks the layout which cell each sample sits in, which is the only line test that means anything on staggered iso and hex where cell adjacency does not correspond to a screen line
+    var _lay = _grid.layout;
+    var _w   = _grid.width;
+    var _h   = _grid.height;
+    var _fl  = _grid.flags;
+
+    var _d    = point_distance(_x1, _y1, _x2, _y2);
+    var _step = min(_lay.tile_w, _lay.tile_h) / max(1, global.gmnav.config.WORLD_SAMPLE_DIV);
+    var _n    = max(1, ceil(_d / _step));
+
+    for (var i = 0; i <= _n; i++) {
+        var _t  = i / _n;
+        var _sx = lerp(_x1, _x2, _t);
+        var _sy = lerp(_y1, _y2, _t);
+
+        var _cr = gmnav_layout_world_to_cell(_lay, _sx, _sy);
+
+        if (_cr[0] < 0 || _cr[1] < 0 || _cr[0] >= _w || _cr[1] >= _h) return false;
+        if ((_fl[_cr[1] * _w + _cr[0]] & GMNAV_FLAG_BLOCKED) != 0) return false;
+    }
+    return true;
+}
+
 function __gmnav_path_heading_ok(_grid, _a, _b, _dirs) { // may a unit travel this segment in one straight move
     if (_dirs <= 0) return true;
 
@@ -233,11 +292,15 @@ function __gmnav_path_cost_ok(_grid, _src, _i, _j, _profile) { // is the straigh
 //#macro GMNAV_TRACE_SMOOTH true
 
 function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
-                           _radius = 0, _headings = 0, _profile = undefined) {
+                           _radius = 0, _headings = 0, _profile = undefined,
+                           _avoid_pinch = false) {
     var _grid = _path.grid;
     var _mode = _grid.layout.mode;
 
-    if (_mode != gmnav_layout.ORTHO && _mode != gmnav_layout.ISO_DIAMOND) return;
+    if (_headings > 0
+    && (_mode == gmnav_layout.ISO_STAGGERED
+     || _mode == gmnav_layout.HEX_POINTY
+     || _mode == gmnav_layout.HEX_FLAT)) return;
 
     var _n = array_length(_path.nodes);
     if (_n <= 2) return;
@@ -266,7 +329,8 @@ function gmnav_path_smooth(_path, _max_climb = undefined, _max_drop = undefined,
 
             if (__gmnav_path_heading_ok(_grid, _src[_i], _src[_j], _headings)
             &&  __gmnav_path_corridor_ok(_grid, _src[_i], _src[_j],
-                                         _max_climb, _max_drop, _radius)) {
+                                         _max_climb, _max_drop, _radius)
+            &&  (!_avoid_pinch || !__gmnav_path_crosses_pinch(_grid, _src[_i], _src[_j]))) {
                 _best = _j;
                 break;
             }
@@ -503,12 +567,70 @@ function __gmnav_path_seg_z_ok(_grid, _x0, _y0, _x1, _y1, _climb, _drop) {
     return __gmnav_path_line_z_ok(_grid, _a, _b, _climb, _drop);
 }
 
+function __gmnav_path_line_z_world(_grid, _x1, _y1, _x2, _y2, _climb, _drop) { // the height twin of line_clear_world. on staggered and hex a cell space walk of the segment does not correspond to the line on screen, so the segment is walked in pixels and the layout resolves each sample back to a cell
+    if (_climb == undefined) return true;
+    if (!gmnav_grid_has_heights(_grid)) return true;
+
+    var _lay = _grid.layout;
+    var _w   = _grid.width;
+    var _h   = _grid.height;
+    var _hz  = _grid.height_z;
+
+    var _d    = point_distance(_x1, _y1, _x2, _y2);
+    var _step = min(_lay.tile_w, _lay.tile_h) / max(1, global.gmnav.config.WORLD_SAMPLE_DIV);
+    var _n    = max(1, ceil(_d / _step));
+
+    var _pz = undefined;
+
+    for (var i = 0; i <= _n; i++) {
+        var _t  = i / _n;
+        var _sx = lerp(_x1, _x2, _t);
+        var _sy = lerp(_y1, _y2, _t);
+
+        var _cr = gmnav_layout_world_to_cell(_lay, _sx, _sy);
+        if (_cr[0] < 0 || _cr[1] < 0 || _cr[0] >= _w || _cr[1] >= _h) return false;
+
+        var _z = _hz[_cr[1] * _w + _cr[0]];
+
+        if (_pz != undefined) {
+            var _dz = _z - _pz;
+            if (_dz > _climb || -_dz > _drop) return false;
+        }
+        _pz = _z;
+    }
+    return true;
+}
+
 function __gmnav_path_corridor_ok(_grid, _a, _b, _climb, _drop, _radius) {
-    if (!gmnav_grid_node_line_clear(_grid, _a, _b)) return false;
+    var _mode = _grid.layout.mode;
+
+    var _world_line = (_mode == gmnav_layout.ISO_STAGGERED
+                    || _mode == gmnav_layout.HEX_POINTY
+                    || _mode == gmnav_layout.HEX_FLAT);
+
+    var _pa = undefined;
+    var _pb = undefined;
+
+    if (_world_line) {
+        _pa = gmnav_grid_node_to_world(_grid, _a);
+        _pb = gmnav_grid_node_to_world(_grid, _b);
+
+        if (!__gmnav_path_line_clear_world(_grid, _pa[0], _pa[1], _pb[0], _pb[1])) return false;
+    } else {
+        if (!gmnav_grid_node_line_clear(_grid, _a, _b)) return false;
+    }
 
     var _uses_z = (_climb != undefined) && gmnav_grid_has_heights(_grid);
 
-    if (_uses_z && !__gmnav_path_line_z_ok(_grid, _a, _b, _climb, _drop)) return false;
+    if (_uses_z) {
+        if (_world_line) {
+            if (!__gmnav_path_line_z_world(_grid, _pa[0], _pa[1], _pb[0], _pb[1],
+                                           _climb, _drop)) return false;
+        } else {
+            if (!__gmnav_path_line_z_ok(_grid, _a, _b, _climb, _drop)) return false;
+        }
+    }
+
     if (_radius <= 0) return true;
 
     if (_a >= _grid.count || _b >= _grid.count) return false;

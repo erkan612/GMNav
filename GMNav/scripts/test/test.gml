@@ -162,13 +162,13 @@ function gmt_test_clearance() {
     gmt_check("radius 8 -> 1",  gmnav_clearance_for_radius(_d, 8),  1);
     gmt_check("radius 16 -> 1", gmnav_clearance_for_radius(_d, 16), 1);
     gmt_check("radius 24 -> 2", gmnav_clearance_for_radius(_d, 24), 2);
-    gmt_check("radius 40 -> 3", gmnav_clearance_for_radius(_d, 40), 3);
+	gmt_check("radius 40 -> 2", gmnav_clearance_for_radius(_d, 40), 2);
     gmt_check("radius 0 -> 1",  gmnav_clearance_for_radius(_d, 0),  1);
 
     gmt_head("C4 door selection");
 
-    var _from = gmnav_grid_node(_d, 0, 2);
-    var _to   = gmnav_grid_node(_d, 10, 2);
+    var _from = gmnav_grid_node(_d, 1, 2);
+    var _to   = gmnav_grid_node(_d, 9, 2);
 
     var _sm = gmnav_search_create(_d);
     gmnav_search_begin(_sm, _from, _to, false, undefined, 1);
@@ -207,6 +207,7 @@ function gmt_test_clearance() {
     gmt_check("tight goal unreachable", gmnav_search_step(_tg, 100000), gmnav_state.FAILED);
 
     var _ts = gmnav_search_create(_d);
+    _ts.relax = 2;
     gmt_check("tight start accepted",
               gmnav_search_begin(_ts, gmnav_grid_node(_d, 5, 2),
                                  gmnav_grid_node(_d, 2, 5), false, undefined, 2), true);
@@ -233,15 +234,17 @@ function gmt_test_clearance() {
     gmnav_search_begin(_bg2, _from, _to, false, undefined, 2);
     gmt_check("big now blocked", gmnav_search_step(_bg2, 100000), gmnav_state.FAILED);
 
-    gmt_head("C7 unsupported layouts");
-    var _hx = gmnav_grid_create(8, 8, gmnav_layout_create(gmnav_layout.HEX_POINTY, 32, 32));
-    gmt_check("hex refuses build", gmnav_clearance_build(_hx), false);
-    gmt_check("hex clear undefined", _hx.clear == undefined, true);
+    gmt_head("C7 clearance on every layout");
+    var _hx = gmnav_grid_create(10, 10, gmnav_layout_create(gmnav_layout.HEX_POINTY, 32, 36));
+    gmt_check("hex builds clearance", gmnav_clearance_build(_hx), true);
+    gmt_check("hex clear defined", _hx.clear != undefined, true);
+    gmt_check("hex border is one",
+              gmnav_clearance_at(_hx, gmnav_grid_node(_hx, 0, 0)), 1);
 
     var _hs = gmnav_search_create(_hx);
-    gmt_check("hex search begins", gmnav_search_begin(_hs, 0, 63, false, undefined, 3), true);
+    gmt_check("hex search begins", gmnav_search_begin(_hs, 55, 99, false, undefined, 1), true);
     gmt_check("hex solves", gmnav_search_step(_hs, 100000), gmnav_state.FOUND);
-    gmt_check("need_clear zeroed", _hs.need_clear, 0);
+    gmt_check("need_clear kept", _hs.need_clear, 1);
 }
 
 function gmt_test_platformer() {
@@ -1007,8 +1010,8 @@ function gmt_test_dynamic() {
 
     gmnav_grid_set_blocked(_kg, 7, 9, true);
     var _ks = gmnav_search_create(_kg);
-    gmnav_search_begin(_ks, gmnav_grid_node(_kg, 0, 7),
-                            gmnav_grid_node(_kg, 14, 7), false, undefined, 2);
+    gmnav_search_begin(_ks, gmnav_grid_node(_kg, 1, 7),
+                            gmnav_grid_node(_kg, 13, 7), false, undefined, 2);
     gmt_check("clearance auto-rebuilt by begin", gmnav_clearance_is_stale(_kg), false);
     gmt_check("solves", gmnav_search_step(_ks, 100000), gmnav_state.FOUND);
 
@@ -4100,4 +4103,701 @@ function gmt_test_drop_links() {
     var _mpath = gmnav_graphsearch_get_path(_msearch);
     gmt_note("chained path", gmt_arr_str(_mpath));
     gmt_check("three hop path", array_length(_mpath), 3);
+}
+
+function gmt_test_smooth_staggered() {
+    gmt_head("M7 smoothing on staggered iso");
+
+    var _sg = gmt_stagger_room();
+    var _st = gmnav_grid_node(_sg, 2, 2);
+    var _gl = gmnav_grid_node(_sg, 8, 2);
+
+    var _raw = gmt_solve_z(_sg, _st, _gl);
+    gmt_check("a route exists", is_array(_raw), true);
+    gmt_note("raw waypoints", array_length(_raw));
+
+    var _sp = gmnav_path_create(_sg, _raw);
+    gmt_check("path starts unsmoothed", _sp.count, array_length(_raw));
+
+    gmnav_path_smooth(_sp);
+    gmt_note("smoothed waypoints", _sp.count);
+
+    gmt_check("smoothing removes points", (_sp.count < array_length(_raw)), true);
+    gmt_check("starts where it did", _sp.nodes[0], _st);
+    gmt_check("ends at the goal", _sp.nodes[array_length(_sp.nodes) - 1], _gl);
+    gmt_check("no blocked nodes on the smoothed path",
+              gmt_path_blocked_count(_sg, _sp.nodes), 0);
+    gmt_check("every world point is a real cell",
+              gmt_path_points_clear(_sg, _sp), true);
+
+    // the wall must still be respected. row 3 sits inside the block
+    var _lw = gmnav_grid_node(_sg, 2, 3);
+    var _rw = gmnav_grid_node(_sg, 8, 3);
+    gmt_check("a straight line across the wall is refused",
+              __gmnav_path_corridor_ok(_sg, _lw, _rw, undefined, undefined, 0), false);
+
+    // and a line through the gap below it passes
+    var _lg = gmnav_grid_node(_sg, 2, 8);
+    var _rg = gmnav_grid_node(_sg, 8, 8);
+    gmt_check("a line through the gap is allowed",
+              __gmnav_path_corridor_ok(_sg, _lg, _rg, undefined, undefined, 0), true);
+
+    // heading constrained smoothing still refuses on staggered. the two leg rewrite invents a corner in cell space and cell space means nothing here
+    var _hp     = gmnav_path_create(_sg, _raw);
+    var _hcount = _hp.count;
+    gmnav_path_smooth(_hp, undefined, undefined, 0, 4);
+    gmt_check("headings 4 on staggered refuses", _hp.count, _hcount);
+
+    // the other layouts are untouched by the change
+    var _og = gmt_room_grid(20, 16);
+    var _on = gmt_solve_z(_og, gmnav_grid_node(_og, 1, 1),
+                              gmnav_grid_node(_og, 18, 14));
+    var _op = gmnav_path_create(_og, _on);
+    gmnav_path_smooth(_op);
+    gmt_check("ortho still smooths", (_op.count < array_length(_on)), true);
+    gmt_check("ortho still lands on the goal",
+              _op.nodes[array_length(_op.nodes) - 1],
+              gmnav_grid_node(_og, 18, 14));
+
+    var _dg = gmnav_grid_create(20, 20,
+                  gmnav_layout_create(gmnav_layout.ISO_DIAMOND, 64, 32));
+    gmnav_grid_fill_blocked(_dg, 0, 0, 19, 0, true);
+    gmnav_grid_fill_blocked(_dg, 0, 19, 19, 19, true);
+    gmnav_grid_fill_blocked(_dg, 0, 0, 0, 19, true);
+    gmnav_grid_fill_blocked(_dg, 19, 0, 19, 19, true);
+
+    var _dn = gmt_solve_z(_dg, gmnav_grid_node(_dg, 1, 1),
+                              gmnav_grid_node(_dg, 18, 18));
+    var _dp = gmnav_path_create(_dg, _dn);
+    gmnav_path_smooth(_dp);
+    gmt_check("iso diamond still smooths", (_dp.count < array_length(_dn)), true);
+    gmt_check("iso diamond still lands on the goal",
+              _dp.nodes[array_length(_dp.nodes) - 1],
+              gmnav_grid_node(_dg, 18, 18));
+
+    // hex still refuses, unchanged by this release
+    //var _hg = gmnav_grid_create(10, 10,
+    //              gmnav_layout_create(gmnav_layout.HEX_POINTY, 32, 36));
+    //gmnav_grid_fill_blocked(_hg, 0, 0, 9, 0, true);
+    //gmnav_grid_fill_blocked(_hg, 0, 9, 9, 9, true);
+    //gmnav_grid_fill_blocked(_hg, 0, 0, 0, 9, true);
+    //gmnav_grid_fill_blocked(_hg, 9, 0, 9, 9, true);
+
+    //var _hn = gmt_solve_z(_hg, gmnav_grid_node(_hg, 1, 1),
+    //                          gmnav_grid_node(_hg, 8, 8));
+    //var _hp2 = gmnav_path_create(_hg, _hn);
+    //var _hc  = _hp2.count;
+    //gmnav_path_smooth(_hp2);
+    //gmt_check("hex still refuses", _hp2.count, _hc);
+}
+
+function gmt_test_smooth_hex() {
+    gmt_head("M8 smoothing on hex");
+
+    var _hg = gmt_hex_room();
+    var _st = gmnav_grid_node(_hg, 2, 2);
+    var _gl = gmnav_grid_node(_hg, 8, 2);
+
+    var _raw = gmt_solve_z(_hg, _st, _gl);
+    gmt_check("a route exists", is_array(_raw), true);
+    gmt_note("raw waypoints", array_length(_raw));
+
+    var _sp = gmnav_path_create(_hg, _raw);
+    gmt_check("path starts unsmoothed", _sp.count, array_length(_raw));
+
+    gmnav_path_smooth(_sp);
+    gmt_note("smoothed waypoints", _sp.count);
+
+    gmt_check("smoothing removes points", (_sp.count < array_length(_raw)), true);
+    gmt_check("starts where it did", _sp.nodes[0], _st);
+    gmt_check("ends at the goal", _sp.nodes[array_length(_sp.nodes) - 1], _gl);
+    gmt_check("no blocked nodes on the smoothed path",
+              gmt_path_blocked_count(_hg, _sp.nodes), 0);
+    gmt_check("every world point is a real cell",
+              gmt_path_points_clear(_hg, _sp), true);
+
+    // the wall must still be respected. row 3 sits inside the block
+    var _lw = gmnav_grid_node(_hg, 2, 3);
+    var _rw = gmnav_grid_node(_hg, 8, 3);
+    gmt_check("a straight line across the wall is refused",
+              __gmnav_path_corridor_ok(_hg, _lw, _rw, undefined, undefined, 0), false);
+
+    // and a line through the gap below it passes
+    var _lg = gmnav_grid_node(_hg, 2, 8);
+    var _rg = gmnav_grid_node(_hg, 8, 8);
+    gmt_check("a line through the gap is allowed",
+              __gmnav_path_corridor_ok(_hg, _lg, _rg, undefined, undefined, 0), true);
+
+    // heading constrained smoothing still refuses on hex. four and eight directions make no sense with six neighbours
+    var _hp     = gmnav_path_create(_hg, _raw);
+    var _hcount = _hp.count;
+    gmnav_path_smooth(_hp, undefined, undefined, 0, 4);
+    gmt_check("headings 4 on hex refuses", _hp.count, _hcount);
+
+    var _hp8     = gmnav_path_create(_hg, _raw);
+    var _h8count = _hp8.count;
+    gmnav_path_smooth(_hp8, undefined, undefined, 0, 8);
+    gmt_check("headings 8 on hex refuses", _hp8.count, _h8count);
+
+    gmt_head("M9 height limits on staggered and hex");
+
+    // staggered grid with a three tier cliff. the search with climb 2 must cross and the smoothed path must not shortcut the ramp
+    var _zg = gmnav_grid_create(12, 14,
+                  gmnav_layout_create(gmnav_layout.ISO_STAGGERED, 64, 32));
+    gmnav_grid_fill_blocked(_zg, 0, 0, 11, 0, true);
+    gmnav_grid_fill_blocked(_zg, 0, 13, 11, 13, true);
+    gmnav_grid_fill_blocked(_zg, 0, 0, 0, 13, true);
+    gmnav_grid_fill_blocked(_zg, 11, 0, 11, 13, true);
+
+    // rows 1 to 5 at 0, row 6 at 1, rows 7 to 12 at 3
+    gmnav_grid_fill_height(_zg, 1, 1, 10, 5, 0);
+    gmnav_grid_fill_height(_zg, 1, 6, 10, 6, 1);
+    gmnav_grid_fill_height(_zg, 1, 7, 10, 12, 3);
+
+    var _zs = gmnav_grid_node(_zg, 2, 3);
+    var _zt = gmnav_grid_node(_zg, 2, 10);
+
+    var _zp = gmt_solve_z(_zg, _zs, _zt, 2, 2);
+    gmt_check("staggered climb 2 crosses", is_array(_zp), true);
+
+    var _zpath = gmnav_path_create(_zg, _zp);
+    gmnav_path_smooth(_zpath, 2, 2);
+    gmt_note("staggered smoothed waypoints", _zpath.count);
+    gmt_note("staggered max world Z step",
+             string_format(gmt_path_points_max_dz(_zg, _zpath), 1, 3));
+
+    gmt_check("staggered smoothed respects climb 2",
+              gmt_path_points_max_dz(_zg, _zpath) <= 2, true);
+
+    var _zp1 = gmt_solve_z(_zg, _zs, _zt, 1, 1);
+    gmt_check("staggered climb 1 refuses the cliff", is_undefined(_zp1), true);
+
+    // hex version, same shape
+    var _hgz = gmnav_grid_create(12, 14,
+                   gmnav_layout_create(gmnav_layout.HEX_POINTY, 32, 36));
+    gmnav_grid_fill_blocked(_hgz, 0, 0, 11, 0, true);
+    gmnav_grid_fill_blocked(_hgz, 0, 13, 11, 13, true);
+    gmnav_grid_fill_blocked(_hgz, 0, 0, 0, 13, true);
+    gmnav_grid_fill_blocked(_hgz, 11, 0, 11, 13, true);
+
+    gmnav_grid_fill_height(_hgz, 1, 1, 10, 5, 0);
+    gmnav_grid_fill_height(_hgz, 1, 6, 10, 6, 1);
+    gmnav_grid_fill_height(_hgz, 1, 7, 10, 12, 3);
+
+    var _hzs = gmnav_grid_node(_hgz, 2, 3);
+    var _hzt = gmnav_grid_node(_hgz, 2, 10);
+
+    var _hzp = gmt_solve_z(_hgz, _hzs, _hzt, 2, 2);
+    gmt_check("hex climb 2 crosses", is_array(_hzp), true);
+
+    var _hzpath = gmnav_path_create(_hgz, _hzp);
+    gmnav_path_smooth(_hzpath, 2, 2);
+    gmt_note("hex smoothed waypoints", _hzpath.count);
+    gmt_note("hex max world Z step",
+             string_format(gmt_path_points_max_dz(_hgz, _hzpath), 1, 3));
+
+    gmt_check("hex smoothed respects climb 2",
+              gmt_path_points_max_dz(_hgz, _hzpath) <= 2, true);
+
+    var _hzp1 = gmt_solve_z(_hgz, _hzs, _hzt, 1, 1);
+    gmt_check("hex climb 1 refuses the cliff", is_undefined(_hzp1), true);
+
+    // the layouts that were already supported are untouched
+    var _og = gmt_room_grid(20, 16);
+    var _on = gmt_solve_z(_og, gmnav_grid_node(_og, 1, 1),
+                              gmnav_grid_node(_og, 18, 14));
+    var _op = gmnav_path_create(_og, _on);
+    gmnav_path_smooth(_op);
+    gmt_check("ortho still smooths", (_op.count < array_length(_on)), true);
+
+    var _dg = gmnav_grid_create(20, 20,
+                  gmnav_layout_create(gmnav_layout.ISO_DIAMOND, 64, 32));
+    gmnav_grid_fill_blocked(_dg, 0, 0, 19, 0, true);
+    gmnav_grid_fill_blocked(_dg, 0, 19, 19, 19, true);
+    gmnav_grid_fill_blocked(_dg, 0, 0, 0, 19, true);
+    gmnav_grid_fill_blocked(_dg, 19, 0, 19, 19, true);
+
+    var _dn = gmt_solve_z(_dg, gmnav_grid_node(_dg, 1, 1),
+                              gmnav_grid_node(_dg, 18, 18));
+    var _dp = gmnav_path_create(_dg, _dn);
+    gmnav_path_smooth(_dp);
+    gmt_check("iso diamond still smooths", (_dp.count < array_length(_dn)), true);
+
+    // staggered smoothing still works, regression check for item 22
+    var _sg2 = gmt_stagger_room();
+    var _s2  = gmt_solve_z(_sg2, gmnav_grid_node(_sg2, 2, 2),
+                                 gmnav_grid_node(_sg2, 8, 2));
+    var _sp2 = gmnav_path_create(_sg2, _s2);
+    gmnav_path_smooth(_sp2);
+    gmt_check("staggered still smooths", (_sp2.count < array_length(_s2)), true);
+}
+
+function gmt_test_clearance_layouts() {
+    gmt_head("C8 clearance on hex");
+
+    var _hg = gmt_hex_room();
+    gmt_check("build succeeds", gmnav_clearance_build(_hg), true);
+    gmt_check("not stale", gmnav_clearance_is_stale(_hg), false);
+
+    gmt_check("wall cell is zero",
+              gmnav_clearance_at(_hg, gmnav_grid_node(_hg, 5, 3)), 0);
+    gmt_check("cell beside a border is one",
+              gmnav_clearance_at(_hg, gmnav_grid_node(_hg, 1, 1)), 1);
+    gmt_check("the gap centre reads two",
+              gmnav_clearance_at(_hg, gmnav_grid_node(_hg, 5, 8)), 2);
+    gmt_check("the gap edge reads one",
+              gmnav_clearance_at(_hg, gmnav_grid_node(_hg, 5, 7)), 1);
+
+    var _mism = 0;
+    for (var _c = 0; _c < _hg.width; _c++) {
+        for (var _r = 0; _r < _hg.height; _r++) {
+            var _n = gmnav_grid_node(_hg, _c, _r);
+            if (gmnav_grid_is_blocked(_hg, _n)) continue;
+
+            var _got  = gmnav_clearance_at(_hg, _n);
+            var _want = gmt_clearance_bfs(_hg, _n);
+
+            if (_got != _want) {
+                _mism++;
+                if (_mism <= 5) gmt_note("hex mismatch (" + string(_c) + "," + string(_r)
+                                       + ") got " + string(_got) + " want " + string(_want));
+            }
+        }
+    }
+    gmt_check("every hex cell matches a bfs audit", _mism, 0);
+
+    gmt_head("C9 clearance on staggered");
+
+    var _sg = gmt_stagger_room();
+    gmt_check("build succeeds", gmnav_clearance_build(_sg), true);
+    gmt_check("not stale", gmnav_clearance_is_stale(_sg), false);
+
+    gmt_check("wall cell is zero",
+              gmnav_clearance_at(_sg, gmnav_grid_node(_sg, 5, 3)), 0);
+    gmt_check("cell beside a border is one",
+              gmnav_clearance_at(_sg, gmnav_grid_node(_sg, 1, 1)), 1);
+
+    var _mism2 = 0;
+    for (var _c = 0; _c < _sg.width; _c++) {
+        for (var _r = 0; _r < _sg.height; _r++) {
+            var _n = gmnav_grid_node(_sg, _c, _r);
+            if (gmnav_grid_is_blocked(_sg, _n)) continue;
+
+            var _got  = gmnav_clearance_at(_sg, _n);
+            var _want = gmt_clearance_bfs(_sg, _n);
+
+            if (_got != _want) {
+                _mism2++;
+                if (_mism2 <= 5) gmt_note("staggered mismatch (" + string(_c) + "," + string(_r)
+                                       + ") got " + string(_got) + " want " + string(_want));
+            }
+        }
+    }
+    gmt_check("every staggered cell matches a bfs audit", _mism2, 0);
+
+    gmt_head("C10 size routing on hex and staggered");
+
+    var _hg2 = gmt_hex_room();
+    gmnav_clearance_build(_hg2);
+
+    var _hs = gmnav_grid_node(_hg2, 2, 2);
+    var _ht = gmnav_grid_node(_hg2, 8, 2);
+
+    var _hsmall = gmt_solve_clear(_hg2, _hs, _ht, 1);
+    gmt_check("hex clearance 1 crosses the wall", is_array(_hsmall), true);
+
+    var _hbig = gmt_solve_clear(_hg2, _hs, _ht, 3);
+    gmt_check("hex clearance 3 is refused", is_undefined(_hbig), true);
+
+    var _sg2 = gmt_stagger_room();
+    gmnav_clearance_build(_sg2);
+
+    var _ss = gmnav_grid_node(_sg2, 2, 2);
+    var _st = gmnav_grid_node(_sg2, 8, 2);
+
+    var _ssmall = gmt_solve_clear(_sg2, _ss, _st, 1);
+    gmt_check("staggered clearance 1 crosses the wall", is_array(_ssmall), true);
+
+    var _sbig = gmt_solve_clear(_sg2, _ss, _st, 3);
+    gmt_check("staggered clearance 3 is refused", is_undefined(_sbig), true);
+
+    gmt_head("C11 staleness on hex and staggered");
+
+    var _hg3 = gmt_hex_room();
+    gmnav_clearance_build(_hg3);
+    gmt_check("hex fresh", gmnav_clearance_is_stale(_hg3), false);
+
+    gmnav_grid_set_blocked(_hg3, 3, 3, true);
+    gmt_check("hex stale after edit", gmnav_clearance_is_stale(_hg3), true);
+
+    gmnav_clearance_build_if_stale(_hg3);
+    gmt_check("hex rebuilt", gmnav_clearance_is_stale(_hg3), false);
+
+    var _mism3 = 0;
+    for (var _c = 0; _c < _hg3.width; _c++) {
+        for (var _r = 0; _r < _hg3.height; _r++) {
+            var _n = gmnav_grid_node(_hg3, _c, _r);
+            if (gmnav_grid_is_blocked(_hg3, _n)) continue;
+
+            if (gmnav_clearance_at(_hg3, _n) != gmt_clearance_bfs(_hg3, _n)) _mism3++;
+        }
+    }
+    gmt_check("hex rebuild matches a bfs audit", _mism3, 0);
+
+    var _sg3 = gmt_stagger_room();
+    gmnav_clearance_build(_sg3);
+    gmt_check("staggered fresh", gmnav_clearance_is_stale(_sg3), false);
+
+    gmnav_grid_set_blocked(_sg3, 3, 3, true);
+    gmt_check("staggered stale after edit", gmnav_clearance_is_stale(_sg3), true);
+
+    gmnav_clearance_build_if_stale(_sg3);
+    gmt_check("staggered rebuilt", gmnav_clearance_is_stale(_sg3), false);
+
+    var _mism4 = 0;
+    for (var _c = 0; _c < _sg3.width; _c++) {
+        for (var _r = 0; _r < _sg3.height; _r++) {
+            var _n = gmnav_grid_node(_sg3, _c, _r);
+            if (gmnav_grid_is_blocked(_sg3, _n)) continue;
+
+            if (gmnav_clearance_at(_sg3, _n) != gmt_clearance_bfs(_sg3, _n)) _mism4++;
+        }
+    }
+    gmt_check("staggered rebuild matches a bfs audit", _mism4, 0);
+
+    gmt_head("C12 clearance_for_radius on the new layouts");
+
+    var _hg4 = gmt_hex_room();
+    gmt_check("hex radius 0 -> 1",  gmnav_clearance_for_radius(_hg4, 0),  1);
+    gmt_check("hex radius 8 -> 1",  gmnav_clearance_for_radius(_hg4, 8),  1);
+    gmt_check("hex radius 32 -> 2", gmnav_clearance_for_radius(_hg4, 32), 2);
+    gmt_check("hex radius 40 -> 2", gmnav_clearance_for_radius(_hg4, 40), 2);
+
+    var _sg4 = gmt_stagger_room();
+    gmt_check("staggered radius 8 -> 1",  gmnav_clearance_for_radius(_sg4, 8),  1);
+    gmt_check("staggered radius 40 -> 2", gmnav_clearance_for_radius(_sg4, 40), 2);
+}
+
+function gmt_test_flowfield_clearance() {
+    gmt_head("F3 flow field clearance");
+
+    var _dg = gmt_doors();
+    gmnav_clearance_build(_dg);
+
+    var _west_x = 2 * 32 + 16;
+    var _west_y = 5 * 32 + 16;
+    var _east   = gmnav_grid_node(_dg, 10, 5);
+
+    // default field with need_clear 0
+    var _f0 = gmnav_flowfield_create(_dg);
+    gmnav_flowfield_build(_f0, _east);
+    gmt_check("need 0 reaches west",
+              gmnav_flowfield_is_reachable(_f0, _west_x, _west_y), true);
+    gmt_check("need 0 crosses the narrow door",
+              gmnav_flowfield_is_reachable(_f0, 176, 80), true);
+    gmt_check("need 0 crosses the wide door",
+              gmnav_flowfield_is_reachable(_f0, 176, 240), true);
+
+    // need 2 field
+    var _f2 = gmnav_flowfield_create(_dg, undefined, undefined, undefined, 2);
+    gmnav_flowfield_build(_f2, _east);
+    gmt_check("need 2 still reaches west",
+              gmnav_flowfield_is_reachable(_f2, _west_x, _west_y), true);
+    gmt_check("need 2 refuses the narrow door",
+              gmnav_flowfield_is_reachable(_f2, 176, 80), false);
+    gmt_check("need 2 crosses the wide door",
+              gmnav_flowfield_is_reachable(_f2, 176, 240), true);
+
+    // need 3 field. no passage on this map is wide enough
+    var _f3 = gmnav_flowfield_create(_dg, undefined, undefined, undefined, 3);
+    gmnav_flowfield_build(_f3, _east);
+    gmt_check("need 3 cannot cross",
+              gmnav_flowfield_is_reachable(_f3, _west_x, _west_y), false);
+    gmt_check("need 3 leaves the wide door cut off",
+              gmnav_flowfield_is_reachable(_f3, 176, 240), false);
+
+    // the field's own dist array agrees
+    var _nd3 = gmnav_grid_node(_dg, 5, 7);
+    gmt_check("need 3 leaves the wide door cell as infinity",
+              _f3.dist[_nd3] == GMNAV_INF, true);
+
+    gmt_head("F4 the seeded goal is exempt from clearance");
+
+    var _fg = gmnav_flowfield_create(_dg, undefined, undefined, undefined, 2);
+    gmnav_flowfield_build(_fg, gmnav_grid_node(_dg, 5, 2));
+
+    gmt_check("the goal cell itself is reachable",
+              gmnav_flowfield_is_reachable(_fg, 176, 80), true);
+    gmt_check_f("the goal has cost zero",
+                gmnav_flowfield_cost_at(_fg, 176, 80), 0);
+
+    // and nothing expands out of it, every neighbour is under clearance
+    gmt_check("nobody walks in from the side",
+              gmnav_flowfield_is_reachable(_fg, 176, 48), false);
+
+    gmt_head("F5 search and field agree on clearance");
+
+    var _rg   = gmt_doors();
+    gmnav_clearance_build(_rg);
+    var _rfrom = gmnav_grid_node(_rg, 10, 5);
+
+    var _s_west = gmt_solve_clear(_rg, _rfrom, gmnav_grid_node(_rg, 1, 5), 2);
+    gmt_check("search with need 2 reaches west", is_array(_s_west), true);
+
+    var _s_door = gmt_solve_clear(_rg, _rfrom, gmnav_grid_node(_rg, 5, 2), 2);
+    gmt_check("search with need 2 refuses the narrow door",
+              is_undefined(_s_door), true);
+
+    var _s_door_1 = gmt_solve_clear(_rg, _rfrom, gmnav_grid_node(_rg, 5, 2), 1);
+    gmt_check("search with need 1 reaches the narrow door",
+              is_array(_s_door_1), true);
+
+    gmt_head("F6 a field build rebuilds stale clearance");
+
+    var _sg = gmt_doors();
+    gmt_check("clearance starts stale", gmnav_clearance_is_stale(_sg), true);
+
+    var _sf = gmnav_flowfield_create(_sg, undefined, undefined, undefined, 2);
+    gmnav_flowfield_build(_sf, gmnav_grid_node(_sg, 10, 5));
+    gmt_check("field build rebuilt clearance",
+              gmnav_clearance_is_stale(_sg), false);
+
+    gmt_head("F7 clearance over an overlay");
+
+    var _bg = gmt_bridge_level();
+    gmnav_clearance_build(_bg);
+
+    // the three cell bridge, layer 1, column 5, rows 4 to 6. the mid cell has only two overlay neighbours above and below, so clearance 1
+    var _mid = gmnav_overlay_node_at(_bg.overlay, 5, 5, 1);
+    gmt_check("bridge mid cell is clearance 1",
+              gmnav_clearance_at(_bg, _mid), 1);
+
+    var _south = gmnav_grid_node(_bg, 5, 10);
+
+    var _bf2 = gmnav_flowfield_create(_bg, undefined, undefined, undefined, 2);
+    gmnav_flowfield_build(_bf2, gmnav_grid_node(_bg, 5, 1));
+    gmt_check("need 2 leaves the south bank unreached",
+              _bf2.dist[_south] == GMNAV_INF, true);
+
+    var _bf1 = gmnav_flowfield_create(_bg, undefined, undefined, undefined, 1);
+    gmnav_flowfield_build(_bf1, gmnav_grid_node(_bg, 5, 1));
+    gmt_check("need 1 reaches the south bank",
+              _bf1.dist[_south] < GMNAV_INF, true);
+
+    gmt_head("F8 clearance on hex and staggered");
+
+    var _hg = gmt_hex_room();
+    gmnav_clearance_build(_hg);
+
+    var _hex_east = gmnav_grid_node(_hg, 8, 2);
+    var _hex_west = gmnav_grid_node(_hg, 2, 2);
+    var _hex_ww   = gmnav_grid_node_to_world(_hg, _hex_west);
+
+    var _hf = gmnav_flowfield_create(_hg, undefined, undefined, undefined, 2);
+    gmnav_flowfield_build(_hf, _hex_east);
+
+    gmt_check("hex wall is unreached",
+              _hf.dist[gmnav_grid_node(_hg, 5, 3)] == GMNAV_INF, true);
+    gmt_check("hex need 2 reaches west through the gap",
+              gmnav_flowfield_is_reachable(_hf, _hex_ww[0], _hex_ww[1]), true);
+
+    var _stg = gmt_stagger_room();
+    gmnav_clearance_build(_stg);
+
+    var _stg_east = gmnav_grid_node(_stg, 8, 2);
+    var _stg_west = gmnav_grid_node(_stg, 2, 2);
+    var _stg_ww   = gmnav_grid_node_to_world(_stg, _stg_west);
+
+    var _sf1 = gmnav_flowfield_create(_stg, undefined, undefined, undefined, 1);
+    gmnav_flowfield_build(_sf1, _stg_east);
+    gmt_check("staggered need 1 reaches west",
+              gmnav_flowfield_is_reachable(_sf1, _stg_ww[0], _stg_ww[1]), true);
+
+    gmt_head("F9 every reachable cell walks home under clearance");
+
+    var _wg = gmt_doors();
+    gmnav_clearance_build(_wg);
+
+    var _wf  = gmnav_flowfield_create(_wg, undefined, undefined, undefined, 2);
+    var _wgo = gmnav_grid_node(_wg, 10, 5);
+    gmnav_flowfield_build(_wf, _wgo);
+
+    var _reach = 0;
+    var _fail  = 0;
+
+    for (var _c = 0; _c < _wg.width; _c++) {
+        for (var _r = 0; _r < _wg.height; _r++) {
+            var _n = gmnav_grid_node(_wg, _c, _r);
+            if (gmnav_grid_is_blocked(_wg, _n)) continue;
+            if (_wf.dist[_n] == GMNAV_INF) continue;
+
+            _reach++;
+            if (!gmt_field_walks_to_goal(_wg, _wf, _n, _wgo)) _fail++;
+        }
+    }
+
+    gmt_note("reachable cells walked", _reach);
+    gmt_check("every reachable cell walks to the goal", _fail, 0);
+}
+
+function gmt_test_avoid_pinch() {
+    gmt_head("P12 pinch off is the default, nothing changes");
+
+    var _g  = gmt_stagger_pinch();
+    var _sf = gmnav_grid_node(_g, 2, 4);
+    var _gt = gmnav_grid_node(_g, 11, 4);
+
+    var _p0 = gmt_solve_z(_g, _sf, _gt);
+    gmt_check("a route exists", is_array(_p0), true);
+    gmt_check("and takes the one row gap",
+              gmt_path_visits(_g, _p0, 7, 3), true);
+
+    gmt_head("P13 pinch on refuses the pinched cell");
+
+    var _p1 = gmt_solve_pinch(_g, _sf, _gt, true);
+    gmt_check("a route still exists", is_array(_p1), true);
+    gmt_check("the one row gap is refused",
+              gmt_path_visits(_g, _p1, 7, 3), false);
+    gmt_check("and the two row gap is taken",
+              (gmt_path_visits(_g, _p1, 7, 8) || gmt_path_visits(_g, _p1, 7, 9)), true);
+
+    gmt_head("P14 the only gap is pinched");
+
+    var _w  = gmt_stagger_pinch_sealed();
+    var _wf = gmnav_grid_node(_w, 2, 4);
+    var _wt = gmnav_grid_node(_w, 11, 4);
+
+    gmt_check("pinch off crosses", is_array(gmt_solve_pinch(_w, _wf, _wt, false)), true);
+    gmt_check("pinch on refuses", is_undefined(gmt_solve_pinch(_w, _wf, _wt, true)), true);
+
+    gmt_head("P15 pinch does not touch other layouts");
+
+    var _og = gmnav_grid_create(14, 16,
+                  gmnav_layout_create(gmnav_layout.ORTHO, 32, 32));
+    gmnav_grid_fill_blocked(_og, 0, 0, 13, 0, true);
+    gmnav_grid_fill_blocked(_og, 0, 15, 13, 15, true);
+    gmnav_grid_fill_blocked(_og, 0, 0, 0, 15, true);
+    gmnav_grid_fill_blocked(_og, 13, 0, 13, 15, true);
+    gmnav_grid_fill_blocked(_og, 7, 1, 7, 14, true);
+    gmnav_grid_set_blocked(_og, 7, 3, false);
+
+    var _of = gmnav_grid_node(_og, 2, 4);
+    var _ot = gmnav_grid_node(_og, 11, 4);
+
+    var _po = gmt_solve_pinch(_og, _of, _ot, true);
+    gmt_check("ortho route exists", is_array(_po), true);
+    gmt_check("ortho still uses the one cell gap",
+              gmt_path_visits(_og, _po, 7, 3), true);
+
+    gmt_head("P16 scheduler carries the flag");
+
+    var _sg    = gmt_stagger_pinch();
+    var _sched = gmnav_scheduler_create(_sg, 4000);
+
+    var _ts = gmnav_scheduler_request(_sched,
+                                      gmnav_grid_node(_sg, 2, 4),
+                                      gmnav_grid_node(_sg, 11, 4),
+                                      gmnav_priority.IMMEDIATE,
+                                      false, undefined, 0,
+                                      undefined, undefined, false,
+                                      true);
+    gmt_check("scheduler found", _ts.state, gmnav_state.FOUND);
+    gmt_check("and skips the pinched cell",
+              gmt_path_visits(_sg, gmnav_scheduler_get_path(_ts), 7, 3), false);
+
+    gmt_head("P17 flow field honours the flag");
+
+    var _fg    = gmt_stagger_pinch();
+    var _fgoal = gmnav_grid_node(_fg, 11, 4);
+    var _fp    = gmnav_grid_node(_fg, 7, 3);
+    var _fw    = gmnav_grid_node(_fg, 7, 8);
+
+    var _f0 = gmnav_flowfield_create(_fg);
+    gmnav_flowfield_build(_f0, _fgoal);
+    gmt_check("default reaches the pinch",   _f0.dist[_fp] < GMNAV_INF, true);
+    gmt_check("default reaches the wide gap", _f0.dist[_fw] < GMNAV_INF, true);
+
+    var _f1 = gmnav_flowfield_create(_fg, undefined, undefined, undefined, 0, true);
+    gmnav_flowfield_build(_f1, _fgoal);
+    gmt_check("pinch refuses the pinched cell", _f1.dist[_fp] == GMNAV_INF, true);
+    gmt_check("pinch still reaches the wide gap", _f1.dist[_fw] < GMNAV_INF, true);
+
+    gmt_head("P18 the start is exempt, the goal is not");
+
+    var _pg     = gmt_stagger_pinch();
+    var _sstart = gmnav_grid_node(_pg, 7, 3);
+    var _sgoal  = gmnav_grid_node(_pg, 11, 4);
+
+    var _ps = gmt_solve_pinch(_pg, _sstart, _sgoal, true);
+    gmt_check("start on a pinched cell still escapes", is_array(_ps), true);
+
+    var _qg     = gmt_stagger_pinch();
+    var _qstart = gmnav_grid_node(_qg, 2, 4);
+    var _qgoal  = gmnav_grid_node(_qg, 7, 3);
+
+    gmt_check("a pinched goal is refused",
+              is_undefined(gmt_solve_pinch(_qg, _qstart, _qgoal, true)), true);
+    gmt_check("and reached when pinch is off",
+              is_array(gmt_solve_pinch(_qg, _qstart, _qgoal, false)), true);
+}
+
+function gmt_test_avoid_pinch_smoothing() {
+    gmt_head("P19 smoothing must not undo the pinch refusal");
+
+    var _g  = gmt_stagger_pinch();
+    var _sf = gmnav_grid_node(_g, 2, 4);
+    var _gt = gmnav_grid_node(_g, 11, 4);
+
+    var _raw = gmt_solve_pinch(_g, _sf, _gt, true);
+    gmt_check("raw route avoids the pinch",
+              gmt_path_visits(_g, _raw, 7, 3), false);
+    gmt_note("raw waypoints", array_length(_raw));
+
+    var _path = gmnav_path_create(_g, _raw);
+    gmnav_path_smooth(_path);
+    gmt_note("smoothed waypoints", _path.count);
+
+    gmt_check("smoothed path does not cross the pinched cell",
+              gmt_path_crosses_cell(_g, _path, 7, 3), false);
+
+    var _path2 = gmnav_path_create(_g, _raw);
+    gmnav_path_smooth(_path2, undefined, undefined, 0, 0, undefined, true);
+    gmt_note("pinch aware smoothed waypoints", _path2.count);
+
+    gmt_check("pinch aware smoothing also avoids it",
+              gmt_path_crosses_cell(_g, _path2, 7, 3), false);
+}
+
+function gmt_test_relax_zero() {
+    gmt_head("C13 clearance refusal rules");
+
+    var _d = gmt_doors();
+    gmnav_clearance_build(_d);
+
+    var _pocket = gmnav_grid_node(_d, 5, 2); // narrow doorway, clearance 1
+    var _open   = gmnav_grid_node(_d, 2, 2); // open ground, clearance 3
+
+    gmt_check("the pocket is clearance 1",   gmnav_clearance_at(_d, _pocket), 1);
+    gmt_check("the open cell is clearance 3", gmnav_clearance_at(_d, _open),  3);
+
+    var _s1b = gmnav_search_create(_d);
+    _s1b.relax = 0;
+    gmnav_search_begin(_s1b, _pocket, _open, false, undefined, 3);
+    gmt_check("rule 1b: relax 0 refuses the tight start",
+              gmnav_search_step(_s1b, 100000), gmnav_state.FAILED);
+
+    var _s2 = gmnav_search_create(_d);
+    gmnav_search_begin(_s2, _open, _pocket, false, undefined, 3);
+    gmt_check("rule 2: a tight goal is refused",
+              gmnav_search_step(_s2, 100000), gmnav_state.FAILED);
+
+    var _s3 = gmnav_search_create(_d);
+    gmnav_search_begin(_s3, _open, _pocket, false, undefined, 1);
+    gmt_check("a clearance 1 agent reaches the pocket",
+              gmnav_search_step(_s3, 100000), gmnav_state.FOUND);
+
+    var _s4 = gmnav_search_create(_d);
+    gmnav_search_begin(_s4, _pocket, _open, false, undefined, 1);
+    gmt_check("a clearance 1 agent leaves the pocket",
+              gmnav_search_step(_s4, 100000), gmnav_state.FOUND);
 }

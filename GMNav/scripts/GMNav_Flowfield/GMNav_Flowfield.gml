@@ -1,5 +1,6 @@
 function gmnav_flowfield_create(_grid, _profile = undefined,
-                                _max_climb = undefined, _max_drop = undefined) {
+                                _max_climb = undefined, _max_drop = undefined,
+                                _need_clear = 0, _avoid_pinch = false) {
     var _n = __gmnav_field_capacity(_grid);
 
     return {
@@ -8,6 +9,10 @@ function gmnav_flowfield_create(_grid, _profile = undefined,
 
         max_climb : _max_climb, // undefined means heights are not consulted, 
         max_drop  : _max_drop,  // so a grid carrying elevation behaves exactly as before until a caller opts in
+
+        need_clear : _need_clear, // cells below this clearance are excluded from expansion. seeded goals are exempt, same as in search. 0 means clearance is not consulted
+
+        avoid_pinch : _avoid_pinch, // staggered only. refuses to expand into cells pinched between two wall cells in the same column
 
         dist     : array_create(_n, GMNAV_INF),
         dirx     : array_create(_n, 0),
@@ -60,6 +65,10 @@ function gmnav_flowfield_begin(_field, _goal_nodes, _max_dist = GMNAV_INF) {
     var _grid = _field.grid;
 
     __gmnav_field_fit(_field);
+
+    if (_field.need_clear > 1 && gmnav_clearance_is_stale(_grid)) {
+        gmnav_clearance_build(_grid);
+    }
 
     if (!is_array(_goal_nodes)) _goal_nodes = [_goal_nodes];
 
@@ -185,6 +194,9 @@ function __gmnav_field_expand(_field, _budget) {
     var _hz    = (_field.max_climb == undefined) ? undefined : _grid.height_z;
     var _climb = _field.max_climb;
     var _drop  = _field.max_drop;
+    var _need  = _field.need_clear;
+    var _clr   = (_need > 1) ? _grid.clear : undefined;
+    var _pinch = _field.avoid_pinch && (_lay.mode == gmnav_layout.ISO_STAGGERED);
     var _left  = _budget;
 
     while (_left > 0) {
@@ -210,6 +222,14 @@ function __gmnav_field_expand(_field, _budget) {
 
                 if (_on < _obase && (_flags[_on] & GMNAV_FLAG_BLOCKED) != 0) continue;
                 if (_on >= _obase && gmnav_overlay_is_blocked(_ov, _on)) continue;
+
+                if (_clr != undefined) {
+                    if (_on >= _obase) {
+                        if (_ov.clear[_on - _obase] < _need) continue;
+                    } else {
+                        if (_clr[_on] < _need) continue;
+                    }
+                }
 
                 var _ocost = (_on >= _obase && _field.profile == undefined)
 						   ? _ov.cost[_on - _obase]
@@ -248,6 +268,17 @@ function __gmnav_field_expand(_field, _budget) {
             if (_mark[_nn] == _cgen) continue;
             if ((_flags[_nn] & GMNAV_FLAG_BLOCKED) != 0) continue;
 
+            if (_clr != undefined && _clr[_nn] < _need) continue;
+
+            if (_pinch) {
+                var _ub = (_nr - 1 < 0)
+                       || ((_flags[_nn - _w] & GMNAV_FLAG_BLOCKED) != 0);
+                var _db = (_nr + 1 >= _h)
+                       || ((_flags[_nn + _w] & GMNAV_FLAG_BLOCKED) != 0);
+
+                if (_ub && _db) continue;
+            }
+
             if (_hz != undefined) {
                 var _dz = _hz[_cur] - _hz[_nn];
                 if (_dz > _climb || -_dz > _drop) continue;
@@ -259,6 +290,10 @@ function __gmnav_field_expand(_field, _budget) {
 
                 if ((_flags[_f1] & GMNAV_FLAG_BLOCKED) != 0) continue;
                 if ((_flags[_f2] & GMNAV_FLAG_BLOCKED) != 0) continue;
+
+                if (_clr != undefined) {
+                    if (_clr[_f1] < _need || _clr[_f2] < _need) continue;
+                }
 
                 if (_hz != undefined) {
                     var _zn  = _hz[_nn];
@@ -289,6 +324,10 @@ function __gmnav_field_expand(_field, _budget) {
                 if (_mark[_un] == _cgen) continue;
 
                 if (_un >= _obase && gmnav_overlay_is_blocked(_ov, _un)) continue;
+
+                if (_clr != undefined && _un >= _obase) {
+                    if (_ov.clear[_un - _obase] < _need) continue;
+                }
 
                 var _ucost = (_un >= _obase && _field.profile == undefined)
 				           ? _ov.cost[_un - _obase]

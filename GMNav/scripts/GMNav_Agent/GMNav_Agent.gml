@@ -44,6 +44,8 @@ function gmnav_agent_create(_sched, _x, _y, _radius = 8, _speed = 2) {
         avoid_str  : 1.0,					// 0 disables local avoidance
         avoid_range: 3.0,					// multiples of radius
 
+        avoid_pinch: false,					// staggered only. refuses to enter cells pinched between two wall cells in the same column
+
         avoid_mode : gmnav_avoid.BASIC,		// BASIC, CONTEXT or FOLLOW
 
         // mode-specific tuning
@@ -95,7 +97,8 @@ function gmnav_agent_goto(_agent, _gx, _gy, _priority = gmnav_priority.NORMAL,
     _agent.failed	  = false;
     _agent.ticket     = gmnav_scheduler_request(_agent.sched, _sn, _gn, _priority,
                                                 false, _agent.profile, _agent.need_clear,
-                                                _agent.max_climb, _agent.max_drop);
+                                                _agent.max_climb, _agent.max_drop,
+                                                false, _agent.avoid_pinch);
 
     return true;
 }
@@ -227,7 +230,8 @@ function __gmnav_agent_collect_ticket(_agent) {
         var _p = gmnav_path_create(_agent.grid, gmnav_scheduler_get_path(_t));
 
         gmnav_path_smooth(_p, _agent.max_climb, _agent.max_drop,
-                          _agent.radius, _agent.headings, _agent.profile);
+                          _agent.radius, _agent.headings, _agent.profile,
+                          _agent.avoid_pinch);
         gmnav_path_anchor_start(_p, _agent.x, _agent.y);
         gmnav_path_anchor_end(_p, _agent.goal_x, _agent.goal_y);
         gmnav_path_curve(_p, _agent.curve_mode, _agent.curve_radius,
@@ -297,7 +301,8 @@ function __gmnav_agent_try_repath(_agent) {
     _agent.ticket = gmnav_scheduler_request(_agent.sched, _sn, _gn,
                                             gmnav_priority.HIGH, false,
                                             _agent.profile, _agent.need_clear,
-                                            _agent.max_climb, _agent.max_drop);
+                                            _agent.max_climb, _agent.max_drop,
+                                            false, _agent.avoid_pinch);
 }
 
 function __gmnav_agent_avoid(_agent, _neighbours, _desired_x, _desired_y) { // dispatch on the agent's mode. every mode returns [push_x, push_y, speed_scale]
