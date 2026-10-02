@@ -18,18 +18,72 @@ function gmnav_path_get_x(_path, _i)  { return _path.px[_i]; }
 function gmnav_path_get_y(_path, _i)  { return _path.py[_i]; }
 function gmnav_path_get_length(_path) { return _path.length; }
 
-function gmnav_path_anchor_start(_path, _x, _y) {
+function gmnav_path_anchor_start(_path, _x, _y, _radius = 0) {
     if (_path.count == 0) return;
+
+    // the anchor replaces a cell centre with the agent's real position,
+    // which can be off-centre near a wall corner. smoothing checked the
+    // segment between cell centres, not this one. refuse the anchor when
+    // the segment from it to the next waypoint would clip for a body of
+    // the given radius, and let the agent take one more step to reach the
+    // cell centre instead
+    if (_path.count > 1 && _radius > 0) {
+        var _nx = _path.px[1];
+        var _ny = _path.py[1];
+
+        if (!__gmnav_path_seg_body_ok(_path.grid, _x, _y, _nx, _ny, _radius)) return;
+    }
+
     _path.px[0] = _x;
     _path.py[0] = _y;
     __gmnav_path_measure(_path);
 }
 
-function gmnav_path_anchor_end(_path, _x, _y) {
+function gmnav_path_anchor_end(_path, _x, _y, _radius = 0) {
     if (_path.count == 0) return;
+
+    if (_path.count > 1 && _radius > 0) {
+        var _px = _path.px[_path.count - 2];
+        var _py = _path.py[_path.count - 2];
+
+        if (!__gmnav_path_seg_body_ok(_path.grid, _px, _py, _x, _y, _radius)) return;
+    }
+
     _path.px[_path.count - 1] = _x;
     _path.py[_path.count - 1] = _y;
     __gmnav_path_measure(_path);
+}
+
+function __gmnav_path_seg_body_ok(_grid, _x0, _y0, _x1, _y1, _radius) { // is this segment clear for a body of the given radius, sampled in world space
+    var _lay  = _grid.layout;
+    var _w    = _grid.width;
+    var _h    = _grid.height;
+    var _fl   = _grid.flags;
+
+    var _d    = point_distance(_x0, _y0, _x1, _y1);
+    var _step = min(_lay.tile_w, _lay.tile_h) * 0.25;
+    var _n    = max(1, ceil(_d / _step));
+
+    for (var _s = 0; _s <= _n; _s++) {
+        var _t  = _s / _n;
+        var _sx = lerp(_x0, _x1, _t);
+        var _sy = lerp(_y0, _y1, _t);
+
+        var _fc1 = floor((_sx - _radius - _lay.origin_x) / _lay.tile_w);
+        var _fc2 = floor((_sx + _radius - 0.001 - _lay.origin_x) / _lay.tile_w);
+        var _fr1 = floor((_sy - _radius - _lay.origin_y) / _lay.tile_h);
+        var _fr2 = floor((_sy + _radius - 0.001 - _lay.origin_y) / _lay.tile_h);
+
+        for (var _fr = _fr1; _fr <= _fr2; _fr++) {
+            if (_fr < 0 || _fr >= _h) return false;
+
+            for (var _fc = _fc1; _fc <= _fc2; _fc++) {
+                if (_fc < 0 || _fc >= _w) return false;
+                if ((_fl[_fr * _w + _fc] & GMNAV_FLAG_BLOCKED) != 0) return false;
+            }
+        }
+    }
+    return true;
 }
 
 function gmnav_grid_line_clear(_grid, _c0, _r0, _c1, _r1) {

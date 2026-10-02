@@ -237,8 +237,8 @@ function __gmnav_agent_collect_ticket(_agent) {
         gmnav_path_smooth(_p, _agent.max_climb, _agent.max_drop,
                           _agent.radius, _agent.headings, _agent.profile,
                           _agent.avoid_pinch);
-        gmnav_path_anchor_start(_p, _agent.x, _agent.y);
-        gmnav_path_anchor_end(_p, _agent.goal_x, _agent.goal_y);
+        gmnav_path_anchor_start(_p, _agent.x, _agent.y, _agent.radius);
+        gmnav_path_anchor_end(_p, _agent.goal_x, _agent.goal_y, _agent.radius);
         gmnav_path_curve(_p, _agent.curve_mode, _agent.curve_radius,
                          _agent.curve_steps, _agent.radius);
         _p.stale = _t.stale;
@@ -261,7 +261,8 @@ function __gmnav_agent_collect_ticket(_agent) {
 function __gmnav_agent_advance_waypoint(_agent) {
     var _p = _agent.path;
     var _n = _p.count;
-    var _r = max(_agent.reach_dist, _agent.speed);
+    //var _r = max(_agent.reach_dist, _agent.speed);
+    var _r = max(_agent.reach_dist, _agent.speed, _agent.radius);
 
     while (_agent.seek_i < _n - 1) {
         var _d = point_distance(_agent.x, _agent.y,
@@ -273,7 +274,7 @@ function __gmnav_agent_advance_waypoint(_agent) {
 
     if (_agent.seek_i == _n - 1) {
         var _dl = point_distance(_agent.x, _agent.y, _p.px[_n - 1], _p.py[_n - 1]);
-        if (_dl <= _agent.reach_dist) _agent.seek_i = _n;
+        if (_dl <= _r) _agent.seek_i = _n;
     }
 
     var _nodes = _p.nodes;
