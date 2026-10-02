@@ -140,24 +140,24 @@ Look at that sequence and you can watch it hop: 3 to 5 skips row 4, 6 to 8 skips
 
 Block rows 7 **and** 8 and both layouts refuse. So the rule for staggered maps is simply: walls are two rows deep. It's a small thing once you know, and genuinely baffling until you do.
 
-## Why smoothing stops working
+## How smoothing works on each layout
 
 One more consequence, and it explains something from Chapter 4.
 
-`gmnav_path_smooth` needs a line-of-sight test, and that test walks cells. On orthogonal and diamond isometric, a straight line in cell coordinates is a straight line on screen, so testing cells tells you something true about the world.
+`gmnav_path_smooth` needs a line-of-sight test. On orthogonal and diamond isometric, a straight line in cell coordinates is a straight line on screen, so the test walks cells: it visits every cell the line touches and asks whether each is open. That test is exact there, and cheap.
 
-On staggered and hex it doesn't. Cell adjacency and screen geometry have come apart, so a clear line in cell space says nothing reliable about whether a character could walk it.
+On staggered and hex it isn't. Cell adjacency and screen geometry have come apart, so a clear line in cell space says nothing reliable about whether a character could walk it.
 
-GMNav could return an answer anyway. It would be confidently wrong, which is worse than useless. Instead `gmnav_path_smooth` detects those layouts and returns without doing anything.
+Rather than refuse to run, GMNav walks those two layouts in **world space**. The segment is sampled every fraction of a tile in pixels, and each sample is resolved back to a cell by the layout's own `world_to_cell` conversion. A sample that lands on a blocked cell refuses the shortcut. The test is slightly more expensive per call, and it produces the same guarantee: the smoothed path is walkable.
 
-`gmnav_path_simplify` still works everywhere, because it only removes waypoints that lie on a straight line between their neighbours in world space. It doesn't change the path's shape, so it can't introduce a route that clips geometry:
+Curving does not have a world-space fallback, since a rounded corner is generated in cell space before it is validated. `gmnav_path_curve` still refuses on staggered and hex.
+
+`gmnav_path_simplify` works everywhere regardless, because it only removes waypoints that lie on a straight line between their neighbours in world space. It doesn't change the path's shape, so it can't introduce a route that clips geometry:
 
 ```gml
-if (grid.layout.mode == gmnav_layout.ORTHO
-||  grid.layout.mode == gmnav_layout.ISO_DIAMOND) {
-    gmnav_path_smooth(path);
-}
-gmnav_path_simplify(path);   // safe on all five
+gmnav_path_smooth(path);     // works on all five now
+gmnav_path_curve(path);      // refused on staggered and hex
+gmnav_path_simplify(path);   // safe on all five, always
 ```
 
 ## Seeing it
@@ -179,7 +179,7 @@ That matters more here than on square maps. An overlay that draws squares over a
 - **Heuristics must be measured in step units, not pixels.** Get this wrong on 2:1 tiles and the estimate is 32 times too large, giving a 41 percent worse path for identical work, on 325 pairs across this map.
 - **`LOGICAL` counts moves, `VISUAL` counts pixels.** On this map the same journey is 564.88 pixels of walking under one and 485.77 under the other. Turn-based wants the first, real-time wants the second.
 - **Staggered walls must be two rows deep**, because rows two apart are screen-cardinal neighbours. One row is stepped straight over, and nothing reports a problem.
-- **Smoothing is refused on staggered and hex** rather than returning a wrong answer. `simplify` is the universal fallback.
+- **Smoothing uses a world-space walk on staggered and hex**, sampling the segment in pixels and resolving each sample back to a cell. It produces the same guarantees as the cell-space supercover on ortho and diamond. Curving is still refused on those two layouts, since it has no world-space fallback. `simplify` is the universal fallback and never changes the path's shape.
 
 ## What's next
 

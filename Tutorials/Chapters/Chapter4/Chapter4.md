@@ -104,7 +104,9 @@ On this chapter's warehouse the two tests disagree on **1546 cell pairs**. Smoot
 
 This is a good example of a bug that never crashes, never logs anything, and gets reported to you as "sometimes the enemies clip the shelves a bit".
 
-**Smoothing is refused on some layouts.** On staggered isometric and hex grids, a straight line in cell coordinates doesn't correspond to a straight line on screen, so a line-of-sight test in cell space says nothing useful about whether a character could walk it. `gmnav_path_smooth` detects those layouts and returns without doing anything, rather than returning a confidently wrong answer. `gmnav_path_simplify` works everywhere. Chapter 5 explains why.
+**Smoothing uses a world-space walk on staggered and hex.** On staggered isometric and hex grids, a straight line in cell coordinates doesn't correspond to a straight line on screen, so the supercover walk above says nothing useful about whether a character could walk the line. GMNav handles those layouts with a different line test that samples the segment in world pixels and asks the layout which cell each sample sits in. It is slightly more expensive per call and it produces the same guarantees.
+
+Curving is still refused on those layouts, since it has no world-space fallback. Chapter 5 covers both.
 
 ## The agent
 

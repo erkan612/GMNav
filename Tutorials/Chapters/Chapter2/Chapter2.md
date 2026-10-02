@@ -38,7 +38,33 @@ GMNav picks a heuristic automatically based on your layout, and you can see whic
 search = gmnav_search_create(grid, gmnav_heuristic.AUTO);   // the default
 ```
 
-On a standard 8-way square grid, `AUTO` resolves to the **octile** heuristic, which is the exact straight-line distance you'd cover if there were no walls at all, counting diagonals at their proper price. There's also `gmnav_heuristic.ZERO`, which turns the search into Dijkstra. That sounds useless, and it mostly is, but it's genuinely valuable for one thing: if you ever suspect A\* is returning a bad path, run the same search with `ZERO` and compare the total cost. Dijkstra is optimal by construction, so if the two disagree, something is wrong with the heuristic rather than with your map.
+On a standard 8-way square grid, `AUTO` resolves to the **octile** heuristic,
+which is the exact straight-line distance you'd cover if there were no walls at
+all, counting diagonals at their proper price. There's also
+`gmnav_heuristic.ZERO`, which turns the search into Dijkstra. That sounds
+useless, and it mostly is, but it's genuinely valuable for one thing: if you
+ever suspect A\* is returning a bad path, run the same search with `ZERO` and
+compare the total cost. Dijkstra is optimal by construction, so if the two
+disagree, something is wrong with the heuristic rather than with your map.
+
+You can also pass a **function** in place of the enum:
+
+```gml
+search = gmnav_search_create(grid, function(_c, _r, _gc, _gr, _grid) {
+    var _dx = abs(_c - _gc);
+    var _dy = abs(_r - _gr);
+    var _lo = min(_dx, _dy);
+    return (_dx + _dy) + (GMNAV_SQRT2 - 2) * _lo;
+});
+```
+
+It receives the current column and row, the goal column and row, and the grid,
+and returns a real. This is useful when the built-ins are too loose for your
+map, or when you have per-cell data you can consult for a tighter bound. It is
+**not** a tuning knob for speed against quality. Because admissibility is what
+keeps A\* optimal, and the framework cannot check a function you wrote, that
+responsibility becomes yours. A function that overestimates produces worse
+paths with no error anywhere, exactly like the doubled estimate above.
 
 ## A new map: the river valley
 

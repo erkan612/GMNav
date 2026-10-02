@@ -51,6 +51,18 @@ gmnav_flowfield_is_reachable(field, x, y)   // can this cell get there at all
 
 `cost_at` is more useful than it looks. It's a free "how far am I from the objective" for every unit on the map, which is exactly what you want for deciding who retreats, who reinforces, and which spawn point is closest to the action.
 
+### Fields respect clearance
+
+A field routes a wide unit through a gap too narrow for it, unless you tell it how much room the unit needs. The fifth argument to `gmnav_flowfield_create` is a clearance requirement, the same integer a request carries:
+
+```gml
+field = gmnav_flowfield_create(grid, undefined, undefined, undefined, 2);
+```
+
+Cells below the requirement are excluded from expansion. A field built this way does not have a direction pointing into a gap the unit cannot cross, and `cost_at` and `is_reachable` reflect the same restriction. Seeded goals are exempt, matching the search: a tight goal does not refuse the whole build, it just does not receive a direction out.
+
+The important thing to know is that a field bakes in one clearance value, the way it bakes in one profile. A field built with `need_clear = 2` is not useful to a unit that needs 3. If two unit sizes share a goal, either build two fields, or route the differing sizes through the scheduler instead. Three unit types with different weights and different clearances means six fields, and at that point searches are usually the better trade.
+
 ## What the build actually does
 
 It's two passes, and knowing that explains the cost and the slicing.
@@ -135,6 +147,8 @@ This is the honest part, and it matters because flow fields are easy to over-app
 
 **Per-agent cost profiles multiply the fields.** A field bakes in one profile. Chapter 6's berserker and scout disagree about danger, so they need separate fields. Three unit types with different weights means three builds, and the economics shift back toward searches.
 
+**Per-agent clearance multiplies them the same way.** A field bakes in one clearance value, so a rat and an ogre sharing a goal need two fields. If you have multiple sizes and multiple profiles, the combination grows quickly, and a scheduler running searches per unit is usually the better trade.
+
 The rule of thumb: **many agents, few destinations, stable goals**. Tower defense creeps, a fleeing crowd, an RTS move order, zombies converging on a player. Those are flow field problems. A dozen guards patrolling to a dozen different waypoints is not.
 
 ## Seeing it
@@ -156,6 +170,7 @@ Every cell gets an arrow and a distance-shaded background, with a circle marking
 - **Multiple goals cost almost nothing**: three exits took 1,303 pops against 1,300, and every agent flows to its own nearest one.
 - **Capping the build distance** cut coverage to 42 percent of the map for 42 percent of the work, and matters far more as maps grow.
 - **The crossover is around thirty agents** on this map. Below that, use searches. Many agents, few destinations, stable goals is where a field belongs.
+- **A field can carry a clearance requirement**, the same integer a search request uses. Cells below the threshold are excluded from expansion, so a wide unit reading the field does not get routed through a gap it cannot fit. A field bakes in one clearance value the way it bakes in one profile, so different unit sizes sharing a goal need separate fields.
 
 ## What's next
 

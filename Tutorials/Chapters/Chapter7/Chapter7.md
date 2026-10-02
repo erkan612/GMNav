@@ -57,6 +57,12 @@ The backward sweep runs bottom-right to top-left doing the mirror image, and kee
 
 Two passes, four lookups each. On our fortress that's **1,496 cell visits** against 36,652 for the box scan at radius 4, and unlike the box scan it doesn't care how large your units are. The cost is the same for radius 2 and radius 20.
 
+**The chamfer is only exact on square-like grids.** It works by propagating a Chebyshev distance, and a Chebyshev step between two cells is only uniform in world space on orthogonal and diamond isometric. On staggered isometric and on hex, adjacent cells are not the same distance apart on screen, so a chamfer would produce a value that claims the wrong amount of room.
+
+For those two layouts GMNav uses a different algorithm: an **iterative relaxation** over the layout's own neighbour table. Every open cell starts at the maximum value and every blocked cell at 0, and each pass lets a cell take the smallest value among its neighbours plus one, capped at the same maximum. It converges in at most as many passes as the cap, so the cost is roughly `cap × cells × neighbours` instead of `2 × cells × neighbours`.
+
+Meaningfully slower than the chamfer, about ten times on a map with cap 16. Still a level-load operation, not a per-frame one, and correct on a layout where the two-sweep version would be wrong.
+
 ### The mistake that hides
 
 It's tempting to use three neighbours per pass rather than four. Up-left, up and left seems to cover "everything above and to the left", and the pattern is neater.
@@ -103,7 +109,7 @@ Here's a problem that only shows up in a real game.
 
 An ogre gets pushed into a one-cell doorway. A cutscene spawns it there. A wall collapses around it. Now every cell adjacent to it also has clearance 1, because they're all next to the same wall, so under a strict rule the ogre can never move again. It's not stuck by geometry, it's stuck by the rule.
 
-GMNav relaxes the clearance requirement for the first couple of steps out of the start:
+GMNav relaxes the clearance requirement for a small number of steps out of a tight start:
 
 ```gml
 search.relax = 2;   // the default
@@ -117,9 +123,15 @@ Our ogre standing on cell (17,3), which has clearance 1 against its need of 3, e
 
 It steps through two under-clearance cells, both inside the relaxation window, then reaches a cell that genuinely fits and proceeds normally. Set `relax = 0` and the same request returns **no route**, permanently.
 
+**The relaxation fires per step, not per search.** A tight step is only allowed while the search's current cell is itself tight, and only while the depth from the start is inside the window. Once the ogre reaches a cell that meets its clearance, every subsequent step must meet clearance. That rule closes a chain that would otherwise let a caller place an agent somewhere it does not fit and then inch it through tight ground one request at a time.
+
 **The honest cost:** during those first steps the ogre will visibly clip geometry. That's a real trade, and it's the right one, because the alternative is a boss frozen in a doorway for the rest of the fight. If your game would rather fail loudly, `relax = 0` is there.
 
-There's also a tidier option when it's the *goal* that's too tight. Rather than failing, relocate it:
+### When it's the goal that's too tight
+
+A request refuses a goal the unit does not fit in, the same way it refuses any other tight cell. That is deliberate: a request for somewhere the body cannot stand has no honest answer.
+
+The pattern for "walk as close as you can" is to move the goal before you send the request:
 
 ```gml
 var _to = gmnav_clearance_nearest(grid, _wanted_goal, _need);
@@ -130,6 +142,8 @@ if (_to != gmnav_no_node) {
 ```
 
 This searches outward in rings for the closest cell that genuinely fits. "Walk as close as you can" is usually what the game meant anyway.
+
+Before v1.3 the goal was exempt from clearance, and the search would path to a cell the body did not fit in. That exemption was removed because it allowed a caller to inch a large body through a gap it did not fit, by clicking one cell at a time. `gmnav_clearance_nearest` does the same job explicitly, and the caller sees the substitution.
 
 ## Two details worth knowing
 
@@ -143,7 +157,9 @@ gmnav_clearance_build_if_stale(grid);
 
 A search that needs clearance rebuilds automatically if it finds the map out of date, so you can't accidentally route a golem through a wall that appeared. But a rebuild is a full two-pass sweep, so if you're destroying terrain every frame, call it deliberately at a moment that suits you rather than letting a search trigger it mid-combat.
 
-**Clearance is available on `ORTHO` and `ISO_DIAMOND` only.** On staggered and hex, a Chebyshev radius in cell indices doesn't correspond to a disc in world space, so the number would be meaningless. `gmnav_clearance_build` returns `false` on those layouts, and clearance requirements are then ignored rather than failing every request.
+**Clearance is available on every layout.** Ortho and diamond use a two-pass chamfer. Staggered and hex use an iterative relaxation over the layout's own neighbour table, roughly ten times slower per rebuild but still a level-load operation. The value is a cell count, and `gmnav_clearance_for_radius` converts a body radius into it correctly for the layout by using the layout's own shortest step rather than the tile's bounding box.
+
+**A goal that does not meet clearance is refused.** Callers who want "walk as close as you can" call `gmnav_clearance_nearest` before handing the goal over.
 
 ## Seeing it
 
@@ -158,11 +174,12 @@ Brighter green is more room, darker is tighter. This is the overlay to reach for
 
 - **Pathfinding treats units as points**, and that breaks the moment your game has units of different sizes.
 - **Clearance is the largest `r` where every cell within Chebyshev distance `r - 1` is open.** A three-wide doorway has clearance 2 at its centre, not 3.
-- **Two linear sweeps compute it for the whole map**, 1,496 cell visits against 36,652 for a box scan at radius 4, and the cost doesn't grow with unit size.
+- **Two linear sweeps compute it for the whole map on square-like grids**, 1,496 cell visits against 36,652 for a box scan at radius 4, and the cost doesn't grow with unit size.
+- **Staggered and hex use an iterative relaxation** over the layout's own neighbour table, roughly ten times slower per rebuild but correct on layouts where a Chebyshev step is not uniform in world space.
 - **Four neighbours per pass, not three.** Three leaves the up-right and down-left diagonals unconsulted, and gets 45 cells wrong on this map, always over-reporting.
 - **One grid serves every size.** Four unit sizes, three doorways, four different outcomes from a single integer per request, including an honest failure for the unit nothing fits.
-- **Relaxation lets a stuck unit escape**, at the cost of clipping geometry for its first couple of steps. `relax = 0` fails loudly instead.
-- **`gmnav_clearance_nearest`** relocates a goal that's too tight rather than refusing the request.
+- **Relaxation lets a stuck unit escape**, and fires per step while the current cell is tight, so a well-placed start cannot tunnel through tight ground later. `relax = 0` fails loudly instead.
+- **A tight goal is refused.** `gmnav_clearance_nearest` is how a caller says "walk as close as you can". The goal exemption that used to exist was removed in v1.3 because it allowed a caller to inch a large body through a gap one click at a time.
 
 ## What's next
 

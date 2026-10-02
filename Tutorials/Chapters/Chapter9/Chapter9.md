@@ -103,6 +103,10 @@ The agent notices its path went stale, requests a replacement at `HIGH` priority
 
 That "keep walking" is a deliberate behavioural choice rather than laziness. A character that carries on for a few frames before reacting looks like a character who hasn't noticed the wall yet, which is exactly what a person would do. A character that freezes the instant the world changes looks like a bug.
 
+**If the replacement fails, the agent stops.** Keeping the old path only applies while a new one is in flight. When the replacement resolves as `FAILED`, there is nothing to walk to. The old path described a route the world no longer offers, and following it to its end would walk the agent through geometry that has changed since the route was planned. The agent drops its goal, latches `failed`, and clears the path. Its velocity decays over the next few frames rather than cutting to zero.
+
+The same applies when a change lands on the *start* of the route rather than the middle: if a wall appears at the agent's feet, the fresh search starts from a node it cannot leave, and the same failure path fires.
+
 Measured on the warehouse: an undisturbed crossing takes **400 frames**. Drop the barricade at frame 90, when the agent has reached cell (5,7), and it repaths to a 33-cell route and still arrives, in **439 frames total**, stopping 3.82 pixels from the goal. Thirty-nine extra frames for a wall that appeared in front of it.
 
 Repathing is also rate limited:
@@ -190,7 +194,8 @@ The agent overlay draws a stale path in **red** rather than yellow, so a glance 
 - **A suspended search is not.** Settled cells are never revisited, so a wall landing on committed ground goes unnoticed. Measured: suspend at 80 pops and the path is clean, at 120 pops it crosses 5 blocked cells.
 - **The contract is termination plus the stale flag**, not path validity. Check `ticket.stale` before acting.
 - **Restart-on-change would livelock** in exactly the games that need dynamic obstacles most, which is why GMNav doesn't do it.
-- **The agent repairs itself**, keeps walking the old path while waiting, and still arrived in 439 frames against an undisturbed 400.
+- **The agent repairs itself**, keeps walking the old path while a replacement is in flight, and still arrived in 439 frames against an undisturbed 400.
+- **A failed replacement clears the path.** Keeping the old path only applies to the in-flight case. When the replacement comes back `FAILED`, the agent drops its goal, latches `failed`, and stops, rather than walking a route that no longer exists.
 - **Clearance, cost profiles and flow fields all derive from the grid** and all go stale. The first two can self-heal, flow fields must be rebuilt explicitly.
 - **An expensive door beats a blocked one** when the door is usually open, because it can never strand anybody.
 

@@ -53,6 +53,15 @@ The fifth argument is the number of headings the result may use. Zero, the
 default, means unconstrained, so nothing you already have changes shape. Four
 means cardinals. Eight means cardinals and true diagonals.
 
+**Heading constraints only apply on orthogonal and diamond isometric.** On
+staggered and hex the two-leg rewrite that a constrained smooth relies on
+invents corners in cell space, and cell space does not correspond to screen
+space on those layouts. Calling `gmnav_path_smooth` with `_headings > 0` on
+staggered or hex returns without doing anything. Unconstrained smoothing still
+works on those layouts, since it uses a world-space line test. If you need a
+constrained route on staggered or hex, the constraint has to come from the
+layout's neighbour set instead of from smoothing.
+
 The second is subtler and catches people who only fix the first.
 
 ## The constraint shapes, it does not impose
@@ -157,6 +166,11 @@ the grid. You are not paying for the constraint.
   a run into the fewest legal legs, inventing a corner and checking it properly.
 - **A single leg always beats a pair**, and on eight directions the diagonal
   decomposition is tried before the square one.
+- **Heading constraints only apply on ortho and diamond.** Staggered and hex
+  do not have a cell-space notion of a straight line that matches the screen,
+  so the two-leg rewrite cannot run there. Unconstrained smoothing works on
+  those layouts. A constrained route has to come from the layout's neighbour
+  set.
 
 ## What's next
 

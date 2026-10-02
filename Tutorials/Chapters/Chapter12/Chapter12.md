@@ -147,6 +147,62 @@ context. A span that is usually passable is better modelled as expensive than
 as blocked, because an expensive deck can never strand anybody while a blocked
 one can.
 
+### Three ways a cell can be gone
+
+Blocking is the reversible one. A blocked cell keeps its cost, its offset and
+its clearance value, and unblocking it restores everything in place. That is
+what you want for a door.
+
+`gmnav_overlay_remove` is stronger. It marks the cell as **gone** entirely,
+which is not the same thing:
+
+```gml
+// the cannon hits the bridge
+gmnav_overlay_remove(_ov, _span);
+gmnav_overlay_finish(_ov);
+```
+
+A removed cell reads as blocked to every subsystem that already respects
+blocked state, is unreachable from `gmnav_overlay_node_at`, and is skipped at
+the next `finish` so its edges are pruned. But it stays in the overlay's arrays
+as a **tombstone**, marked with a bit. It is not deleted from memory, and
+`gmnav_overlay_count` does not change.
+
+The reason is that removing a cell mid-session and then re-adding it is the
+common case for a bridge. Tombstoning means `gmnav_overlay_add` on the same
+column, row and layer finds the existing slot, clears the bit, and returns the
+**same node id** the caller was already using. Any id you were holding is still
+valid, any array you built around that id is still correct. There is no
+renumbering.
+
+### When the tombstones add up
+
+A long session of destroying and rebuilding leaves tombstones behind. They cost
+a few bytes each and no per-frame work, so most games never need to do anything
+about them. If a scripted event destroys a large fraction of an overlay, or if
+a game has run for hours with constant destruction, `gmnav_overlay_compact`
+reclaims the slots:
+
+```gml
+var _map = gmnav_overlay_compact(_ov);
+```
+
+Compaction drops every tombstoned cell and renumbers the survivors consecutively
+starting at `base`. Authored links that touched a removed cell are dropped;
+links between two live cells are renumbered. `max_layer` is recomputed. The
+overlay is re-finished automatically at the end of the call, so the edges and
+clearance are rebuilt against the new numbering.
+
+This is destructive. Every node id you hold becomes invalid the moment it
+returns, and any id that pointed at a removed cell is gone entirely. The
+returned array is the old-to-new slot map, one entry per slot before the
+compact, with `GMNAV_NO_NODE` for a cell that was removed. A caller that needs
+to keep its references across a compact remaps them through that array.
+
+`gmnav_overlay_count` tells you how many slots are still in use, including
+tombstones. If you want a signal for when compaction is worth it, compare that
+against the count of live cells.
+
 ## What you've learned
 
 - **An overlay is a sparse set of cells above the grid**, and its nodes are
@@ -161,6 +217,15 @@ one can.
 - **A deck cell is a real cell**: blockable, priceable, measurable, and
   independent of the ground beneath it.
 - **State changes need no rebuild**, only shape changes do.
+- **Removing a cell is not the same as blocking it.** `gmnav_overlay_remove`
+  marks the cell gone, prunes its edges at the next `finish`, and makes it
+  unreachable from any lookup. It stays in the arrays as a tombstone so
+  `gmnav_overlay_add` can restore it later with the same node id, which is what
+  a destroyed-and-rebuilt bridge needs.
+- **`gmnav_overlay_compact` reclaims tombstones** and renumbers the rest.
+  Destructive: any node id you hold becomes invalid. It returns an
+  old-to-new-slot map so a caller can remap what it holds. Most games never
+  need it.
 
 ## What's next
 
