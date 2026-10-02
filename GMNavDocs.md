@@ -50,6 +50,7 @@ function shaped. Start here and follow the links.
 | Send everyone to their own nearest exit | `gmnav_flowfield_build` with several goals |
 | Ask how far a unit really is from something | `gmnav_flowfield_cost_at` |
 | Stop units standing inside each other | `gmnav_agent_update` with a neighbour list |
+| Route a wide unit through a field | `gmnav_flowfield_create` with `need_clear` |
 
 ### Ground that is not flat
 
@@ -59,6 +60,7 @@ function shaped. Start here and follow the links.
 | Build a bridge over a road | `gmnav_overlay_create`, `gmnav_overlay_link` |
 | Make a slope rather than a step | `gmnav_overlay_ramp` |
 | Work out which surface the player clicked | `gmnav_grid_world_to_node_top` |
+| Remove a span mid-game | `gmnav_overlay_remove`, `gmnav_overlay_compact` |
 
 ### Side view games
 
@@ -2238,7 +2240,7 @@ cells are numbered consecutively from `base`, so iterating them is a plain loop.
 **Syntax:**
 
 ```gml
-gmnav_overlay_node_at(ov, col, row, layer);
+gmnav_overlay_node_at(ov, col, row, layer, include_removed);
 ```
 
 | Argument | Type | Description |
@@ -2247,13 +2249,14 @@ gmnav_overlay_node_at(ov, col, row, layer);
 | col | Integer | Column |
 | row | Integer | Row |
 | layer | Integer | Layer index |
+| include_removed | Boolean | Optional, default `false`. Whether a tombstoned cell is returned |
 
 **Returns:** Integer node id, or `GMNAV_NO_NODE`
 
 **Example:**
 
 ```gml
-// collapse the middle of the bridge
+// navigation code wants the walkable answer
 var _span = gmnav_overlay_node_at(grid.overlay, 5, 5, 1);
 
 if (_span != GMNAV_NO_NODE) {
@@ -2262,17 +2265,29 @@ if (_span != GMNAV_NO_NODE) {
 }
 ```
 
-The above code finds a deck cell by its coordinates and blocks it, which is how
-a bridge gets destroyed mid-game.
+```gml
+// a level editor, a save system or a demo managing its own cells wants the
+// raw answer even when the cell has been removed
+var _raw = gmnav_overlay_node_at(grid.overlay, 5, 5, 1, true);
+
+if (_raw != GMNAV_NO_NODE && gmnav_overlay_is_removed(grid.overlay, _raw)) {
+    gmnav_overlay_add(grid.overlay, 5, 5, 1);   // re-add it
+}
+```
+
+The above two snippets are the two questions a caller can ask. The default
+answer hides tombstones, which is what navigation code wants. Passing `true`
+returns the cell even if it has been removed, which is what management code
+wants.
 
 This is the counterpart to `gmnav_grid_node` for raised surfaces. Overlay node
 ids are not laid out arithmetically, so you cannot compute one, and this lookup
 is the only way to find a cell you did not keep the id of.
 
-Returns `GMNAV_NO_NODE` when that layer has no cell at those coordinates, which
-is the normal case for most of your map.
+Returns `GMNAV_NO_NODE` when that layer has no cell at those coordinates, or
+when the cell has been removed and `include_removed` is false.
 
-**See also:** `gmnav_overlay_add`, `gmnav_grid_world_to_node`
+**See also:** `gmnav_overlay_add`, `gmnav_overlay_remove`, `gmnav_grid_world_to_node`
 
 ---
 
@@ -2493,12 +2508,19 @@ for (var _i = 0; _i < gmnav_overlay_count(_ov); _i++) {
 
 The above code surveys an overlay for damage.
 
+Returns `true` for a cell that has been explicitly blocked, and also for a cell
+that has been removed. Both read as impassable to every subsystem that already
+respects blocked state, which is what lets removal reach search, fields, snap
+helpers and debug views without any changes to those subsystems.
+
+If you need to tell blocked from removed apart, use `gmnav_overlay_is_removed`.
+
 Returns `true` for anything outside the overlay, which makes it safe after a
 lookup that might have failed.
 
 For a node that might be a base cell, `gmnav_grid_is_blocked` handles both.
 
-**See also:** `gmnav_overlay_set_blocked`, `gmnav_grid_is_blocked`
+**See also:** `gmnav_overlay_set_blocked`, `gmnav_overlay_is_removed`, `gmnav_grid_is_blocked`
 
 ---
 
@@ -2566,7 +2588,7 @@ gmnav_overlay_set_cost(ov, node, cost);
 |---|---|---|
 | ov | Struct | The overlay |
 | node | Integer | Overlay node id |
-| cost | Real | Multiplier for entering this cell, clamped to 1 or more |
+| cost | Real | Multiplier for entering this cell |
 
 **Returns:** Boolean, `false` if the node is not in this overlay
 
@@ -2594,6 +2616,159 @@ than the heuristic assumes would break the search's optimality.
 Takes effect immediately. No `finish` required.
 
 **See also:** `gmnav_grid_set_cost`, `gmnav_costlayer_set_node`
+
+---
+
+### gmnav_overlay_is_removed
+
+**Syntax:**
+
+```gml
+gmnav_overlay_is_removed(ov, node);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| ov | Struct | The overlay |
+| node | Integer | Overlay node id |
+
+**Returns:** Boolean
+
+**Example:**
+
+```gml
+if (gmnav_overlay_is_removed(grid.overlay, _span)) {
+    // this span is gone, a caller holding its id can decide to rebuild it
+}
+```
+
+The above code asks the direct question that `gmnav_overlay_is_blocked` cannot
+answer: was this cell removed, or merely blocked.
+
+Returns `false` for anything outside the overlay, which makes it safe after a
+lookup that might have failed.
+
+**See also:** `gmnav_overlay_remove`, `gmnav_overlay_is_blocked`
+
+---
+
+### gmnav_overlay_remove
+
+**Syntax:**
+
+```gml
+gmnav_overlay_remove(ov, node);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| ov | Struct | The overlay |
+| node | Integer | Overlay node id |
+
+**Returns:** Boolean, `false` if the node is not in this overlay
+
+**Example:**
+
+```gml
+// the cannon hits the bridge
+function bridge_collapse(_ov, _col, _row) {
+    var _n = gmnav_overlay_node_at(_ov, _col, _row, 1);
+    if (_n == GMNAV_NO_NODE) return false;
+
+    gmnav_overlay_remove(_ov, _n);
+    gmnav_overlay_finish(_ov);
+
+    return true;
+}
+```
+
+The above code destroys one span of a bridge. Every other crossing on the map
+keeps working, and any agent mid-crossing will repath when it notices.
+
+The cell is not deleted from the arrays. It becomes a tombstone, marked with
+`GMNAV_FLAG_REMOVED`. That means:
+
+- It reads as blocked to every subsystem that already respects blocked state.
+- It is unreachable from `gmnav_overlay_node_at` unless `include_removed` is
+  passed.
+- It is skipped at the next `gmnav_overlay_finish`, so its edges are pruned.
+- It still occupies a slot, so `gmnav_overlay_count` does not change.
+
+Removal is idempotent. Removing an already-removed cell returns `true` and does
+not bump the grid version.
+
+Re-adding the same cell with `gmnav_overlay_add` clears the tombstone, returns
+the same node id, and re-finishing restores the edges. Callers who hold a
+removed span's id can rebuild it without a compact.
+
+The version is bumped and the cell is recorded as a recent edit, but only if
+the state actually changed, so calling this every step from a damage handler is
+harmless.
+
+**Tip:** for a span that is usually passable, consider
+`gmnav_overlay_set_cost` instead. A rickety bridge that is merely expensive can
+never strand anybody, and a removed one can.
+
+**See also:** `gmnav_overlay_is_removed`, `gmnav_overlay_compact`,
+`gmnav_overlay_add`
+
+---
+
+### gmnav_overlay_compact
+
+**Syntax:**
+
+```gml
+gmnav_overlay_compact(ov);
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| ov | Struct | The overlay |
+
+**Returns:** Array, one entry per slot before the compact. Each entry is the
+slot's new index, or `GMNAV_NO_NODE` for a cell that was removed
+
+**Example:**
+
+```gml
+// a long session of destroying and rebuilding spans has left a lot of
+// tombstones in the arrays
+var _map = gmnav_overlay_compact(grid.overlay);
+
+// _map[old_slot] now says where that slot went. any id the caller was
+// holding has to be remapped before use
+for (var _i = 0; _i < array_length(my_held_ids); _i++) {
+    var _old = my_held_ids[_i];
+    var _slot = _old - grid.overlay.base;   // careful, this is the NEW base
+
+    // ... remap using _map before the compact
+}
+```
+
+The above code reclaims the memory that tombstones were holding and reports
+where every slot went.
+
+Compaction walks the overlay's cells, drops every tombstoned one, and
+renumbers the survivors consecutively starting at `base`. Authored links that
+touched a removed cell are dropped; links between two live cells are
+renumbered. `max_layer` is recomputed from the survivors.
+
+This is destructive. Every node id a caller holds becomes invalid the moment
+this returns, and any id that pointed at a removed cell is gone entirely.
+Callers who need to keep their references stable should not compact, or should
+remap via the returned array immediately.
+
+The overlay is re-finished automatically at the end of compaction, so the edges
+and clearance are rebuilt against the new numbering.
+
+**Tip:** if a game only ever removes a handful of cells across a session, do not
+compact. Tombstones cost a few bytes each and no per-frame work. Compact when
+the tombstone count is worth the renumbering, for example after a scripted
+event that destroyed a large portion of an overlay.
+
+**See also:** `gmnav_overlay_remove`, `gmnav_overlay_finish`,
+`gmnav_overlay_count`
 
 ---
 
@@ -2630,31 +2805,24 @@ gmnav_clearance_supported(grid);
 |---|---|---|
 | grid | Struct | The grid |
 
-**Returns:** Boolean
+**Returns:** Boolean, always `true`
 
 **Example:**
 
 ```gml
-if (gmnav_clearance_supported(grid)) {
-    gmnav_clearance_build(grid);
-    agent.need_clear = gmnav_clearance_for_radius(grid, agent.radius);
-} else {
-    agent.need_clear = 0;   // this layout cannot answer the question
-}
+gmnav_clearance_build(grid);
+agent.need_clear = gmnav_clearance_for_radius(grid, agent.radius);
 ```
 
-The above code sets a unit's clearance requirement only on layouts where the
-number would mean something.
+Every layout defines clearance. `ORTHO` and `ISO_DIAMOND` use a two-pass
+Chebyshev chamfer, exact and fast. `ISO_STAGGERED` and the two hex layouts use
+an iterative relaxation over the layout's own neighbour table, since on those
+the step between cells is not uniform in world space and a Chebyshev radius in
+cell indices does not map to a disc.
 
-Clearance works on `ORTHO` and `ISO_DIAMOND` only. On staggered and hex layouts
-a Chebyshev radius in cell indices does not correspond to a disc in world space,
-so the number would be meaningless rather than merely approximate, and GMNav
-would rather say so than hand you a value you cannot trust.
-
-On unsupported layouts `gmnav_clearance_build` returns `false` and clearance
-requirements on requests are ignored rather than failing every one of them, so
-a project that sets `need_clear` blindly still works. The example is being
-tidy rather than avoiding a crash.
+The function is kept as a compatibility shim. It returns `true` for every
+layout today. A caller that used it to guard `need_clear` before the layouts
+were added can leave the guard in place; it will never skip.
 
 **See also:** `gmnav_clearance_build`, `gmnav_layout_create`
 
@@ -2672,7 +2840,7 @@ gmnav_clearance_build(grid);
 |---|---|---|
 | grid | Struct | The grid |
 
-**Returns:** Boolean, `false` on an unsupported layout
+**Returns:** Boolean, always `true`
 
 **Example:**
 
@@ -2685,16 +2853,24 @@ gmnav_clearance_build(grid);
 The above code computes clearance for the whole map, once, after the walls are
 in place.
 
-How it does that is worth knowing, because the obvious approach is unusable. To
-check radius `r` directly you would test `(2r-1)²` cells for every cell in the
-map, which grows quadratically as units get bigger and reaches millions of
-checks on a large map. Instead GMNav uses a distance transform: two sweeps over
-the grid, four neighbour lookups each. The forward sweep runs top left to bottom
-right taking the smallest of four already-computed neighbours and adding one;
-the backward sweep does the mirror image and keeps whichever value is smaller.
+There are two implementations, chosen by layout.
 
-Two passes, four lookups each, and unlike the box scan the cost is the same for
-radius 2 and radius 20.
+**`ORTHO` and `ISO_DIAMOND` use a two-pass chamfer.** The forward sweep runs
+top-left to bottom-right taking the smallest of four already-computed
+neighbours and adding one; the backward sweep does the mirror image and keeps
+whichever value is smaller. Two linear sweeps over the map, four lookups each,
+and the cost does not grow with unit size.
+
+**`ISO_STAGGERED` and both hex layouts use an iterative relaxation.** Every
+open cell starts at `CLEARANCE_MAX`, every blocked cell at 0, and the relaxation
+runs until nothing changes. Each pass, a cell takes the smallest value among
+its neighbours plus one, capped at `CLEARANCE_MAX`. Because every step is one
+hop regardless of its world length, this is the correct cell-count meaning of
+clearance on a layout where the world step is not uniform.
+
+The chamfer is roughly ten times faster than the relaxation. If your game uses
+staggered or hex and clearance rebuilds show up in a profile, the honest answer
+is that the cost is real: it is a level-load operation, not a per-frame one.
 
 The result is stored on the grid, so it is built once and read by every search.
 Build it after your map is complete, not before.
@@ -2795,7 +2971,7 @@ gmnav_clearance_at(grid, node);
 | grid | Struct | The grid |
 | node | Integer | Node id, base or overlay |
 
-**Returns:** Integer, 0 for a blocked cell
+**Returns:** Integer, 0 for a blocked or removed cell
 
 **Example:**
 
@@ -2856,10 +3032,13 @@ ogre.need_clear    = gmnav_clearance_for_radius(grid, ogre.radius);
 The above code gives three units of different sizes the right clearance
 requirement each, from one grid and one clearance map.
 
-Use this rather than guessing a cell count. It accounts for your tile size and
-uses the larger tile dimension, so a wide unit on tall thin tiles is never under
-served. On 32 pixel tiles a radius of 8 needs 1, a radius of 24 needs 2, and a
-radius of 40 needs 3.
+Use this rather than guessing a cell count. The conversion is
+`ceil(radius / step_min_world + 0.5)`, where `step_min_world` is the layout's
+own shortest distance between adjacent cells, not the tile's bounding box. On
+ortho 32-pixel tiles that is 32 pixels and a radius of 40 needs 3. On diamond
+isometric 32 by 32 tiles a cardinal step is 22.6 pixels, so a radius of 40
+needs 4. Using the tile bounding box instead would let a body through a gap it
+does not fit.
 
 What you get for that single integer is four different behaviours from one map:
 the rat takes the narrow gap, the soldier takes a wider one, the ogre detours to
@@ -2945,7 +3124,7 @@ gmnav_search_create(grid, heuristic);
 | Argument | Type | Description |
 |---|---|---|
 | grid | Struct | The grid to search over |
-| heuristic | Enum | Optional, default `gmnav_heuristic.AUTO` |
+| heuristic | Enum or Function | Optional, default `gmnav_heuristic.AUTO`. A `gmnav_heuristic` member, or a function |
 
 **Returns:** Struct
 
@@ -2954,6 +3133,17 @@ gmnav_search_create(grid, heuristic);
 ```gml
 // keep one around, reuse it
 search = gmnav_search_create(grid);
+```
+
+```gml
+// a custom estimate that reads a per-cell data array the caller owns
+heat = array_create(grid.count, 0);
+
+search = gmnav_search_create(grid, function(_c, _r, _gc, _gr, _grid) {
+    var _here = _r * _grid.width + _c;
+    var _goal = _gr * _grid.width + _gc;
+    return (heat[_here] - heat[_goal]) * 0.5;
+});
 ```
 
 The above code makes a reusable search object. Creating one is cheap: it holds
@@ -2975,6 +3165,18 @@ wrong, run the same query with `ZERO` and compare the total cost. Dijkstra is
 optimal by construction, so if the two disagree the problem is the heuristic
 rather than your map.
 
+**A function replaces the enum entirely.** It is called with the current
+column and row, the goal column and row, and the grid, and must return a real.
+**Admissibility becomes the caller's responsibility.** A function that returns
+a value higher than the true remaining cost makes A\* no longer guaranteed
+optimal, and the routes it returns will be worse and may look tidier. Read
+Chapter 2 on admissibility before writing one.
+
+A custom heuristic is useful when the built-ins are too loose for your map,
+or when you have per-cell data you can consult for a tighter bound. It is not
+useful for tuning speed against quality. For that, use `ZERO` as a reference
+and tighten the map instead.
+
 **See also:** `gmnav_search_begin`, `gmnav_scheduler_create`
 
 ---
@@ -2984,7 +3186,7 @@ rather than your map.
 **Syntax:**
 
 ```gml
-gmnav_search_begin(search, start_node, goal_node, corner_cut, profile, need_clear, max_climb, max_drop);
+gmnav_search_begin(search, start_node, goal_node, corner_cut, profile, need_clear, max_climb, max_drop, avoid_pinch);
 ```
 
 | Argument | Type | Description |
@@ -2997,6 +3199,7 @@ gmnav_search_begin(search, start_node, goal_node, corner_cut, profile, need_clea
 | need_clear | Integer | Optional, default 0. Clearance required |
 | max_climb | Real | Optional, default `undefined`. Largest rise |
 | max_drop | Real | Optional, default `undefined`. Largest fall |
+| avoid_pinch | Boolean | Optional, default `false`. Staggered only |
 
 **Returns:** Boolean, whether the search started
 
@@ -3030,6 +3233,19 @@ default because the gap is mathematical rather than physical, and a character
 taking that step clips through both corners. Turn it on if your game wants that,
 some top down shooters and roguelikes do, and accept the clipping.
 
+`avoid_pinch` refuses to enter a staggered cell whose same-column neighbours
+above and below are both blocked. On staggered a one-cell gap in a wall column
+is visually sealed: the two wall cells' diamonds meet at the gap cell's corner,
+so the passage has zero visible width even though the graph sees it as open.
+This flag closes that gap. Only has any effect on `ISO_STAGGERED`. Off by
+default so nothing existing changes.
+
+**Clearance rules.** A request with `need_clear > 1` refuses to enter any cell
+whose clearance is below the requirement, with two exceptions. Seeded goals are
+not exempt. A start cell below the requirement is exempt for the first `relax`
+steps, which lets an agent that legitimately ended up in a tight spot escape.
+Both rules are documented on the search struct and on `gmnav_search_step`.
+
 **See also:** `gmnav_search_step`, `gmnav_scheduler_request`
 
 ---
@@ -3048,6 +3264,22 @@ gmnav_search_step(search, budget);
 | budget | Integer | Optional. Node expansions allowed this call |
 
 **Returns:** Enum, a `gmnav_state` member
+
+**Clearance enforcement.** When `need_clear` is above 1, every step is checked
+against the grid's clearance map. A cell whose clearance is below the
+requirement is refused unless one of two conditions holds: the cell is the
+goal and the start is itself tight (a rare case for callers who spawn agents
+in doorways), or the search's current cell is itself below clearance and the
+depth from the start is within `relax`. The first condition is off by default.
+The second is on.
+
+The two conditions together mean an agent that starts in tight ground can walk
+out through up to `relax` tight cells, but cannot tunnel through tight ground
+later in its path. Once it reaches a cell that meets clearance, every
+subsequent step must meet clearance. `relax` defaults to 2.
+
+A goal that does not meet clearance is refused. Callers who want "walk as
+close as you can" use `gmnav_clearance_nearest` before handing the goal over.
 
 **Example:**
 
@@ -3210,6 +3442,11 @@ path = gmnav_search_get_path(search);
 gmnav_search_release(search);
 ```
 
+Also fires the search's `on_complete` callback if one was attached, but only
+if the search has already reached FOUND or FAILED. The callback fires at the
+moment the state changes, not at release time. See the Search struct for the
+callback's contract.
+
 The above code takes the result and then gives the workspace back, in that
 order, because releasing clears the result.
 
@@ -3293,7 +3530,7 @@ It dispatches on domain, so the same API drives a grid or a platformer graph.
 **Syntax:**
 
 ```gml
-gmnav_scheduler_create(target, budget, concurrent);
+gmnav_scheduler_create(target, budget, concurrent, heuristic);
 ```
 
 | Argument | Type | Description |
@@ -3301,6 +3538,7 @@ gmnav_scheduler_create(target, budget, concurrent);
 | target | Struct | A grid or a platformer graph |
 | budget | Integer | Optional. Node expansions per frame, across all searches |
 | concurrent | Integer | Optional, default 4. Searches in flight at once |
+| heuristic | Enum or Function | Optional, default `gmnav_heuristic.AUTO`. Passed to every grid search the scheduler creates. Ignored on the platformer domain |
 
 **Returns:** Struct
 
@@ -3344,7 +3582,7 @@ the allowance.
 **Syntax:**
 
 ```gml
-gmnav_scheduler_request(sched, start_node, goal_node, priority, corner_cut, profile, need_clear, max_climb, max_drop, allow_drop);
+gmnav_scheduler_request(sched, start_node, goal_node, priority, corner_cut, profile, need_clear, max_climb, max_drop, allow_drop, avoid_pinch, on_complete);
 ```
 
 | Argument | Type | Description |
@@ -3359,6 +3597,8 @@ gmnav_scheduler_request(sched, start_node, goal_node, priority, corner_cut, prof
 | max_climb | Real | Optional, default `undefined`. Largest rise |
 | max_drop | Real | Optional, default `undefined`. Largest fall |
 | allow_drop | Boolean | Optional, default `false`. Whether this route may use DROP links on a platformer graph |
+| avoid_pinch | Boolean | Optional, default `false`. Staggered-only visual pinch refusal |
+| on_complete | Function | Optional, default `undefined`. Fires once when the ticket reaches FOUND or FAILED |
 
 **Returns:** Struct, a ticket
 
@@ -3426,6 +3666,16 @@ NPC at level start, a menu previewing a route, or a cutscene. It does not bypass
 the workspace pool. If four searches are already mid-flight holding all four
 workspaces, there is nowhere to run, and the request quietly falls back into the
 queue to resolve later like any other. So this is a bug waiting to happen:
+
+**`on_complete` fires at the moment the ticket resolves.** For a budgeted
+request that is inside `gmnav_scheduler_update`. For an `IMMEDIATE` request
+that is inside this call, before the ticket is returned to you. Pass the
+callback as an argument rather than setting it after, since a ticket that has
+already resolved will not fire retroactively.
+
+The callback receives the ticket and must not re-enter the framework, cancel
+the ticket, or expect a return value. It fires after the ticket's state and
+path are set, so a callback can read `ticket.state` and `ticket.path` directly.
 
 ```gml
 var _t = gmnav_scheduler_request(sched, _a, _b, gmnav_priority.IMMEDIATE);
@@ -4068,7 +4318,7 @@ unit's radius or raise its `reach_dist` past that radius.
 **Syntax:**
 
 ```gml
-gmnav_path_smooth(path, max_climb, max_drop, radius, headings, profile);
+gmnav_path_smooth(path, max_climb, max_drop, radius, headings, profile, avoid_pinch);
 ```
 
 | Argument | Type | Description |
@@ -4079,6 +4329,7 @@ gmnav_path_smooth(path, max_climb, max_drop, radius, headings, profile);
 | radius | Real | Optional, default 0. Body radius |
 | headings | Integer | Optional, default 0. Permitted headings |
 | profile | Struct | Optional. Cost profile |
+| avoid_pinch | Boolean | Optional, default `false`. Staggered only. Refuse a shortcut that crosses a pinched cell |
 
 **Returns:** N/A
 
@@ -4087,12 +4338,15 @@ gmnav_path_smooth(path, max_climb, max_drop, radius, headings, profile);
 ```gml
 // everything the unit knows about itself, handed to the shaping pass
 gmnav_path_smooth(path, agent.max_climb, agent.max_drop,
-                  agent.radius, agent.headings, agent.profile);
+                  agent.radius, agent.headings, agent.profile,
+                  agent.avoid_pinch);
 ```
 
 The above code is the call you almost always want. Each optional argument closes
 a different way a shortcut could be wrong, and leaving one out does not produce
 an error, it produces a path that is quietly wrong in that specific way.
+
+`gmnav_agent` passes all seven for you. If you drive paths yourself, pass them.
 
 **What it does.** A grid search returns a staircase: a straight line chopped into
 single cell steps, with far more corners than the route really has. Smoothing
@@ -4128,10 +4382,26 @@ way a single leg is checked.
 `profile`: without it, A\* routes carefully around expensive ground and smoothing
 string pulls straight back through it, undoing every cost layer in your project.
 
-**Refused on staggered and hex.** On those layouts a straight line in cell
-coordinates says nothing reliable about whether a character could walk it, so
-this returns without doing anything rather than returning a confidently wrong
-answer. `gmnav_path_simplify` works everywhere.
+`avoid_pinch`: staggered only. A shortcut that passes through a pinched cell is
+refused, matching the same rule the search applied. Without this, a search
+result that correctly avoided a pinched cell is collapsed by smoothing into a
+line straight through it, and the agent walks through a gap whose visible width
+on screen is zero. Ignored on every other layout.
+
+**Smoothing works on every layout.** `ORTHO` and `ISO_DIAMOND` use a cell-space
+supercover walk, which is exact there. `ISO_STAGGERED` and both hex layouts use
+a world-space sampling walk, which resolves each sample back to a cell via the
+layout. The world-space walk is slightly more expensive per call but still
+linear in the path length.
+
+**Heading constraints do not apply on staggered or hex.** A heading count of 4
+or 8 assumes a cell diagonal is a true 45 on screen, which it is not on
+staggered, and hex has six directions rather than four or eight. A call with
+both a heading constraint and one of those layouts returns without doing
+anything, since the two-leg rewrite that headings depend on invents corners in
+cell space.
+
+`gmnav_path_simplify` is the safe fallback on every layout.
 
 **See also:** `gmnav_path_simplify`, `gmnav_path_curve`,
 `gmnav_path_anchor_start`
@@ -4263,7 +4533,10 @@ eases toward its target, as `gmnav_agent_update` does, you may already have a
 curved trajectory from a cornered path, and curving as well gives you two
 smoothing systems in series.
 
-**Refused on staggered and hex**, for the same reason smoothing is.
+**Refused on staggered and hex.** Curving walks the arc in cell space to test
+that it fits, which is exact on `ORTHO` and `ISO_DIAMOND` and meaningless on
+the other three. Unlike smoothing, curve has no world-space fallback, so the
+refusal is total. `gmnav_path_smooth` still works on those layouts.
 
 **Note:** unlike `gmnav_path_simplify`, this keeps `path.nodes` intact, so scoped
 repathing still has a cell route to test against.
@@ -5098,7 +5371,7 @@ all.
 **Syntax:**
 
 ```gml
-gmnav_flowfield_create(grid, profile, max_climb, max_drop);
+gmnav_flowfield_create(grid, profile, max_climb, max_drop, need_clear, avoid_pinch);
 ```
 
 | Argument | Type | Description |
@@ -5107,17 +5380,33 @@ gmnav_flowfield_create(grid, profile, max_climb, max_drop);
 | profile | Struct | Optional. Cost profile the field is built under |
 | max_climb | Real | Optional. Largest rise a unit reading this field can take |
 | max_drop | Real | Optional. Largest fall |
+| need_clear | Integer | Optional, default 0. Clearance the reading unit needs. Cells below the threshold are excluded from expansion, so a field built this way does not route a wide unit through a gap it cannot fit |
+| avoid_pinch | Boolean | Optional, default `false`. Staggered only. Refuses to expand into cells whose same-column neighbours above and below are both blocked, matching the same rule the search applies. Ignored on every other layout |
 
 **Returns:** Struct
 
 **Example:**
 
 ```gml
-field = gmnav_flowfield_create(grid, soldier, 1, 3);
+field = gmnav_flowfield_create(grid, soldier, 1, 3, 2);
 ```
 
-The above code creates a field that respects a cost profile and a unit's
-elevation limits.
+The above code creates a field that respects a cost profile, a unit's
+elevation limits, and a clearance requirement.
+
+`need_clear` mirrors the same argument on the scheduler and on
+`gmnav_search_begin`. A field built with a clearance requirement does not
+expand into cells below it, and the `dist` values are only meaningful for a
+unit of that size. Seeded goals are exempt from the filter, exactly as in
+search, so a tight goal does not refuse the whole build.
+
+`avoid_pinch` mirrors the search's `avoid_pinch` flag. It exists because a
+cell in a wall column on staggered sits in a visual pinch that the graph does
+not refuse. On every layout other than `ISO_STAGGERED` this argument is
+accepted and has no effect.
+
+Clearance is auto-built at the first `gmnav_flowfield_build` if `need_clear`
+is above 1 and the grid's clearance is stale.
 
 A field bakes in one profile and one set of limits, which is the main thing that
 decides whether flow fields suit your game. Chapter 6's berserker and scout
@@ -5323,12 +5612,9 @@ if (gmnav_flowfield_is_stale(field) && !building) {
 
 The above code rebuilds when the world has moved underneath a field.
 
-**Flow fields do not repair themselves.** A field built before an edit still
-describes the old world, arrows and all, and nothing will fix it unless you ask.
-This is where fields earn their reputation for being awkward in destructible
-games: rebuilding one is far more expensive than repathing a single agent, so a
-map that changes every few seconds shifts the economics back toward individual
-searches.
+**Flow fields do not repair themselves.** A field built before an edit still describes the old world, arrows and all, and nothing will fix it unless you ask.
+
+**A field built with `need_clear` serves one unit size.** The clearance requirement is baked into which cells were expanded, so a field built with `need_clear = 2` is not useful to a unit that needs clearance 1 or 3. Different unit sizes that share a goal need separate fields, or should use the scheduler instead.
 
 Note the `building` guard. Without it, a map that changes constantly restarts
 the build every frame and it never completes.
@@ -5562,11 +5848,15 @@ gmnav_agent_create(sched, x, y, radius, speed);
 // Create event
 agent = gmnav_agent_create(sched, x, y, 8, 2.5);
 
-agent.profile    = soldier;
-agent.need_clear = gmnav_clearance_for_radius(grid, 8);
-agent.max_climb  = 1;
-agent.max_drop   = 3;
-agent.headings   = 0;
+agent.profile     = soldier;
+agent.need_clear  = gmnav_clearance_for_radius(grid, 8);
+agent.max_climb   = 1;
+agent.max_drop    = 3;
+agent.headings    = 0;
+agent.avoid_pinch = true;
+
+agent.on_arrived  = function(_ag) { play_sound(snd_arrive); };
+agent.on_failed   = function(_ag) { pick_a_new_goal(_ag); };
 ```
 
 The above code creates an agent and tells it everything about the unit it
@@ -5578,8 +5868,14 @@ check during smoothing that stops a shortcut grazing a corner the unit's
 shoulders cannot clear.
 
 All fields are writable at any time. Changing `speed` mid journey is fine;
-changing `profile` or `need_clear` affects the next request rather than the
-current path.
+changing `profile`, `need_clear` or `avoid_pinch` affects the next request
+rather than the current path.
+
+`on_arrived` and `on_failed` are optional callbacks. Each fires once, with the
+agent as its argument, at the moment the state is set. They must not re-enter
+the framework or call `gmnav_agent_*` on the same agent. A callback that wants
+to do something like issue a new order should queue the work and act after
+`gmnav_agent_update` returns. See the Agent struct for the full contract.
 
 **See also:** `gmnav_agent_goto`, `gmnav_agent_update`
 
@@ -5630,6 +5926,12 @@ This cancels any request already in flight, clears the arrived and failed
 latches, and requests a new path. When it arrives the agent smooths it, anchors
 both ends, curves it if asked, and starts steering. You never touch a ticket.
 
+Every field on the agent that affects pathing is forwarded to the request:
+`profile`, `need_clear`, `max_climb`, `max_drop`, `avoid_pinch`. And to the
+shaping pass: `max_climb`, `max_drop`, `radius`, `headings`, `profile`,
+`avoid_pinch`. Setting a field on the agent is enough. You do not pass them
+again at the call site.
+
 Returning `false` means the framework could not turn your coordinates into
 nodes, which is different from failing to find a route. A route that turns out
 not to exist reports through `gmnav_agent_failed` later.
@@ -5652,6 +5954,13 @@ gmnav_agent_update(agent, neighbours);
 | neighbours | Array | Optional. Nearby agents to push away from |
 
 **Returns:** N/A
+
+**A failed repath clears the path.** When a replacement request fails, the
+agent drops its goal, latches `failed`, and clears the old path. Before this
+was added, an agent whose replacement failed kept walking the stale path, since
+it still had waypoints to follow. If a change to the world broke its route mid
+journey, the agent would walk through geometry that had appeared or removed
+since the route was planned.
 
 **Example:**
 
@@ -8945,8 +9254,7 @@ if ((grid.flags[_n] & GMNAV_FLAG_BLOCKED) != 0) {
 
 ### GMNAV_FLAG_ONEWAY
 
-The bit marking a platform that can be jumped up through but not fallen down
-through. It is 2.
+The bit marking a platform that can be jumped up through but not fallen down through. It is 2.
 
 ```gml
 gmnav_grid_set_flag(grid, _c, _r, GMNAV_FLAG_ONEWAY, true);
@@ -8954,9 +9262,19 @@ gmnav_grid_set_flag(grid, _c, _r, GMNAV_FLAG_ONEWAY, true);
 
 Read by the platformer bake when simulating arcs.
 
-**Careful:** this is partial. Standing on and jumping up through a one way
-platform work. Dropping down through one is not implemented, so a one way deck
-stacked over a solid ledge routes the long way round.
+**Careful:** this is partial. Standing on and jumping up through a one way platform work. Dropping down through one is not implemented, so a one way deck stacked over a solid ledge routes the long way round.
+
+---
+
+### GMNAV_FLAG_REMOVED
+
+The bit marking an overlay cell that has been removed. It is 0x0020.
+
+```gml
+gmnav_overlay_remove(grid.overlay, _node);
+```
+
+A removed cell stays in the overlay's arrays as a tombstone until `gmnav_overlay_compact` is called. Reads as blocked, is unreachable from `gmnav_overlay_node_at` unless the include-removed argument is passed, and is skipped at the next `gmnav_overlay_finish`. Re-adding the same cell clears the bit and returns the same node id.
 
 ---
 
@@ -9023,6 +9341,7 @@ a typo in a setting name tells you.
 | `MAX_STEPS` | 1000000 | Hard abort guard per search. A safety net, not a tuning knob |
 | `CLEARANCE_MAX` | 16 | Largest clearance value stored per cell |
 | `EDIT_RING` | 32 | Recent grid edits kept for scoped repathing |
+| `WORLD_SAMPLE_DIV` | 4 | Divisor of the smaller tile dimension for every world-space line walk. The sampling density used by staggered and hex smoothing, by the util line-of-sight test, and by the pinch check. Smaller means more samples, which catches shallower corner grazes and costs more per call |
 
 `EDIT_RING` is read when a **grid is created**, so changing it affects grids made
 afterwards rather than existing ones. A larger ring holds more history and costs
@@ -9080,12 +9399,26 @@ is omitted.
 | Field | Type | Description |
 |---|---|---|
 | `state` | Enum | A `gmnav_state` member |
+| `start`, `goal` | Integer | Node ids |
+| `h_mode` | Enum or Function | The resolved heuristic, an enum or a caller-supplied function |
+| `corner_cut` | Boolean | Whether diagonal squeezes are allowed |
 | `profile` | Struct | Cost profile, or `undefined` |
 | `need_clear` | Integer | Minimum clearance required |
-| `max_climb`, `max_drop` | Real | Elevation limits |
+| `max_climb`, `max_drop` | Real | Elevation limits, `undefined` to ignore heights |
+| `avoid_pinch` | Boolean | Staggered-only visual pinch refusal |
+| `relax` | Integer | Steps from the start where clearance is relaxed, default 2 |
 | `stale` | Boolean | Grid changed after this search began |
 | `expansions` | Integer | Cells settled |
+| `pops` | Integer | Heap entries popped, including stale ones |
 | `slot_g_final` | Real | Total cost of the found path |
+| `result` | Array | Node ids |
+| `on_complete` | Function | Optional. Fires once when the search reaches FOUND or FAILED |
+
+The `on_complete` callback receives the search struct and must not re-enter the
+framework, touch the search, or expect a return value. It fires at the moment
+the state changes, inside `gmnav_search_step`, before the internal release of
+the workspace. A callback that needs to act on the result should queue the
+work and act after `gmnav_search_step` returns.
 
 ### Ticket
 
@@ -9093,9 +9426,24 @@ is omitted.
 |---|---|---|
 | `state` | Enum | A `gmnav_state` member |
 | `priority` | Enum | A `gmnav_priority` member |
+| `seq` | Integer | Arrival order, used for FIFO within a priority band |
+| `start`, `goal` | Integer | Node ids |
+| `corner_cut` | Boolean | Passed to the search |
+| `profile` | Struct | Passed to the search |
+| `need_clear` | Integer | Passed to the search |
+| `max_climb`, `max_drop` | Real | Passed to the search |
+| `allow_drop` | Boolean | Passed to the search, platformer domain only |
+| `avoid_pinch` | Boolean | Passed to the search |
 | `path` | Array | Node ids, empty unless found |
 | `links` | Array | `gmnav_link` values, platformer domain only |
 | `stale` | Boolean | Grid changed while this request was in flight |
+| `cancelled` | Boolean | Abandoned by the caller |
+| `on_complete` | Function | Optional. Fires once when the ticket reaches FOUND or FAILED |
+
+The `on_complete` callback fires from `gmnav_scheduler_update` for a budgeted
+request, or from inside `gmnav_scheduler_request` for an `IMMEDIATE` request.
+It receives the ticket and must not re-enter the framework. See
+`gmnav_scheduler_request` for the full contract.
 
 ### Path
 
@@ -9144,6 +9492,7 @@ is omitted.
 | `need_clear` | Integer | 0 | Minimum clearance, passed on every request |
 | `max_climb`, `max_drop` | Real | `undefined` | Elevation limits, passed on every request and to smoothing |
 | `headings` | Integer | 0 | Headings smoothing may use. 0 unconstrained, 4 cardinals, 8 with diagonals |
+| `avoid_pinch` | Boolean | false | Staggered only. Passed on every request and to smoothing |
 | `curve_mode` | Enum | `gmnav_curve.NONE` | Curve applied after smoothing and anchoring |
 | `curve_radius` | Real | 16 | Corner radius when curving |
 | `curve_steps` | Integer | 4 | Samples per arc when curving |
@@ -9167,6 +9516,20 @@ is omitted.
 | `path` | Struct | `undefined` | Current path object |
 | `ticket` | Struct | `undefined` | Request in flight |
 | `seek_i` | Integer | 1 | Index of the waypoint being steered toward |
+| `on_arrived` | Function | `undefined` | Fires once when the agent reaches its goal |
+| `on_failed` | Function | `undefined` | Fires once when the agent's goal cannot be routed to |
+
+The `on_arrived` and `on_failed` callbacks receive the agent and must not
+re-enter the framework or call `gmnav_agent_*` on the same agent. They fire at
+the moment the state is set, after the agent's fields are settled, so a callback
+can read `gmnav_agent_arrived(agent)` and get the truth. Queue anything the
+callback wants to do and act on it after `gmnav_agent_update` returns.
+
+The `on_arrived` callback fires from `gmnav_agent_update` on the frame the
+agent's last waypoint is consumed. The `on_failed` callback fires from
+`__gmnav_agent_collect_ticket` when a ticket resolves as `FAILED`, before the
+agent's path is cleared. Both are latched, so a callback fires exactly once per
+journey and not again until the next `goto` or `stop`.
 
 ### Movement
 
@@ -9299,9 +9662,13 @@ headings and cost profile each close a way a shortcut could be wrong. Without
 them a shortcut will climb a cliff, clip a corner, take an illegal heading, or
 walk back through ground the search paid to avoid.
 
-**Smoothing and curving are refused on staggered and hex.** On those layouts a
-straight line in cell coordinates says nothing reliable about whether a
-character could walk it. `gmnav_path_simplify` works everywhere.
+**Smoothing works on every layout. Curving does not.** On staggered and hex,
+a straight line in cell coordinates says nothing reliable about whether a
+character could walk it. Smoothing therefore uses a world-space sampling walk
+on those layouts, which resolves each sample back to a cell. Curving has no
+world-space fallback and is still refused there. On those layouts use
+`gmnav_path_simplify`, which works everywhere and does not change the path's
+shape.
 
 **A deck narrower than a body will not smooth.** The corridor test asks whether
 the whole body fits along the line, and a one cell wide bridge cannot contain a
@@ -9389,12 +9756,36 @@ upward work. And dropping through it works when the movement model has
 character that has never learned to drop; that case still routes the long way
 round.
 
-**Clearance is `ORTHO` and `ISO_DIAMOND` only.** On staggered and hex a
-Chebyshev radius in cell indices does not correspond to a disc in world space,
-so `gmnav_clearance_build` returns `false` and clearance requirements are ignored
-rather than failing every request.
+**Clearance is available on every layout.** Ortho and diamond use a two-pass chamfer. Staggered and hex use an iterative relaxation, roughly ten times slower per rebuild. Either way the value is a cell count, and `gmnav_clearance_for_radius` converts a body radius into it correctly for the layout.
 
 **Forgetting to release a search leaks a workspace.** The grid lends out a small
 fixed number, so slots disappear one by one until nothing can start. If searches
 stop working after a long session, look for a path through your code that
 acquires without releasing.
+
+**A goal that does not meet clearance is refused.** A `need_clear` above 1
+refuses any cell whose clearance is below the requirement, the goal included.
+Callers who want walk-as-close-as-you-can behaviour call
+`gmnav_clearance_nearest` before handing the goal over. Before v1.3 the goal
+was exempt, which allowed a caller to place an agent somewhere it did not fit
+and then inch it through tight ground one step at a time.
+
+**Clearance relaxation fires per step, not per search.** The relaxation exists
+to let an agent that starts in a tight spot escape. It fires only while the
+search's current cell is itself below clearance, and only for the first `relax`
+steps from the start. Once the agent reaches a cell that meets clearance, no
+subsequent step may enter a tight cell. A well-placed start cannot exploit the
+relaxation to cross tight ground later in its path. `relax` defaults to 2.
+
+**`avoid_pinch` refuses a staggered visual seal.** On staggered, a one-cell gap
+in a wall column is visually sealed: the wall cells' diamonds meet at the gap
+cell's corner, so the passage has zero visible width even though the graph sees
+it as open. This flag refuses to enter such a cell. Only has any effect on
+`ISO_STAGGERED`. Off by default. When on, path smoothing respects the same
+rule, so a raw route that avoided the pinch is not collapsed back through it.
+
+**A failed repath clears the path.** When a replacement request comes back
+`FAILED`, the agent drops its goal, latches `failed`, and clears the old path.
+Before v1.3 the old path was kept, and the agent kept walking it even though
+the world had changed underneath. An agent mid-flight whose bridge span was
+removed would walk straight through the gap where the span used to be.

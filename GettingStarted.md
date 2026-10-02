@@ -220,6 +220,7 @@ agent.avoid_range  = 3.0;    // multiples of radius
 agent.profile      = my_profile;   // cost profile, if any
 agent.need_clear   = 2;            // clearance, if the unit is wide
 agent.headings     = 0;            // 0, 4 or 8. See Movement constraints
+agent.avoid_pinch  = true;         // staggered only, see below
 agent.curve_mode   = gmnav_curve.NONE;
 ```
 
@@ -233,6 +234,27 @@ if (gmnav_agent_failed(agent))  { /* no route existed */ }
 Both stay true until the next `goto` or `stop`, which is what makes patrol
 routes a single `if`. Without the second one, a failed request and a completed
 journey look identical, since both end with no goal and no ticket.
+
+Two optional callbacks fire at the moment those latches are set, if you would
+rather react than poll:
+
+```gml
+agent.on_arrived = function(_ag) { play_sound(snd_arrive); };
+agent.on_failed  = function(_ag) { pick_a_new_goal(_ag); };
+```
+
+They receive the agent and must not re-enter the framework or call
+`gmnav_agent_*` on the same agent. Queue the work and act after
+`gmnav_agent_update` returns. The scheduler and search also have an
+`on_complete` callback, and the ticket one can be passed as the last argument
+to `gmnav_scheduler_request` so an `IMMEDIATE` request, which resolves before
+the call returns, can still attach one.
+
+`agent.avoid_pinch` is a staggered-only flag. On staggered a one-cell gap in a
+wall column is visually sealed: the wall cells' diamonds meet at the gap cell's
+corner, so the passage has zero visible width even though the graph sees it as
+open. Setting this flag refuses to enter such a cell, and smoothing respects
+the same rule. It has no effect on any other layout.
 
 Local avoidance needs a neighbour list, which you supply. GMNav does not keep
 a spatial index for you, because your game almost certainly already has one:
@@ -370,6 +392,19 @@ field = gmnav_flowfield_create(grid, profile);
 gmnav_flowfield_build(field, [goal_node]);
 ```
 
+The fifth argument to `gmnav_flowfield_create` is a clearance requirement. A
+field built with one does not expand into cells the unit cannot fit in, so a
+wide unit reading the field does not get routed through a gap too narrow for
+it:
+
+```gml
+field = gmnav_flowfield_create(grid, profile, undefined, undefined, 2);
+```
+
+A field bakes in one clearance value, the same way it bakes in one profile.
+Different unit sizes that share a goal need separate fields, or should use the
+scheduler instead.
+
 Then per agent, per frame:
 
 ```gml
@@ -408,14 +443,23 @@ agent.need_clear = gmnav_clearance_for_radius(grid, agent.radius);
 ```
 
 `gmnav_clearance_for_radius` converts a world radius into the cell count the
-search needs. After editing the grid:
+search needs, accounting for the layout's own step size rather than the tile's
+bounding box, so a diamond isometric map with 32 by 32 tiles correctly reports
+that a radius of 40 needs 4 rather than 3. After editing the grid:
 
 ```gml
 gmnav_clearance_build_if_stale(grid);
 ```
 
 Clearance is capped at the `CLEARANCE_MAX` config setting, which is 16 cells by
-default, and is available on `ORTHO` and `ISO_DIAMOND` only.
+default, and works on every layout. Ortho and diamond use a two-pass chamfer.
+Staggered and hex use an iterative relaxation, roughly ten times slower per
+rebuild but still a level-load operation rather than a per-frame one.
+
+A request with `need_clear` above 1 refuses any cell whose clearance is below
+the requirement, the goal included. If you want walk-as-close-as-you-can
+behaviour, call `gmnav_clearance_nearest` to snap the goal to the nearest cell
+the unit actually fits in.
 
 ---
 
@@ -515,6 +559,27 @@ gmnav_agent_goto(agent, mouse_x, mouse_y, gmnav_priority.NORMAL, 1);
 Overlay cells are real cells. They can be blocked, priced, measured for
 clearance and drawn, and their properties are their own. Dear ground beneath a
 bridge does not make the bridge dear.
+
+**Removing a cell.** `gmnav_overlay_set_blocked` is the reversible option when
+you want a span to stop working. `gmnav_overlay_remove` is stronger: it marks
+the cell gone entirely, unreachable from `gmnav_overlay_node_at`, skipped at
+the next `gmnav_overlay_finish`. It stays in the arrays as a tombstone until
+you compact:
+
+```gml
+// the cannon hits the bridge
+gmnav_overlay_remove(grid.overlay, _span);
+gmnav_overlay_finish(grid.overlay);
+```
+
+Re-adding the same column, row and layer with `gmnav_overlay_add` clears the
+tombstone and returns the same node id, so a destroyed span can be rebuilt
+without a compact.
+
+If a long session of destroying and rebuilding leaves a lot of tombstones,
+`gmnav_overlay_compact(grid.overlay)` reclaims the slots. It renumbers every
+remaining cell, so any node id a caller was holding becomes invalid. It returns
+an old-slot-to-new-slot map so you can remap what you hold.
 
 ---
 
